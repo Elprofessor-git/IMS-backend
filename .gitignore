@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+.vscode/
+.qodo/
+*.env
+appsettings.Development.json
+query
