@@ -41,6 +41,9 @@ namespace Backend_Gestion_Magasin_API.Models
         public DateTime DateCreation { get; set; } = DateTime.Now;
         
         public bool EstActif { get; set; } = true;
+
+        [StringLength(2048)]
+        public string? ImageUrl { get; set; }
         
         // Relations
         public virtual ICollection<Stock> Stocks { get; set; } = new List<Stock>();

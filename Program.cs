@@ -7,6 +7,7 @@ using Backend_Gestion_Magasin_API.Helpers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Backend_Gestion_Magasin_API.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -86,13 +87,15 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
+        // TODO: Load this from configuration for production
+        policy.WithOrigins("http://localhost:4200")
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
 });
 
 // Register custom services
+builder.Services.AddScoped<IArticleService, ArticleService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<StockService>();
 builder.Services.AddScoped<CommandeService>();
@@ -113,6 +116,8 @@ builder.Services.AddScoped<AiChatService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

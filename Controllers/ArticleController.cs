@@ -1,8 +1,10 @@
-using Microsoft.AspNetCore.Mvc;
+using Backend_Gestion_Magasin_API.Dtos.Article;
+using Backend_Gestion_Magasin_API.Services;
 using Microsoft.AspNetCore.Authorization;
-using Backend_Gestion_Magasin_API.Models;
-using Backend_Gestion_Magasin_API.Data;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -11,222 +13,146 @@ namespace Backend_Gestion_Magasin_API.Controllers
     [Authorize]
     public class ArticleController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IArticleService _articleService;
 
-        public ArticleController(ApplicationDbContext context)
+        public ArticleController(IArticleService articleService)
         {
-            _context = context;
+            _articleService = articleService;
         }
 
-        // GET: api/Article
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Article>>> GetArticles()
+        public async Task<IActionResult> GetArticles([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
-            return await _context.Articles
-                .Where(a => a.EstActif)
-                .Include(a => a.Stocks)
-                .ToListAsync();
+            var articles = await _articleService.GetArticlesAsync(pageNumber, pageSize);
+            return Ok(articles);
         }
 
-        // GET: api/Article/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Article>> GetArticle(int id)
+        public async Task<IActionResult> GetArticle(int id)
         {
-            var article = await _context.Articles
-                .Include(a => a.Stocks)
-                .Include(a => a.BesoinsCommande)
-                .Include(a => a.LignesAchat)
-                .Include(a => a.LignesImportation)
-                .FirstOrDefaultAsync(a => a.Id == id);
-
+            var article = await _articleService.GetArticleByIdAsync(id);
             if (article == null)
             {
                 return NotFound();
             }
-
-            return article;
+            return Ok(article);
         }
 
-        // GET: api/Article/Search/{terme}
-        [HttpGet("Search/{terme}")]
-        public async Task<ActionResult<IEnumerable<Article>>> SearchArticles(string terme)
-        {
-            return await _context.Articles
-                .Where(a => a.EstActif && 
-                           (a.Designation.Contains(terme) || 
-                            a.Description.Contains(terme) ||
-                            a.Reference.Contains(terme) ||
-                            a.Categorie.Contains(terme)))
-                .Include(a => a.Stocks)
-                .ToListAsync();
-        }
-
-        // GET: api/Article/ByCategorie/{categorie}
-        [HttpGet("ByCategorie/{categorie}")]
-        public async Task<ActionResult<IEnumerable<Article>>> GetArticlesByCategorie(string categorie)
-        {
-            return await _context.Articles
-                .Where(a => a.EstActif && a.Categorie == categorie)
-                .Include(a => a.Stocks)
-                .ToListAsync();
-        }
-
-        // GET: api/Article/5/StockTotal
-        [HttpGet("{id}/StockTotal")]
-        public async Task<ActionResult<object>> GetStockTotal(int id)
-        {
-            var article = await _context.Articles.FindAsync(id);
-            if (article == null)
-            {
-                return NotFound();
-            }
-
-            var stockInfo = await _context.Stocks
-                .Where(s => s.ArticleId == id)
-                .GroupBy(s => s.ArticleId)
-                .Select(g => new
-                {
-                    ArticleId = g.Key,
-                    QuantiteTotale = g.Sum(s => s.Quantite),
-                    QuantiteReservee = g.Sum(s => s.QuantiteReservee),
-                    QuantiteDisponible = g.Sum(s => s.Quantite - s.QuantiteReservee),
-                    StockLibre = g.Where(s => s.TypeStock == TypeStock.Libre).Sum(s => s.Quantite),
-                    StockReserve = g.Where(s => s.TypeStock == TypeStock.Reserve).Sum(s => s.Quantite),
-                    StockImporte = g.Where(s => s.TypeStock == TypeStock.Importe).Sum(s => s.Quantite),
-                    NombreEmplacements = g.Select(s => s.EmplacementPhysique).Distinct().Count(),
-                    PrixMoyen = g.Average(s => s.PrixUnitaire)
-                })
-                .FirstOrDefaultAsync();
-
-            if (stockInfo == null)
-            {
-                stockInfo = new
-                {
-                    ArticleId = id,
-                    QuantiteTotale = 0m,
-                    QuantiteReservee = 0m,
-                    QuantiteDisponible = 0m,
-                    StockLibre = 0m,
-                    StockReserve = 0m,
-                    StockImporte = 0m,
-                    NombreEmplacements = 0,
-                    PrixMoyen = 0m
-                };
-            }
-
-            return Ok(new
-            {
-                Article = article,
-                Stock = stockInfo,
-                AlerteStock = stockInfo.QuantiteTotale <= article.SeuilAlerte,
-                StockCritique = stockInfo.QuantiteTotale <= article.SeuilCritique
-            });
-        }
-
-        // POST: api/Article
         [HttpPost]
-        public async Task<ActionResult<Article>> PostArticle(Article article)
+        public async Task<IActionResult> PostArticle(CreateArticleDto articleDto)
         {
-            article.DateCreation = DateTime.Now;
-            _context.Articles.Add(article);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetArticle", new { id = article.Id }, article);
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+            var newArticle = await _articleService.CreateArticleAsync(articleDto);
+            return CreatedAtAction(nameof(GetArticle), new { id = newArticle.Id }, newArticle);
         }
 
-        // PUT: api/Article/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutArticle(int id, Article article)
+        public async Task<IActionResult> PutArticle(int id, UpdateArticleDto articleDto)
         {
-            if (id != article.Id)
+            if (!ModelState.IsValid)
             {
-                return BadRequest();
+                return BadRequest(ModelState);
             }
-
-            _context.Entry(article).State = EntityState.Modified;
-
             try
             {
-                await _context.SaveChangesAsync();
+                await _articleService.UpdateArticleAsync(id, articleDto);
+                return NoContent();
             }
-            catch (DbUpdateConcurrencyException)
+            catch (KeyNotFoundException ex)
             {
-                if (!ArticleExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                return NotFound(new { message = ex.Message });
             }
-
-            return NoContent();
         }
 
-        // POST: api/Article/5/Desactiver
-        [HttpPost("{id}/Desactiver")]
-        public async Task<IActionResult> DesactiverArticle(int id)
-        {
-            var article = await _context.Articles.FindAsync(id);
-            if (article == null)
-            {
-                return NotFound();
-            }
-
-            article.EstActif = false;
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Article désactivé avec succès" });
-        }
-
-        // POST: api/Article/5/Activer
-        [HttpPost("{id}/Activer")]
-        public async Task<IActionResult> ActiverArticle(int id)
-        {
-            var article = await _context.Articles.FindAsync(id);
-            if (article == null)
-            {
-                return NotFound();
-            }
-
-            article.EstActif = true;
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Article activé avec succès" });
-        }
-
-        // DELETE: api/Article/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteArticle(int id)
         {
-            var article = await _context.Articles.FindAsync(id);
-            if (article == null)
+            try
+            {
+                await _articleService.DeleteArticleAsync(id);
+                return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("Search/{terme}")]
+        public async Task<IActionResult> SearchArticles(string terme)
+        {
+            var articles = await _articleService.SearchArticlesAsync(terme);
+            return Ok(articles);
+        }
+
+        [HttpGet("ByCategorie/{categorie}")]
+        public async Task<IActionResult> GetArticlesByCategorie(string categorie)
+        {
+            var articles = await _articleService.GetArticlesByCategorieAsync(categorie);
+            return Ok(articles);
+        }
+
+        [HttpGet("{id}/StockTotal")]
+        public async Task<IActionResult> GetStockTotal(int id)
+        {
+            var stockInfo = await _articleService.GetStockTotalAsync(id);
+            if (stockInfo == null)
             {
                 return NotFound();
             }
-
-            // Vérifier s'il y a des stocks, achats ou importations liés
-            var hasStock = await _context.Stocks.AnyAsync(s => s.ArticleId == id);
-            var hasAchats = await _context.LignesAchat.AnyAsync(la => la.ArticleId == id);
-            var hasImportations = await _context.LignesImportation.AnyAsync(li => li.ArticleId == id);
-            var hasBesoins = await _context.BesoinsCommandes.AnyAsync(bc => bc.ArticleId == id);
-
-            if (hasStock || hasAchats || hasImportations || hasBesoins)
-            {
-                return BadRequest("Impossible de supprimer l'article car il est utilisé dans des stocks, achats, importations ou besoins de commandes. Utilisez la désactivation à la place.");
-            }
-
-            _context.Articles.Remove(article);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            return Ok(stockInfo);
         }
 
-        private bool ArticleExists(int id)
+        [HttpPost("{id}/Desactiver")]
+        public async Task<IActionResult> DesactiverArticle(int id)
         {
-            return _context.Articles.Any(e => e.Id == id);
+            var success = await _articleService.DeactivateArticleAsync(id);
+            if (!success)
+            {
+                return NotFound();
+            }
+            return Ok(new { message = "Article désactivé avec succès" });
+        }
+
+        [HttpPost("{id}/Activer")]
+        public async Task<IActionResult> ActiverArticle(int id)
+        {
+            var success = await _articleService.ActivateArticleAsync(id);
+            if (!success)
+            {
+                return NotFound();
+            }
+            return Ok(new { message = "Article activé avec succès" });
+        }
+
+        [HttpPost("{id}/image")]
+        public async Task<IActionResult> UploadImage(int id, IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("No file uploaded.");
+            }
+
+            try
+            {
+                var imageUrl = await _articleService.UploadImageAsync(id, file);
+                return Ok(new { imageUrl });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
     }
 }
-

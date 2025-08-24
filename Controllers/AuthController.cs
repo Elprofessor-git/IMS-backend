@@ -1,4 +1,5 @@
 using Backend_Gestion_Magasin_API.Dtos;
+using Backend_Gestion_Magasin_API.Dtos.Auth;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Models.Auth;
 using Backend_Gestion_Magasin_API.Services;
@@ -15,17 +16,20 @@ public class AuthController : ControllerBase
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly TokenService _tokenService;
     private readonly RoleManager<IdentityRole> _roleManager;
+    private readonly ILogger<AuthController> _logger;
 
-        public AuthController(
-            UserManager<ApplicationUser> userManager, 
-            SignInManager<ApplicationUser> signInManager, 
-            TokenService tokenService,
-            RoleManager<IdentityRole> roleManager)
+    public AuthController(
+        UserManager<ApplicationUser> userManager,
+        SignInManager<ApplicationUser> signInManager,
+        TokenService tokenService,
+        RoleManager<IdentityRole> roleManager,
+        ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _tokenService = tokenService;
         _roleManager = roleManager;
+        _logger = logger;
     }
 
     [HttpPost("register")]
@@ -71,7 +75,28 @@ public class AuthController : ControllerBase
 
         var token = _tokenService.CreateToken(user);
         return Ok(new { token });
+    }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto model)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
         }
+
+        var user = await _userManager.FindByEmailAsync(model.Email);
+        if (user != null)
+        {
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+            // TODO: In a real application, send this token to the user's email.
+            // For now, we log it to the console for development/testing purposes.
+            _logger.LogWarning("Password reset token for {Email}: {Token}", user.Email, token);
+        }
+
+        // Return a generic success response to prevent email enumeration attacks.
+        return Ok(new { message = "If an account with this email exists, a password reset link may have been sent." });
     }
 }
 
