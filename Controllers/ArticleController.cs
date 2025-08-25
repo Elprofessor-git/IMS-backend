@@ -1,6 +1,7 @@
 using Backend_Gestion_Magasin_API.Dtos.Article;
 using Backend_Gestion_Magasin_API.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
