@@ -7,7 +7,6 @@ using Backend_Gestion_Magasin_API.Helpers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Backend_Gestion_Magasin_API.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,7 +25,7 @@ builder.Configuration
 var connectionString = builder.Configuration["ConnectionStrings:DefaultConnection"]
     ?? Environment.GetEnvironmentVariable("DB_CONNECTION");
 
-Console.WriteLine($"Connection string utilis�e: {connectionString}");
+Console.WriteLine($"Connection string utilise: {connectionString}");
 
 // Configure Npgsql pour DateTime
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -85,17 +84,18 @@ builder.Services.AddAuthentication(options =>
 // Add CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        // TODO: Load this from configuration for production
-        policy.WithOrigins("http://localhost:4200")
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+        policy.WithOrigins(
+            "https://ims-frontend-sage.vercel.app"   // ← Mets ton URL front exacte ici
+        )
+        .AllowAnyMethod()
+        .AllowAnyHeader()
+        .AllowCredentials();        
     });
 });
 
 // Register custom services
-builder.Services.AddScoped<IArticleService, ArticleService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<StockService>();
 builder.Services.AddScoped<CommandeService>();
@@ -116,8 +116,6 @@ builder.Services.AddScoped<AiChatService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -133,14 +131,18 @@ if (!isInContainer)
     app.UseHttpsRedirection();
 }
 
+// ✅ AJOUTER CETTE LIGNE - Obligatoire pour que CORS fonctionne
+app.UseRouting();
+
 // Use CORS
-app.UseCors("AllowAll");
+app.UseCors("AllowFrontend");
 
 // Use Authentication and Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapControllers()
+   .RequireCors("AllowFrontend"); 
 
 // Ensure database creation and apply migrations
 using (var scope = app.Services.CreateScope())
@@ -160,5 +162,10 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-app.Run();
+// ✅ Ajoutez ceci AVANT app.Run() dans Program.cs
+app.MapGet("/health", () => Results.Ok(new { 
+    status = "healthy", 
+    time = DateTime.UtcNow 
+})).AllowAnonymous();
 
+app.Run();
