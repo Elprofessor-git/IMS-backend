@@ -5,6 +5,7 @@ using Backend_Gestion_Magasin_API.Models.Auth;
 using Backend_Gestion_Magasin_API.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -33,6 +34,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [AllowAnonymous]
     public async Task<IActionResult> Register([FromBody] RegisterModel model)
     {
         if (!ModelState.IsValid)
@@ -67,6 +69,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginDto model)
     {
         var user = await _userManager.FindByEmailAsync(model.Email);
@@ -98,6 +101,7 @@ public class AuthController : ControllerBase
         // Return a generic success response to prevent email enumeration attacks.
         return Ok(new { message = "If an account with this email exists, a password reset link may have been sent." });
     }
+}
 }
 
 

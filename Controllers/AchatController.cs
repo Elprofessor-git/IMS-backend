@@ -237,6 +237,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Dimension = ligne.Dimension,
                     Quantite = ligne.Quantite,
                     TypeStock = TypeStock.Reserve, // Stock réservé pour la commande
+                    CommandeClientId = achat.CommandeClientId,
                     PrixUnitaire = ligne.PrixUnitaire,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,

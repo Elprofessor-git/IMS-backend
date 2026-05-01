@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
+using Backend_Gestion_Magasin_API.Dtos;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -252,6 +253,79 @@ namespace Backend_Gestion_Magasin_API.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Tâche terminée avec succès" });
+        }
+
+        // PUT: api/TacheProduction/5/statut
+        [HttpPut("{id}/statut")]
+        public async Task<IActionResult> UpdateStatut(int id, [FromBody] UpdateStatutDto data)
+        {
+            var tache = await _context.TachesProduction.FindAsync(id);
+            if (tache == null) return NotFound();
+
+            if (Enum.TryParse<StatutTache>(data.Statut, out var statut))
+            {
+                tache.Statut = statut;
+                tache.DateMiseAJour = DateTime.Now;
+                await _context.SaveChangesAsync();
+                return NoContent();
+            }
+            return BadRequest("Statut invalide");
+        }
+
+        // PUT: api/TacheProduction/5/equipe
+        [HttpPut("{id}/equipe")]
+        public async Task<IActionResult> AssignerEquipe(int id, [FromBody] AssignerEquipeDto data)
+        {
+            var tache = await _context.TachesProduction.FindAsync(id);
+            if (tache == null) return NotFound();
+
+            tache.EquipeAssignee = data.EquipeId;
+            tache.DateMiseAJour = DateTime.Now;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        // POST: api/TacheProduction/5/Assigner
+        [HttpPost("{id}/Assigner")]
+        public async Task<IActionResult> AssignerTache(int id, [FromBody] AssignerTacheDto data)
+        {
+            var tache = await _context.TachesProduction.FindAsync(id);
+            if (tache == null) return NotFound();
+
+            tache.ResponsableAssigne = data.AssigneA;
+            tache.DateMiseAJour = DateTime.Now;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Tâche assignée avec succès" });
+        }
+
+        // POST: api/TacheProduction/5/ModifierPriorite
+        [HttpPost("{id}/ModifierPriorite")]
+        public async Task<IActionResult> ModifierPriorite(int id, [FromBody] ModifierPrioriteDto data)
+        {
+            var tache = await _context.TachesProduction.FindAsync(id);
+            if (tache == null) return NotFound();
+
+            if (Enum.TryParse<PrioriteTache>(data.Priorite, out var priorite))
+            {
+                tache.Priorite = priorite;
+                tache.DateMiseAJour = DateTime.Now;
+                await _context.SaveChangesAsync();
+                return Ok(new { message = "Priorité mise à jour" });
+            }
+            return BadRequest("Priorité invalide");
+        }
+
+        // POST: api/TacheProduction/5/ModifierEcheance
+        [HttpPost("{id}/ModifierEcheance")]
+        public async Task<IActionResult> ModifierEcheance(int id, [FromBody] ModifierEcheanceDto data)
+        {
+            var tache = await _context.TachesProduction.FindAsync(id);
+            if (tache == null) return NotFound();
+
+            tache.DateFinPrevue = data.DateFinPrevue;
+            tache.DateMiseAJour = DateTime.Now;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Échéance mise à jour" });
         }
 
         // DELETE: api/TacheProduction/5

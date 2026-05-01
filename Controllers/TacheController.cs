@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Backend_Gestion_Magasin_API.Services;
+using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Models;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class TacheController : ControllerBase
     {
         private readonly TacheService _tacheService;

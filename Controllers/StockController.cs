@@ -70,6 +70,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             return await _context.Stocks
                 .Include(s => s.Article)
+                .Include(s => s.CommandeClient)
                 .Where(s => s.TypeStock == TypeStock.Reserve || s.QuantiteReservee > 0)
                 .ToListAsync();
         }

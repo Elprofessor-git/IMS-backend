@@ -42,6 +42,9 @@ namespace Backend_Gestion_Magasin_API.Models
         
         public TypeStock TypeStock { get; set; } = TypeStock.Libre;
         
+        [ForeignKey("CommandeClient")]
+        public int? CommandeClientId { get; set; }
+        
         public decimal PrixUnitaire { get; set; } = 0;
         
         [StringLength(10)]
@@ -65,6 +68,7 @@ namespace Backend_Gestion_Magasin_API.Models
         
         // Relations
         public virtual Article Article { get; set; } = null!;
+        public virtual CommandeClient? CommandeClient { get; set; }
         public virtual ICollection<MouvementStock> Mouvements { get; set; } = new List<MouvementStock>();
     }
 }

@@ -214,6 +214,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Dimension = ligne.Dimension,
                     Quantite = ligne.Quantite,
                     TypeStock = TypeStock.Importe, // Stock importé
+                    CommandeClientId = ligne.CommandeClientId,
                     PrixUnitaire = ligne.PrixUnitaire,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,
@@ -291,6 +292,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     if (quantiteAReserver > 0)
                     {
                         stock.QuantiteReservee += quantiteAReserver;
+                        stock.CommandeClientId = ligne.CommandeClientId; // Lier le stock à la commande
                         quantiteAAffecter -= quantiteAReserver;
 
                         affectations.Add(new

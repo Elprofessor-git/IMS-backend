@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Dtos;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
-[Route("api/[controller]")]
+[Route("api/Account/users")]
 [ApiController]
+[Authorize(Roles = "Admin")]
 public class UserController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;

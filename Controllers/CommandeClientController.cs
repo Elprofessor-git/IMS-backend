@@ -123,15 +123,20 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 besoin.QuantiteStockImporte = Math.Min(stockImporte, besoin.QuantiteTotale);
 
-                // 2. Vérifier achats locaux réservés
-                var achatsLocaux = await _context.LignesAchat
+                // 2. Vérifier les ressources réservées (Achats locaux ET Stock déjà réservé pour cette commande)
+                var achatsEnCours = await _context.LignesAchat
                     .Include(la => la.Achat)
                     .Where(la => la.ArticleId == besoin.ArticleId &&
                                 la.Achat.CommandeClientId == commande.Id &&
                                 la.Achat.Statut == StatutAchat.Confirme)
                     .SumAsync(la => la.Quantite);
 
-                besoin.QuantiteAchatsLocaux = achatsLocaux;
+                var stockDejaReserve = await _context.Stocks
+                    .Where(s => s.ArticleId == besoin.ArticleId &&
+                               s.CommandeClientId == commande.Id)
+                    .SumAsync(s => s.Quantite);
+
+                besoin.QuantiteAchatsLocaux = achatsEnCours + stockDejaReserve;
 
                 // 3. Calculer le reste nécessaire depuis stock libre
                 var quantiteRestante = besoin.QuantiteTotale - besoin.QuantiteStockImporte - besoin.QuantiteAchatsLocaux;
