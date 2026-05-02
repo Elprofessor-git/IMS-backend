@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Models;
+using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,56 +12,68 @@ namespace Backend_Gestion_Magasin_API.Controllers
     [Authorize(Roles = "Admin")]
     public class RoleController : ControllerBase
     {
-        private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly ApplicationDbContext _context;
 
-        public RoleController(RoleManager<IdentityRole> roleManager)
+        public RoleController(ApplicationDbContext context)
         {
-            _roleManager = roleManager;
+            _context = context;
         }
 
+        // GET: api/roles
         [HttpGet]
         public async Task<ActionResult<IEnumerable<RoleDto>>> GetRoles()
         {
-            var roles = await _roleManager.Roles
-                .Select(r => new RoleDto
-                {
-                    Id = r.Id,
-                    Name = r.Name ?? ""
-                })
-                .ToListAsync();
+            // On récupère les données depuis votre table personnalisée
+            var roles = await _context.AppRoles.ToListAsync();
+            
+            var result = roles.Select(r => new RoleDto
+            {
+                Id = r.Id.ToString(), // Conversion explicite pour satisfaire le compilateur et Angular
+                Name = r.NomRole,
+                Description = r.Description,
+                PeutGererStock = r.PeutGererStock,
+                EstAdministrateur = r.EstAdministrateur
+            });
 
-            return Ok(roles);
+            return Ok(result);
         }
 
+        // POST: api/roles
         [HttpPost]
-        public async Task<IActionResult> CreateRole(CreateRoleDto createRoleDto)
+        public async Task<ActionResult<RoleDto>> CreateRole(CreateRoleDto createRoleDto)
         {
-            if (string.IsNullOrWhiteSpace(createRoleDto.Name))
-                return BadRequest("Le nom du rôle est obligatoire.");
+            var role = new Role
+            {
+                NomRole = createRoleDto.Name,
+                Description = createRoleDto.Description,
+                PeutGererStock = createRoleDto.PeutGererStock,
+                EstAdministrateur = createRoleDto.EstAdministrateur,
+                DateCreation = DateTime.Now,
+                EstActif = true
+            };
 
-            var roleExists = await _roleManager.RoleExistsAsync(createRoleDto.Name);
-            if (roleExists)
-                return BadRequest("Ce rôle existe déjà.");
+            _context.AppRoles.Add(role);
+            await _context.SaveChangesAsync();
 
-            var result = await _roleManager.CreateAsync(new IdentityRole(createRoleDto.Name));
-            if (result.Succeeded)
-                return Ok(new { message = "Rôle créé avec succès" });
-
-            return BadRequest(result.Errors);
+            return Ok(new RoleDto
+            {
+                Id = role.Id.ToString(),
+                Name = role.NomRole,
+                Description = role.Description
+            });
         }
 
+        // DELETE: api/roles/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteRole(string id)
+        public async Task<IActionResult> DeleteRole(int id)
         {
-            var role = await _roleManager.FindByIdAsync(id);
-            if (role == null)
-                return NotFound();
+            var role = await _context.AppRoles.FindAsync(id);
+            if (role == null) return NotFound();
 
-            var result = await _roleManager.DeleteAsync(role);
-            if (result.Succeeded)
-                return NoContent();
+            _context.AppRoles.Remove(role);
+            await _context.SaveChangesAsync();
 
-            return BadRequest(result.Errors);
+            return NoContent();
         }
     }
 }

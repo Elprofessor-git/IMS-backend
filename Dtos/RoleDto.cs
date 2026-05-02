@@ -2,10 +2,9 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Backend_Gestion_Magasin_API.Dtos
 {
-    // DTO pour l'affichage et la gestion des rôles personnalisés
     public class RoleDto
     {
-        public int Id { get; set; }
+        public string Id { get; set; } = string.Empty; // Format texte pour Angular
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public bool PeutGererStock { get; set; }
@@ -21,7 +20,6 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool EstAdministrateur { get; set; }
     }
 
-    // DTOs indispensables pour les tâches de production
     public class UpdateStatutDto
     {
         public string Statut { get; set; } = string.Empty;
