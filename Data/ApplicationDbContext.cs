@@ -28,7 +28,7 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<LigneAchat> LignesAchat { get; set; }
         public DbSet<Importation> Importations { get; set; }
         public DbSet<LigneImportation> LignesImportation { get; set; }
-        public override DbSet<IdentityRole> Roles { get; set; }
+        public DbSet<Role> AppRoles { get; set; }
         public DbSet<Tache> Taches { get; set; }
         public DbSet<FournisseurClient> FournisseurClients { get; set; }
 
