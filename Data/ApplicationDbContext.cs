@@ -265,6 +265,8 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasIndex(tp => new { tp.Statut, tp.DateFinPrevue });
 
             // Configuration des enums pour PostgreSQL
+            modelBuilder.Entity<Role>().ToTable("Role");
+            
             modelBuilder.Entity<Stock>()
                 .Property(s => s.TypeStock)
                 .HasConversion<string>();
