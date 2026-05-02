@@ -9,7 +9,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 {
     [Route("api/roles")]
     [ApiController]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin")]
     public class RoleController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
@@ -60,8 +60,26 @@ namespace Backend_Gestion_Magasin_API.Controllers
             {
                 Id = role.Id.ToString(),
                 Name = role.NomRole,
-                Description = role.Description
+                Description = role.Description,
+                PeutGererStock = role.PeutGererStock,
+                EstAdministrateur = role.EstAdministrateur
             });
+        }
+
+        // PUT: api/roles/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateRole(int id, CreateRoleDto model)
+        {
+            var role = await _context.AppRoles.FindAsync(id);
+            if (role == null) return NotFound();
+
+            role.NomRole = model.Name;
+            role.Description = model.Description;
+            role.PeutGererStock = model.PeutGererStock;
+            role.EstAdministrateur = model.EstAdministrateur;
+
+            await _context.SaveChangesAsync();
+            return NoContent();
         }
 
         // DELETE: api/roles/5
