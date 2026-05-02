@@ -52,8 +52,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 EstActif = true
             };
 
+            Console.WriteLine($"[DEBUG] Tentative d'ajout du rôle '{role.NomRole}' dans la table 'Role'...");
             _context.AppRoles.Add(role);
             await _context.SaveChangesAsync();
+            Console.WriteLine($"[DEBUG] Succès ! Rôle enregistré avec l'ID : {role.Id}");
 
             return Ok(new RoleDto
             {
