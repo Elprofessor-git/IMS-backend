@@ -38,10 +38,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(result);
         }
 
-        // POST: api/roles
         [HttpPost]
         public async Task<ActionResult<RoleDto>> CreateRole(CreateRoleDto createRoleDto)
         {
+            Console.WriteLine($"===> [DB-DEBUG] Requête POST reçue pour le rôle : {createRoleDto.Name}");
             var role = new Role
             {
                 NomRole = createRoleDto.Name,
@@ -54,6 +54,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             _context.AppRoles.Add(role);
             await _context.SaveChangesAsync();
+            Console.WriteLine($"===> [DB-DEBUG] Rôle enregistré avec succès ! ID généré : {role.Id}");
 
             return Ok(new RoleDto
             {
