@@ -9,7 +9,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 {
     [Route("api/roles")]
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [AllowAnonymous]
     public class RoleController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
