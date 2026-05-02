@@ -5,7 +5,7 @@ namespace Backend_Gestion_Magasin_API.Dtos
     // DTO pour l'affichage et la gestion des rôles personnalisés
     public class RoleDto
     {
-        public int Id { get; set; }
+        public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public bool PeutGererStock { get; set; }
