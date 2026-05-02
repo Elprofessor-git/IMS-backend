@@ -6,6 +6,7 @@ using Backend_Gestion_Magasin_API.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -72,11 +73,17 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginDto model)
     {
+        // On utilise _userManager pour vérifier le mot de passe
         var user = await _userManager.FindByEmailAsync(model.Email);
         if (user == null || !await _userManager.CheckPasswordAsync(user, model.Password))
             return Unauthorized();
 
-        var token = _tokenService.CreateToken(user);
+        // On recharge l'utilisateur AVEC son rôle pour le TokenService
+        var userWithRole = await _userManager.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == user.Id);
+
+        var token = _tokenService.CreateToken(userWithRole ?? user);
         return Ok(new { token });
     }
 
