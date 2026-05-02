@@ -78,12 +78,15 @@ public class AuthController : ControllerBase
         if (user == null || !await _userManager.CheckPasswordAsync(user, model.Password))
             return Unauthorized();
 
-        // On recharge l'utilisateur AVEC son rôle pour le TokenService
+        // Récupérer les rôles standards Identity
+        var roles = await _userManager.GetRolesAsync(user);
+
+        // On recharge l'utilisateur AVEC son rôle personnalisé pour le TokenService
         var userWithRole = await _userManager.Users
             .Include(u => u.Role)
             .FirstOrDefaultAsync(u => u.Id == user.Id);
 
-        var token = _tokenService.CreateToken(userWithRole ?? user);
+        var token = _tokenService.CreateToken(userWithRole ?? user, roles);
         return Ok(new { token });
     }
 
