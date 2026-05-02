@@ -33,7 +33,8 @@ namespace Backend_Gestion_Magasin_API.Services
             var user = await _userManager.FindByEmailAsync(email);
             if (user == null) return null;
 
-            return _tokenService.CreateToken(user);
+            var roles = await _userManager.GetRolesAsync(user);
+            return _tokenService.CreateToken(user, roles);
         }
 
         public async Task<ApplicationUser?> GetUserByEmailAsync(string email)
