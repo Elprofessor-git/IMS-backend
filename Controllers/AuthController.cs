@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -88,6 +89,28 @@ public class AuthController : ControllerBase
 
         var token = _tokenService.CreateToken(userWithRole ?? user, roles);
         return Ok(new { token });
+    }
+
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMe()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId == null) return Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        var roles = await _userManager.GetRolesAsync(user);
+
+        return Ok(new {
+            id = user.Id,
+            email = user.Email,
+            nom = user.Nom ?? user.UserName,
+            prenom = user.Prenom ?? "",
+            roles = roles,
+            estActif = user.EstActif
+        });
     }
 
     [HttpPost("forgot-password")]
