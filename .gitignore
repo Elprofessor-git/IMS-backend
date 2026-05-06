@@ -5,3 +5,4 @@ obj/
 *.env
 appsettings.Development.json
 query
+.claude/
