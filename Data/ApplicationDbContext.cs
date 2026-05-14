@@ -31,6 +31,7 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<Role> AppRoles { get; set; }
         public DbSet<Tache> Taches { get; set; }
         public DbSet<FournisseurClient> FournisseurClients { get; set; }
+        public DbSet<DocumentImportation> DocumentsImportation { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -128,6 +129,13 @@ namespace Backend_Gestion_Magasin_API.Data
                 .WithMany(f => f.Importations)
                 .HasForeignKey(i => i.FournisseurId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Importation -> DocumentImportation (One-to-Many)
+            modelBuilder.Entity<DocumentImportation>()
+                .HasOne(d => d.Importation)
+                .WithMany(i => i.Documents)
+                .HasForeignKey(d => d.ImportationId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // Importation -> LigneImportation (One-to-Many)
             modelBuilder.Entity<LigneImportation>()

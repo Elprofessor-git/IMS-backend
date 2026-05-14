@@ -185,15 +185,14 @@ namespace Backend_Gestion_Magasin_API.Services
                 throw new ArgumentException("No file uploaded.", nameof(file));
             }
 
-            // TODO: For production, use a cloud storage provider like Azure Blob Storage or AWS S3.
-            // Storing files on the local web server filesystem is not scalable or reliable.
-            var uploadsFolderPath = Path.Combine(_hostingEnvironment.WebRootPath, "uploads", "images");
+            var uploadsFolderPath = Path.Combine(_hostingEnvironment.WebRootPath, "uploads", "articles");
             if (!Directory.Exists(uploadsFolderPath))
             {
                 Directory.CreateDirectory(uploadsFolderPath);
             }
 
-            var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var fileName = $"{id}{extension}";
             var filePath = Path.Combine(uploadsFolderPath, fileName);
 
             using (var stream = new FileStream(filePath, FileMode.Create))
@@ -201,7 +200,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 await file.CopyToAsync(stream);
             }
 
-            var imageUrl = $"/uploads/images/{fileName}";
+            var imageUrl = $"/uploads/articles/{fileName}";
             article.ImageUrl = imageUrl;
             await _context.SaveChangesAsync();
 

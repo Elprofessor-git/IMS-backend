@@ -140,6 +140,7 @@ if (!isInContainer)
 
 // ✅ AJOUTER CETTE LIGNE - Obligatoire pour que CORS fonctionne
 app.UseRouting();
+app.UseStaticFiles();
 
 // Use CORS
 app.UseCors("AllowFrontend");

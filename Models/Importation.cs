@@ -76,6 +76,7 @@ namespace Backend_Gestion_Magasin_API.Models
         // Relations
         public virtual Fournisseur Fournisseur { get; set; } = null!;
         public virtual ICollection<LigneImportation> LignesImportation { get; set; } = new List<LigneImportation>();
+        public virtual ICollection<DocumentImportation> Documents { get; set; } = new List<DocumentImportation>();
     }
 }
 
