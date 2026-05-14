@@ -350,6 +350,37 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.ToTable("BesoinsCommandes");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.BomLigne", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ArticleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CommandeId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("QuantiteParPiece")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("Unite")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleId");
+
+                    b.HasIndex("CommandeId");
+
+                    b.ToTable("BomLignes");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Client", b =>
                 {
                     b.Property<int>("Id")
@@ -455,6 +486,9 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
 
+                    b.Property<int?>("MarqueId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ModifiePar")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -492,10 +526,80 @@ namespace Backend_Gestion_Magasin_API.Migrations
 
                     b.HasIndex("ClientId");
 
+                    b.HasIndex("MarqueId");
+
                     b.HasIndex("NumeroCommande")
                         .IsUnique();
 
                     b.ToTable("CommandesClients");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.ConfigTaille", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CommandeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quantite")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Taille")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommandeId");
+
+                    b.ToTable("ConfigTailles");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.DocumentImportation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AjoutePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CheminFichier")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("DateAjout")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("ImportationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NomFichier")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long>("TailleOctets")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TypeFichier")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImportationId");
+
+                    b.ToTable("DocumentsImportation");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Fournisseur", b =>
@@ -857,6 +961,39 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.ToTable("LignesImportation");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Marque", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("EstActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Nom")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("PlateformeId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlateformeId");
+
+                    b.ToTable("Marques");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.MouvementStock", b =>
                 {
                     b.Property<int>("Id")
@@ -980,6 +1117,67 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.ToTable("Plateformes");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.ResultatCalcul", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ArticleId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("BesoinBrut")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("BesoinFinal")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<int>("CommandeId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("DateCalcul")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("EstSuffisant")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Manque")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("MargeAppliquee")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("QteAchat")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("QteDisponible")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("QteImport")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("QteStockReserve")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleId");
+
+                    b.HasIndex("CommandeId");
+
+                    b.ToTable("ResultatsCalcul");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Role", b =>
                 {
                     b.Property<int>("Id")
@@ -1044,7 +1242,7 @@ namespace Backend_Gestion_Magasin_API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Role");
+                    b.ToTable("Role", (string)null);
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Stock", b =>
@@ -1444,6 +1642,25 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("CommandeClient");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.BomLigne", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.Article", "Article")
+                        .WithMany()
+                        .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.CommandeClient", "Commande")
+                        .WithMany("BomLignes")
+                        .HasForeignKey("CommandeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Article");
+
+                    b.Navigation("Commande");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Client", b =>
                 {
                     b.HasOne("Backend_Gestion_Magasin_API.Models.Plateforme", "Plateforme")
@@ -1463,7 +1680,36 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.Marque", "Marque")
+                        .WithMany("Commandes")
+                        .HasForeignKey("MarqueId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Client");
+
+                    b.Navigation("Marque");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.ConfigTaille", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.CommandeClient", "Commande")
+                        .WithMany("ConfigTailles")
+                        .HasForeignKey("CommandeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Commande");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.DocumentImportation", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.Importation", "Importation")
+                        .WithMany("Documents")
+                        .HasForeignKey("ImportationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Importation");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Importation", b =>
@@ -1522,6 +1768,17 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("Importation");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Marque", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.Plateforme", "Plateforme")
+                        .WithMany("Marques")
+                        .HasForeignKey("PlateformeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Plateforme");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.MouvementStock", b =>
                 {
                     b.HasOne("Backend_Gestion_Magasin_API.Models.Stock", "Stock")
@@ -1538,6 +1795,25 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("Stock");
 
                     b.Navigation("TacheProduction");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.ResultatCalcul", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.Article", "Article")
+                        .WithMany()
+                        .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.CommandeClient", "Commande")
+                        .WithMany("ResultatsCalcul")
+                        .HasForeignKey("CommandeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Article");
+
+                    b.Navigation("Commande");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Stock", b =>
@@ -1645,6 +1921,12 @@ namespace Backend_Gestion_Magasin_API.Migrations
 
                     b.Navigation("Besoins");
 
+                    b.Navigation("BomLignes");
+
+                    b.Navigation("ConfigTailles");
+
+                    b.Navigation("ResultatsCalcul");
+
                     b.Navigation("Taches");
                 });
 
@@ -1657,12 +1939,21 @@ namespace Backend_Gestion_Magasin_API.Migrations
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Importation", b =>
                 {
+                    b.Navigation("Documents");
+
                     b.Navigation("LignesImportation");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Marque", b =>
+                {
+                    b.Navigation("Commandes");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Plateforme", b =>
                 {
                     b.Navigation("Clients");
+
+                    b.Navigation("Marques");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Role", b =>
