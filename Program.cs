@@ -91,7 +91,9 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
-            "https://ims-frontend-sage.vercel.app"   // ← Mets ton URL front exacte ici
+            "http://localhost:4200",
+            "https://localhost:4200",
+            "https://ims-frontend-sage.vercel.app"
         )
         .AllowAnyMethod()
         .AllowAnyHeader()
