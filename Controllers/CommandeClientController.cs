@@ -266,6 +266,175 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return NoContent();
         }
 
+        // GET: api/CommandeClient/5/Tailles
+        [HttpGet("{id}/Tailles")]
+        public async Task<ActionResult<IEnumerable<ConfigTaille>>> GetTailles(int id)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            return await _context.ConfigTailles
+                .Where(ct => ct.CommandeId == id)
+                .OrderBy(ct => ct.Taille)
+                .ToListAsync();
+        }
+
+        // POST: api/CommandeClient/5/Tailles
+        [HttpPost("{id}/Tailles")]
+        public async Task<ActionResult> SetTailles(int id, [FromBody] List<ConfigTailleDto> dtos)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            var existants = _context.ConfigTailles.Where(ct => ct.CommandeId == id);
+            _context.ConfigTailles.RemoveRange(existants);
+
+            foreach (var dto in dtos)
+            {
+                _context.ConfigTailles.Add(new ConfigTaille
+                {
+                    CommandeId = id,
+                    Taille = dto.Taille,
+                    Quantite = dto.Quantite
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Configuration des tailles enregistrée", count = dtos.Count });
+        }
+
+        // GET: api/CommandeClient/5/Bom
+        [HttpGet("{id}/Bom")]
+        public async Task<ActionResult<IEnumerable<BomLigne>>> GetBom(int id)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            return await _context.BomLignes
+                .Include(b => b.Article)
+                .Where(b => b.CommandeId == id)
+                .ToListAsync();
+        }
+
+        // POST: api/CommandeClient/5/Bom
+        [HttpPost("{id}/Bom")]
+        public async Task<ActionResult> SetBom(int id, [FromBody] List<BomLigneDto> dtos)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            var existants = _context.BomLignes.Where(b => b.CommandeId == id);
+            _context.BomLignes.RemoveRange(existants);
+
+            foreach (var dto in dtos)
+            {
+                _context.BomLignes.Add(new BomLigne
+                {
+                    CommandeId = id,
+                    ArticleId = dto.ArticleId,
+                    QuantiteParPiece = dto.QuantiteParPiece,
+                    Unite = dto.Unite
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "BOM enregistrée", count = dtos.Count });
+        }
+
+        // POST: api/CommandeClient/5/Calculer
+        [HttpPost("{id}/Calculer")]
+        public async Task<ActionResult> Calculer(int id, [FromBody] CalculerRequest request)
+        {
+            var commande = await _context.CommandesClients.FindAsync(id);
+            if (commande == null)
+                return NotFound();
+
+            var totalPieces = await _context.ConfigTailles
+                .Where(ct => ct.CommandeId == id)
+                .SumAsync(ct => (decimal)ct.Quantite);
+
+            if (totalPieces <= 0)
+                return BadRequest("Aucune configuration de tailles définie pour cette commande.");
+
+            var bomLignes = await _context.BomLignes
+                .Where(b => b.CommandeId == id)
+                .ToListAsync();
+
+            if (!bomLignes.Any())
+                return BadRequest("Aucune ligne BOM définie pour cette commande.");
+
+            var existants = _context.ResultatsCalcul.Where(r => r.CommandeId == id);
+            _context.ResultatsCalcul.RemoveRange(existants);
+
+            var resultats = new List<ResultatCalcul>();
+            decimal marge = request.MargeAppliquee;
+
+            foreach (var ligne in bomLignes)
+            {
+                var besoinBrut = ligne.QuantiteParPiece * totalPieces;
+                var besoinFinal = besoinBrut * (1 + marge / 100);
+
+                var qteStockReserve = await _context.Stocks
+                    .Where(s => s.ArticleId == ligne.ArticleId && s.CommandeClientId == id)
+                    .SumAsync(s => s.Quantite);
+
+                var qteAchat = await _context.LignesAchat
+                    .Include(la => la.Achat)
+                    .Where(la => la.ArticleId == ligne.ArticleId
+                              && la.Achat.CommandeClientId == id
+                              && la.Achat.Statut == StatutAchat.Confirme)
+                    .SumAsync(la => la.Quantite);
+
+                var qteImport = await _context.LignesImportation
+                    .Where(li => li.ArticleId == ligne.ArticleId && li.CommandeClientId == id)
+                    .SumAsync(li => li.Quantite);
+
+                var qteDisponible = qteStockReserve + qteAchat + qteImport;
+                var manque = Math.Max(0, besoinFinal - qteDisponible);
+
+                resultats.Add(new ResultatCalcul
+                {
+                    CommandeId = id,
+                    ArticleId = ligne.ArticleId,
+                    BesoinBrut = besoinBrut,
+                    MargeAppliquee = marge,
+                    BesoinFinal = besoinFinal,
+                    QteAchat = qteAchat,
+                    QteImport = qteImport,
+                    QteStockReserve = qteStockReserve,
+                    QteDisponible = qteDisponible,
+                    Manque = manque,
+                    EstSuffisant = qteDisponible >= besoinFinal,
+                    DateCalcul = DateTime.UtcNow
+                });
+            }
+
+            _context.ResultatsCalcul.AddRange(resultats);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Calcul BOM terminé",
+                totalPieces,
+                lignesCalculees = resultats.Count,
+                toutSuffisant = resultats.All(r => r.EstSuffisant)
+            });
+        }
+
+        // GET: api/CommandeClient/5/ResultatCalcul
+        [HttpGet("{id}/ResultatCalcul")]
+        public async Task<ActionResult<IEnumerable<ResultatCalcul>>> GetResultatCalcul(int id)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            return await _context.ResultatsCalcul
+                .Include(r => r.Article)
+                .Where(r => r.CommandeId == id)
+                .OrderBy(r => r.Article.Designation)
+                .ToListAsync();
+        }
+
         private bool CommandeClientExists(int id)
         {
             return _context.CommandesClients.Any(e => e.Id == id);
@@ -279,5 +448,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return $"{prefix}{count:D4}";
         }
     }
+
+    public record ConfigTailleDto(string Taille, int Quantite);
+    public record BomLigneDto(int ArticleId, decimal QuantiteParPiece, string? Unite);
+    public record CalculerRequest(decimal MargeAppliquee);
 }
 

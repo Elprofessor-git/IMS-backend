@@ -29,6 +29,7 @@ namespace Backend_Gestion_Magasin_API.Models
         
         // Relations
         public virtual ICollection<Client> Clients { get; set; } = new List<Client>();
+        public virtual ICollection<Marque> Marques { get; set; } = new List<Marque>();
     }
 }
 

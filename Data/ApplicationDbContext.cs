@@ -32,12 +32,85 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<Tache> Taches { get; set; }
         public DbSet<FournisseurClient> FournisseurClients { get; set; }
         public DbSet<DocumentImportation> DocumentsImportation { get; set; }
+        public DbSet<Marque> Marques { get; set; }
+        public DbSet<ConfigTaille> ConfigTailles { get; set; }
+        public DbSet<BomLigne> BomLignes { get; set; }
+        public DbSet<ResultatCalcul> ResultatsCalcul { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
             // Configuration des relations et contraintes
+
+            // Plateforme -> Marque (One-to-Many)
+            modelBuilder.Entity<Marque>()
+                .HasOne(m => m.Plateforme)
+                .WithMany(p => p.Marques)
+                .HasForeignKey(m => m.PlateformeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Marque -> CommandeClient (One-to-Many, nullable)
+            modelBuilder.Entity<CommandeClient>()
+                .HasOne(c => c.Marque)
+                .WithMany(m => m.Commandes)
+                .HasForeignKey(c => c.MarqueId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // CommandeClient -> ConfigTaille (One-to-Many)
+            modelBuilder.Entity<ConfigTaille>()
+                .HasOne(ct => ct.Commande)
+                .WithMany(c => c.ConfigTailles)
+                .HasForeignKey(ct => ct.CommandeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // CommandeClient -> BomLigne (One-to-Many)
+            modelBuilder.Entity<BomLigne>()
+                .HasOne(b => b.Commande)
+                .WithMany(c => c.BomLignes)
+                .HasForeignKey(b => b.CommandeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<BomLigne>()
+                .HasOne(b => b.Article)
+                .WithMany()
+                .HasForeignKey(b => b.ArticleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // CommandeClient -> ResultatCalcul (One-to-Many)
+            modelBuilder.Entity<ResultatCalcul>()
+                .HasOne(r => r.Commande)
+                .WithMany(c => c.ResultatsCalcul)
+                .HasForeignKey(r => r.CommandeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ResultatCalcul>()
+                .HasOne(r => r.Article)
+                .WithMany()
+                .HasForeignKey(r => r.ArticleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Précisions décimales BomLigne / ResultatCalcul
+            modelBuilder.Entity<BomLigne>()
+                .Property(b => b.QuantiteParPiece)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<ResultatCalcul>()
+                .Property(r => r.BesoinBrut).HasPrecision(18, 4);
+            modelBuilder.Entity<ResultatCalcul>()
+                .Property(r => r.MargeAppliquee).HasPrecision(5, 2);
+            modelBuilder.Entity<ResultatCalcul>()
+                .Property(r => r.BesoinFinal).HasPrecision(18, 4);
+            modelBuilder.Entity<ResultatCalcul>()
+                .Property(r => r.QteAchat).HasPrecision(18, 4);
+            modelBuilder.Entity<ResultatCalcul>()
+                .Property(r => r.QteImport).HasPrecision(18, 4);
+            modelBuilder.Entity<ResultatCalcul>()
+                .Property(r => r.QteStockReserve).HasPrecision(18, 4);
+            modelBuilder.Entity<ResultatCalcul>()
+                .Property(r => r.QteDisponible).HasPrecision(18, 4);
+            modelBuilder.Entity<ResultatCalcul>()
+                .Property(r => r.Manque).HasPrecision(18, 4);
 
             // Plateforme -> Client (One-to-Many)
             modelBuilder.Entity<Client>()
