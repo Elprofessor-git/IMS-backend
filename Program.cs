@@ -93,7 +93,8 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
             "http://localhost:4200",
             "https://localhost:4200",
-            "https://ims-frontend-sage.vercel.app"
+            "https://ims-frontend-sage.vercel.app",
+            "https://ims-backend-g95v.onrender.com"
         )
         .AllowAnyMethod()
         .AllowAnyHeader()
