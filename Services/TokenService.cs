@@ -19,7 +19,10 @@ namespace Backend_Gestion_Magasin_API.Services
         public string CreateToken(ApplicationUser user, IEnumerable<string> roles)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
-            var key = Encoding.ASCII.GetBytes(jwtSettings["Secret"] ?? "YourSecretKeyHere");
+            var secret = Environment.GetEnvironmentVariable("JWT_SECRET")
+                ?? jwtSettings["Secret"]
+                ?? throw new InvalidOperationException("JWT_SECRET non configuré.");
+            var key = Encoding.ASCII.GetBytes(secret);
 
             var claims = new List<Claim>
             {
