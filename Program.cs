@@ -26,8 +26,8 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 // Lire la connexion DB (depuis appsettings OU variable d'environnement)
-var connectionString = builder.Configuration["ConnectionStrings:DefaultConnection"]
-    ?? Environment.GetEnvironmentVariable("DB_CONNECTION");
+var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
+    ?? builder.Configuration["ConnectionStrings:DefaultConnection"];
 
 Console.WriteLine($"Connection string utilise: {connectionString}");
 
@@ -110,15 +110,15 @@ builder.Services.AddScoped<TacheService>();
 builder.Services.AddScoped<FournisseurClientService>();
 builder.Services.AddScoped<IArticleService, ArticleService>();
 
-// Register HttpClient for AiChatService
-builder.Services.AddHttpClient<AiChatService>(client =>
+// Register HttpClient for GroqChatService
+builder.Services.AddHttpClient<GroqChatService>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(30); // Timeout de 30 secondes
+    client.Timeout = TimeSpan.FromSeconds(60);
     client.DefaultRequestHeaders.Add("User-Agent", "Backend-Gestion-Magasin/1.0");
 });
 
-// Register AiChatService
-builder.Services.AddScoped<AiChatService>();
+// Register GroqChatService
+builder.Services.AddScoped<GroqChatService>();
 
 var app = builder.Build();
 
