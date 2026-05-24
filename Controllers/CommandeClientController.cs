@@ -260,6 +260,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
+            if (commande.Statut == StatutCommande.EnProduction ||
+                commande.Statut == StatutCommande.Terminee)
+            {
+                return BadRequest(new { message = "Impossible de supprimer une commande en production ou terminée." });
+            }
+
             _context.CommandesClients.Remove(commande);
             await _context.SaveChangesAsync();
 
