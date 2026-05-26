@@ -25,6 +25,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return await _context.CommandesClients
                 .Include(c => c.Client)
                 .ThenInclude(cl => cl.Plateforme)
+                .Include(c => c.Marque)
                 .Include(c => c.Besoins)
                 .ThenInclude(b => b.Article)
                 .ToListAsync();
@@ -37,6 +38,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var commande = await _context.CommandesClients
                 .Include(c => c.Client)
                 .ThenInclude(cl => cl.Plateforme)
+                .Include(c => c.Marque)
                 .Include(c => c.Besoins)
                 .ThenInclude(b => b.Article)
                 .Include(c => c.Taches)
