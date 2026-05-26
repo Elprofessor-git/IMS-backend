@@ -36,6 +36,8 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<ConfigTaille> ConfigTailles { get; set; }
         public DbSet<BomLigne> BomLignes { get; set; }
         public DbSet<ResultatCalcul> ResultatsCalcul { get; set; }
+        public DbSet<ModeleBom> ModeleBoms { get; set; }
+        public DbSet<FournitureBom> FournituresBom { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -387,6 +389,23 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<BesoinCommande>()
                 .Property(bc => bc.TypeBesoin)
                 .HasConversion<string>();
+
+            // ModeleBom -> FournitureBom (One-to-Many)
+            modelBuilder.Entity<FournitureBom>()
+                .HasOne(f => f.ModeleBom)
+                .WithMany(m => m.Fournitures)
+                .HasForeignKey(f => f.ModeleBomId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<FournitureBom>()
+                .HasOne(f => f.Article)
+                .WithMany()
+                .HasForeignKey(f => f.ArticleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<FournitureBom>()
+                .Property(f => f.QteParPiece)
+                .HasPrecision(18, 4);
         }
     }
 }
