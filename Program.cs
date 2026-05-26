@@ -153,21 +153,35 @@ app.UseAuthorization();
 app.MapControllers()
    .RequireCors("AllowFrontend"); 
 
-// Ensure database creation and apply migrations
+// Ensure database creation and apply migrations (with retry)
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    try
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    const int maxRetries = 5;
+    var delay = TimeSpan.FromSeconds(5);
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++)
     {
-        var context = services.GetRequiredService<ApplicationDbContext>();
-        await context.Database.MigrateAsync();
-        await SeedData.Initialize(services);
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while initializing the database.");
-        throw; // Re-throw pour fail fast
+        try
+        {
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            await context.Database.MigrateAsync();
+            await SeedData.Initialize(services);
+            break;
+        }
+        catch (Exception ex) when (attempt < maxRetries)
+        {
+            logger.LogWarning(ex, "Database initialization failed (attempt {Attempt}/{Max}). Retrying in {Delay}s...",
+                attempt, maxRetries, delay.TotalSeconds);
+            await Task.Delay(delay);
+            delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 60));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Database initialization failed after {Max} attempts.", maxRetries);
+            throw;
+        }
     }
 }
 
