@@ -10,12 +10,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
     [ApiController]
     public class ChatbotController : ControllerBase
     {
-        private readonly GroqChatService _chatService;
+        private readonly ChatbotAgentService _agentService;
         private readonly ILogger<ChatbotController> _logger;
 
-        public ChatbotController(GroqChatService chatService, ILogger<ChatbotController> logger)
+        public ChatbotController(ChatbotAgentService agentService, ILogger<ChatbotController> logger)
         {
-            _chatService = chatService;
+            _agentService = agentService;
             _logger = logger;
         }
 
@@ -30,13 +30,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 request.UserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-                _logger.LogInformation("Requête chat de l'utilisateur {UserId}: {Message}", request.UserId, request.Message);
+                _logger.LogInformation("Chat user={UserId}: {Message}", request.UserId, request.Message);
 
-                var response = await _chatService.SendMessageAsync(request);
+                var response = await _agentService.SendMessageAsync(request);
 
                 return response.Success
                     ? Ok(response)
-                    : StatusCode(500, new { error = "Erreur lors du traitement de votre message.", details = response.Error });
+                    : StatusCode(500, new { error = "Erreur lors du traitement.", details = response.Error });
             }
             catch (Exception ex)
             {
@@ -56,13 +56,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 if (string.IsNullOrWhiteSpace(request.SessionId))
                     request.SessionId = Guid.NewGuid().ToString();
 
-                _logger.LogInformation("Requête chat anonyme session {SessionId}: {Message}", request.SessionId, request.Message);
+                _logger.LogInformation("Chat anonyme session={SessionId}: {Message}", request.SessionId, request.Message);
 
-                var response = await _chatService.SendMessageAsync(request);
+                var response = await _agentService.SendMessageAsync(request);
 
                 return response.Success
                     ? Ok(response)
-                    : StatusCode(500, new { error = "Erreur lors du traitement de votre message.", details = response.Error });
+                    : StatusCode(500, new { error = "Erreur lors du traitement.", details = response.Error });
             }
             catch (Exception ex)
             {
@@ -76,17 +76,18 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             try
             {
-                var isAvailable = await _chatService.IsApiAvailableAsync();
+                var isAvailable = await _agentService.IsAvailableAsync();
                 return Ok(new
                 {
-                    status = isAvailable ? "available" : "unavailable",
+                    status    = isAvailable ? "available" : "unavailable",
                     timestamp = DateTime.UtcNow,
-                    service = "Groq AI"
+                    service   = "Groq AI",
+                    model     = _agentService.CurrentModel
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erreur lors de la vérification de l'état du service Groq");
+                _logger.LogError(ex, "Erreur vérification état Groq");
                 return StatusCode(500, new { status = "error", error = ex.Message, timestamp = DateTime.UtcNow });
             }
         }
@@ -96,16 +97,18 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             return Ok(new
             {
-                name = "Assistant IA Gestion Magasin",
-                version = "2.0.0",
-                engine = "Groq — llama-3.3-70b-versatile",
-                description = "Assistant intelligent pour la gestion de magasin textile",
+                name        = "Assistant IA Gestion Magasin",
+                version     = "2.0.0",
+                engine      = $"Groq — {_agentService.CurrentModel}",
+                description = "Assistant intelligent pour la gestion de magasin textile (lecture seule)",
                 capabilities = new[]
                 {
-                    "Consulter les articles et le stock en temps réel",
-                    "Détecter les alertes de stock",
-                    "Suivre les commandes clients",
-                    "Consulter les importations et achats"
+                    "Rechercher des articles et consulter le stock en temps réel",
+                    "Détecter les articles sous seuil d'alerte ou critique",
+                    "Suivre les commandes clients par statut et marque",
+                    "Consulter les achats fournisseurs",
+                    "Consulter les importations",
+                    "Historique des mouvements de stock"
                 },
                 endpoints = new
                 {
