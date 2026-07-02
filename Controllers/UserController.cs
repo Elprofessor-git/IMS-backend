@@ -1,27 +1,28 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Dtos;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
-[Route("api/Account/users")]
-[ApiController]
-[Authorize(Roles = "Admin")]
-public class UserController : ControllerBase
-{
-    private readonly UserManager<ApplicationUser> _userManager;
+    [Route("api/Account/users")]
+    [ApiController]
+    [Authorize(Roles = "Admin")]
+    public class UserController : ControllerBase
+    {
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public UserController(UserManager<ApplicationUser> userManager)
-    {
-        _userManager = userManager;
-    }
+        {
+            _userManager = userManager;
+        }
 
-    [HttpGet]
+        [HttpGet]
         public async Task<ActionResult<List<ReadUserDto>>> GetAll()
         {
-            var users = _userManager.Users.ToList();
+            var users = await _userManager.Users.Include(u => u.Role).ToListAsync();
             var userDtos = new List<ReadUserDto>();
 
             foreach (var user in users)
@@ -34,6 +35,8 @@ public class UserController : ControllerBase
                     Prenom = user.Prenom,
                     Email = user.Email ?? "",
                     Role = roles.FirstOrDefault(),
+                    RoleId = user.RoleId,
+                    NomRole = user.Role?.NomRole,
                     EstActif = user.EstActif,
                     DateCreation = user.DateCreation
                 });
@@ -45,23 +48,24 @@ public class UserController : ControllerBase
         [HttpGet("{id}")]
         public async Task<ActionResult<ReadUserDto>> GetById(string id)
         {
-            var user = await _userManager.FindByIdAsync(id);
+            var user = await _userManager.Users.Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == id);
             if (user == null)
                 return NotFound();
 
-        var roles = await _userManager.GetRolesAsync(user);
-            var userDto = new ReadUserDto
+            var roles = await _userManager.GetRolesAsync(user);
+            return Ok(new ReadUserDto
             {
                 Id = user.Id,
                 Nom = user.Nom,
                 Prenom = user.Prenom,
                 Email = user.Email ?? "",
                 Role = roles.FirstOrDefault(),
+                RoleId = user.RoleId,
+                NomRole = user.Role?.NomRole,
                 EstActif = user.EstActif,
                 DateCreation = user.DateCreation
-            };
-
-            return Ok(userDto);
+            });
         }
 
         [HttpPut("{id}")]
@@ -91,6 +95,10 @@ public class UserController : ControllerBase
 
             if (updateDto.EstActif.HasValue)
                 user.EstActif = updateDto.EstActif.Value;
+
+            // RoleId : 0 = retirer le rôle, valeur positive = assigner, absent/null = inchangé
+            if (updateDto.RoleId.HasValue)
+                user.RoleId = updateDto.RoleId.Value == 0 ? null : updateDto.RoleId;
 
             var result = await _userManager.UpdateAsync(user);
             if (!result.Succeeded)

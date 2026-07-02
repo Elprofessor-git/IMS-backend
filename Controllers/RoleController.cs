@@ -23,60 +23,71 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<RoleDto>>> GetRoles()
         {
-            // On récupère les données depuis votre table personnalisée
             var roles = await _context.AppRoles.ToListAsync();
-            
-            var result = roles.Select(r => new RoleDto
-            {
-                Id = r.Id.ToString(), // Conversion explicite pour satisfaire le compilateur et Angular
-                Name = r.NomRole,
-                Description = r.Description,
-                PeutGererStock = r.PeutGererStock,
-                EstAdministrateur = r.EstAdministrateur
-            });
-
-            return Ok(result);
+            return Ok(roles.Select(MapToDto));
         }
 
-        [HttpPost]
-        public async Task<ActionResult<RoleDto>> CreateRole(CreateRoleDto createRoleDto)
+        // GET: api/roles/5
+        [HttpGet("{id}")]
+        public async Task<ActionResult<RoleDto>> GetRole(int id)
         {
-            Console.WriteLine($"===> [DB-DEBUG] Requête POST reçue pour le rôle : {createRoleDto.Name}");
+            var role = await _context.AppRoles.FindAsync(id);
+            if (role == null) return NotFound();
+            return Ok(MapToDto(role));
+        }
+
+        // POST: api/roles
+        [HttpPost]
+        public async Task<ActionResult<RoleDto>> CreateRole(CreateRoleDto dto)
+        {
             var role = new Role
             {
-                NomRole = createRoleDto.Name,
-                Description = createRoleDto.Description,
-                PeutGererStock = createRoleDto.PeutGererStock,
-                EstAdministrateur = createRoleDto.EstAdministrateur,
+                NomRole = dto.Name,
+                Description = dto.Description,
+                EstAdministrateur = dto.EstAdministrateur,
+                PeutGererStock = dto.PeutGererStock,
+                PeutGererCommandes = dto.PeutGererCommandes,
+                PeutGererTaches = dto.PeutGererTaches,
+                PeutGererClients = dto.PeutGererClients,
+                PeutGererFournisseurs = dto.PeutGererFournisseurs,
+                PeutGererAchats = dto.PeutGererAchats,
+                PeutGererImportations = dto.PeutGererImportations,
+                PeutGererUtilisateurs = dto.PeutGererUtilisateurs,
+                PeutGererMouvements = dto.PeutGererMouvements,
+                PeutValiderStock = dto.PeutValiderStock,
+                PeutConfirmerAchats = dto.PeutConfirmerAchats,
+                PeutValiderImportations = dto.PeutValiderImportations,
                 DateCreation = DateTime.Now,
                 EstActif = true
             };
 
             _context.AppRoles.Add(role);
             await _context.SaveChangesAsync();
-            Console.WriteLine($"===> [DB-DEBUG] Rôle enregistré avec succès ! ID généré : {role.Id}");
-
-            return Ok(new RoleDto
-            {
-                Id = role.Id.ToString(),
-                Name = role.NomRole,
-                Description = role.Description,
-                PeutGererStock = role.PeutGererStock,
-                EstAdministrateur = role.EstAdministrateur
-            });
+            return Ok(MapToDto(role));
         }
 
         // PUT: api/roles/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateRole(int id, CreateRoleDto model)
+        public async Task<IActionResult> UpdateRole(int id, CreateRoleDto dto)
         {
             var role = await _context.AppRoles.FindAsync(id);
             if (role == null) return NotFound();
 
-            role.NomRole = model.Name;
-            role.Description = model.Description;
-            role.PeutGererStock = model.PeutGererStock;
-            role.EstAdministrateur = model.EstAdministrateur;
+            role.NomRole = dto.Name;
+            role.Description = dto.Description;
+            role.EstAdministrateur = dto.EstAdministrateur;
+            role.PeutGererStock = dto.PeutGererStock;
+            role.PeutGererCommandes = dto.PeutGererCommandes;
+            role.PeutGererTaches = dto.PeutGererTaches;
+            role.PeutGererClients = dto.PeutGererClients;
+            role.PeutGererFournisseurs = dto.PeutGererFournisseurs;
+            role.PeutGererAchats = dto.PeutGererAchats;
+            role.PeutGererImportations = dto.PeutGererImportations;
+            role.PeutGererUtilisateurs = dto.PeutGererUtilisateurs;
+            role.PeutGererMouvements = dto.PeutGererMouvements;
+            role.PeutValiderStock = dto.PeutValiderStock;
+            role.PeutConfirmerAchats = dto.PeutConfirmerAchats;
+            role.PeutValiderImportations = dto.PeutValiderImportations;
 
             await _context.SaveChangesAsync();
             return NoContent();
@@ -91,8 +102,28 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             _context.AppRoles.Remove(role);
             await _context.SaveChangesAsync();
-
             return NoContent();
         }
+
+        private static RoleDto MapToDto(Role r) => new()
+        {
+            Id = r.Id,
+            Name = r.NomRole,
+            Description = r.Description,
+            EstActif = r.EstActif,
+            EstAdministrateur = r.EstAdministrateur,
+            PeutGererStock = r.PeutGererStock,
+            PeutGererCommandes = r.PeutGererCommandes,
+            PeutGererTaches = r.PeutGererTaches,
+            PeutGererClients = r.PeutGererClients,
+            PeutGererFournisseurs = r.PeutGererFournisseurs,
+            PeutGererAchats = r.PeutGererAchats,
+            PeutGererImportations = r.PeutGererImportations,
+            PeutGererUtilisateurs = r.PeutGererUtilisateurs,
+            PeutGererMouvements = r.PeutGererMouvements,
+            PeutValiderStock = r.PeutValiderStock,
+            PeutConfirmerAchats = r.PeutConfirmerAchats,
+            PeutValiderImportations = r.PeutValiderImportations,
+        };
     }
 }
