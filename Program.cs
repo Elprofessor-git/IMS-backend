@@ -112,15 +112,14 @@ builder.Services.AddScoped<TacheService>();
 builder.Services.AddScoped<FournisseurClientService>();
 builder.Services.AddScoped<IArticleService, ArticleService>();
 
-// Register HttpClient for GroqChatService
-builder.Services.AddHttpClient<GroqChatService>(client =>
+// Chatbot IA — HttpClient typé pour GroqService, puis ToolExecutor et ChatbotAgentService
+builder.Services.AddHttpClient<GroqService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(60);
-    client.DefaultRequestHeaders.Add("User-Agent", "Backend-Gestion-Magasin/1.0");
+    client.DefaultRequestHeaders.Add("User-Agent", "IMS-Backend/2.0");
 });
-
-// Register GroqChatService
-builder.Services.AddScoped<GroqChatService>();
+builder.Services.AddScoped<ToolExecutor>();
+builder.Services.AddScoped<ChatbotAgentService>();
 
 var app = builder.Build();
 
