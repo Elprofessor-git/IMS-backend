@@ -66,8 +66,8 @@ namespace Backend_Gestion_Magasin_API.Models
         public string? ModifiePar { get; set; }
         
         // Relations
-        public virtual Fournisseur Fournisseur { get; set; } = null!;
-        public virtual CommandeClient CommandeClient { get; set; } = null!;
+        public virtual Fournisseur? Fournisseur { get; set; }
+        public virtual CommandeClient? CommandeClient { get; set; }
         public virtual ICollection<LigneAchat> LignesAchat { get; set; } = new List<LigneAchat>();
     }
 }

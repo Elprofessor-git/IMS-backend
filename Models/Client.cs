@@ -52,7 +52,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public int PlateformeId { get; set; }
         
         // Relations
-        public virtual Plateforme Plateforme { get; set; } = null!;
+        public virtual Plateforme? Plateforme { get; set; }
         public virtual ICollection<CommandeClient> Commandes { get; set; } = new List<CommandeClient>();
     }
 }
