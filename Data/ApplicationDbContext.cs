@@ -31,6 +31,7 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<Role> AppRoles { get; set; }
         public DbSet<Tache> Taches { get; set; }
         public DbSet<FournisseurClient> FournisseurClients { get; set; }
+        public DbSet<DocumentJoint> DocumentsJoints { get; set; }
         public DbSet<DocumentImportation> DocumentsImportation { get; set; }
         public DbSet<Marque> Marques { get; set; }
         public DbSet<ConfigTaille> ConfigTailles { get; set; }
@@ -406,6 +407,25 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<FournitureBom>()
                 .Property(f => f.QteParPiece)
                 .HasPrecision(18, 4);
+
+            // DocumentJoint — enum stocké en string
+            modelBuilder.Entity<DocumentJoint>()
+                .Property(d => d.Type)
+                .HasConversion<string>();
+
+            // DocumentJoint -> Achat (nullable, cascade sur suppression achat)
+            modelBuilder.Entity<DocumentJoint>()
+                .HasOne(d => d.Achat)
+                .WithMany()
+                .HasForeignKey(d => d.AchatId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // DocumentJoint -> Importation (nullable, cascade sur suppression importation)
+            modelBuilder.Entity<DocumentJoint>()
+                .HasOne(d => d.Importation)
+                .WithMany()
+                .HasForeignKey(d => d.ImportationId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

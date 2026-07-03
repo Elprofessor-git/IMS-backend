@@ -1,0 +1,43 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace Backend_Gestion_Magasin_API.Models
+{
+    public enum TypeDocument { Facture, BonLivraison, Autre }
+
+    public class DocumentJoint
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [ForeignKey("Achat")]
+        public int? AchatId { get; set; }
+
+        [ForeignKey("Importation")]
+        public int? ImportationId { get; set; }
+
+        public TypeDocument Type { get; set; } = TypeDocument.Autre;
+
+        [Required]
+        [StringLength(255)]
+        public string NomFichier { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(100)]
+        public string ContentType { get; set; } = string.Empty;
+
+        public long TailleOctets { get; set; }
+
+        [Required]
+        public byte[] Contenu { get; set; } = Array.Empty<byte>();
+
+        public DateTime DateAjout { get; set; } = DateTime.UtcNow;
+
+        [StringLength(100)]
+        public string? AjoutePar { get; set; }
+
+        // Relations — nullable : le modèle est lié à l'un OU l'autre
+        public virtual Achat? Achat { get; set; }
+        public virtual Importation? Importation { get; set; }
+    }
+}

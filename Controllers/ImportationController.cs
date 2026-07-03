@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Http;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -361,92 +360,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
 
             _context.Importations.Remove(importation);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        // POST: api/Importation/{id}/Documents
-        [HttpPost("{id}/Documents")]
-        public async Task<ActionResult<DocumentImportation>> UploadDocument(int id, IFormFile file)
-        {
-            var importation = await _context.Importations.FindAsync(id);
-            if (importation == null) return NotFound();
-
-            if (file == null || file.Length == 0)
-                return BadRequest(new { message = "Aucun fichier fourni." });
-
-            var dossier = Path.Combine("wwwroot", "uploads", "importations", id.ToString());
-            Directory.CreateDirectory(dossier);
-
-            var nomFichier = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-            var chemin = Path.Combine(dossier, nomFichier);
-
-            using (var stream = new FileStream(chemin, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
-            }
-
-            var doc = new DocumentImportation
-            {
-                ImportationId = id,
-                NomFichier = file.FileName,
-                CheminFichier = $"/uploads/importations/{id}/{nomFichier}",
-                TypeFichier = file.ContentType,
-                TailleOctets = file.Length,
-                DateAjout = DateTime.UtcNow,
-                AjoutePar = User.Identity?.Name
-            };
-
-            _context.DocumentsImportation.Add(doc);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetImportation), new { id }, doc);
-        }
-
-        // GET: api/Importation/{id}/Documents
-        [HttpGet("{id}/Documents")]
-        public async Task<ActionResult<IEnumerable<DocumentImportation>>> GetDocuments(int id)
-        {
-            if (!await _context.Importations.AnyAsync(i => i.Id == id))
-                return NotFound();
-
-            var docs = await _context.DocumentsImportation
-                .Where(d => d.ImportationId == id)
-                .OrderByDescending(d => d.DateAjout)
-                .ToListAsync();
-
-            return Ok(docs);
-        }
-
-        // GET: api/Importation/Documents/{docId}/Telecharger
-        [HttpGet("Documents/{docId}/Telecharger")]
-        public async Task<IActionResult> TelechargerDocument(int docId)
-        {
-            var doc = await _context.DocumentsImportation.FindAsync(docId);
-            if (doc == null) return NotFound();
-
-            var chemin = Path.Combine("wwwroot", doc.CheminFichier.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-            if (!System.IO.File.Exists(chemin))
-                return NotFound(new { message = "Fichier introuvable sur le serveur." });
-
-            var bytes = await System.IO.File.ReadAllBytesAsync(chemin);
-            var contentType = doc.TypeFichier ?? "application/octet-stream";
-            return File(bytes, contentType, doc.NomFichier);
-        }
-
-        // DELETE: api/Importation/Documents/{docId}
-        [HttpDelete("Documents/{docId}")]
-        public async Task<IActionResult> SupprimerDocument(int docId)
-        {
-            var doc = await _context.DocumentsImportation.FindAsync(docId);
-            if (doc == null) return NotFound();
-
-            var chemin = Path.Combine("wwwroot", doc.CheminFichier.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-            if (System.IO.File.Exists(chemin))
-                System.IO.File.Delete(chemin);
-
-            _context.DocumentsImportation.Remove(doc);
             await _context.SaveChangesAsync();
 
             return NoContent();
