@@ -8,6 +8,9 @@ namespace Backend_Gestion_Magasin_API.Models.Auth
         [StringLength(100)]
         public string Nom { get; set; } = string.Empty;
 
+        [StringLength(100)]
+        public string? Prenom { get; set; }
+
         [Required]
         [EmailAddress]
         public string Email { get; set; } = string.Empty;

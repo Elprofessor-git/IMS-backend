@@ -31,7 +31,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public string ReferenceImportation { get; set; } = string.Empty;
         
         [ForeignKey("Fournisseur")]
-        public int FournisseurId { get; set; }
+        public int? FournisseurId { get; set; }
         
         public StatutImportation Statut { get; set; } = StatutImportation.Brouillon;
         
@@ -74,7 +74,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public string? ModifiePar { get; set; }
         
         // Relations
-        public virtual Fournisseur Fournisseur { get; set; } = null!;
+        public virtual Fournisseur? Fournisseur { get; set; }
         public virtual ICollection<LigneImportation> LignesImportation { get; set; } = new List<LigneImportation>();
         public virtual ICollection<DocumentImportation> Documents { get; set; } = new List<DocumentImportation>();
     }

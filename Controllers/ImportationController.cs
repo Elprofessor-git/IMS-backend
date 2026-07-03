@@ -111,6 +111,26 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
+            if (ligneImportation.TypeOrigine == TypeOrigineImportation.ClientCMT && !ligneImportation.CommandeClientId.HasValue)
+            {
+                return BadRequest("Une ligne de type Client (CMT) doit être liée à une commande client.");
+            }
+
+            switch (ligneImportation.TypeDestination)
+            {
+                case TypeDestinationImportation.Commande when !ligneImportation.CommandeClientId.HasValue:
+                    return BadRequest("TypeDestination=Commande requiert un CommandeClientId.");
+                case TypeDestinationImportation.Marque when !ligneImportation.ClientId.HasValue:
+                    return BadRequest("TypeDestination=Marque requiert un ClientId.");
+                case TypeDestinationImportation.Plateforme when !ligneImportation.PlateformeId.HasValue:
+                    return BadRequest("TypeDestination=Plateforme requiert un PlateformeId.");
+                case TypeDestinationImportation.StockLibre:
+                    ligneImportation.CommandeClientId = null;
+                    ligneImportation.ClientId = null;
+                    ligneImportation.PlateformeId = null;
+                    break;
+            }
+
             ligneImportation.ImportationId = id;
             ligneImportation.MontantLigne = ligneImportation.Quantite * ligneImportation.PrixUnitaire;
             ligneImportation.DateCreation = DateTime.Now;
@@ -212,9 +232,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Couleur = ligne.Couleur,
                     CodeCouleur = ligne.CodeCouleur,
                     Dimension = ligne.Dimension,
+                    Notes = ligne.Designation ?? ligne.Nature ?? ligne.Notes,
                     Quantite = ligne.Quantite,
-                    TypeStock = TypeStock.Importe, // Stock importé
-                    CommandeClientId = ligne.CommandeClientId,
+                    TypeStock = TypeStock.Importe,
+                    CommandeClientId = ligne.TypeDestination == TypeDestinationImportation.Commande ? ligne.CommandeClientId : null,
+                    ClientId = ligne.TypeDestination == TypeDestinationImportation.Marque ? ligne.ClientId : null,
+                    PlateformeId = ligne.TypeDestination == TypeDestinationImportation.Plateforme ? ligne.PlateformeId : null,
                     PrixUnitaire = ligne.PrixUnitaire,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,

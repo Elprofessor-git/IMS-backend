@@ -3,6 +3,20 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Backend_Gestion_Magasin_API.Models
 {
+    public enum TypeOrigineImportation
+    {
+        Fournisseur,
+        ClientCMT,
+    }
+
+    public enum TypeDestinationImportation
+    {
+        Commande,
+        Marque,
+        Plateforme,
+        StockLibre,
+    }
+
     public class LigneImportation
     {
         [Key]
@@ -45,13 +59,25 @@ namespace Backend_Gestion_Magasin_API.Models
         public string? Notes { get; set; }
         
         public bool EstAffecteStock { get; set; } = false;
-        
+
+        public TypeOrigineImportation TypeOrigine { get; set; } = TypeOrigineImportation.Fournisseur;
+
+        public TypeDestinationImportation TypeDestination { get; set; } = TypeDestinationImportation.StockLibre;
+
+        [ForeignKey("Client")]
+        public int? ClientId { get; set; }
+
+        [ForeignKey("Plateforme")]
+        public int? PlateformeId { get; set; }
+
         public DateTime DateCreation { get; set; } = DateTime.Now;
-        
+
         // Relations
         public virtual Importation Importation { get; set; } = null!;
         public virtual Article Article { get; set; } = null!;
         public virtual CommandeClient? CommandeClient { get; set; }
+        public virtual Client? Client { get; set; }
+        public virtual Plateforme? Plateforme { get; set; }
     }
 }
 

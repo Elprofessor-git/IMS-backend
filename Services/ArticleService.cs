@@ -120,12 +120,13 @@ namespace Backend_Gestion_Magasin_API.Services
 
         public async Task<IEnumerable<Article>> SearchArticlesAsync(string term)
         {
+            var pattern = $"%{term}%";
             return await _context.Articles
                 .Where(a => a.EstActif &&
-                           (a.Designation.Contains(term) ||
-                            a.Description.Contains(term) ||
-                            a.Reference.Contains(term) ||
-                            a.Categorie.Contains(term)))
+                           (EF.Functions.ILike(a.Designation, pattern) ||
+                            EF.Functions.ILike(a.Description ?? "", pattern) ||
+                            EF.Functions.ILike(a.Reference ?? "", pattern) ||
+                            EF.Functions.ILike(a.Categorie ?? "", pattern)))
                 .Include(a => a.Stocks)
                 .ToListAsync();
         }

@@ -157,6 +157,20 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasForeignKey(s => s.ArticleId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Client -> Stock (scope optionnel)
+            modelBuilder.Entity<Stock>()
+                .HasOne(s => s.Client)
+                .WithMany()
+                .HasForeignKey(s => s.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Plateforme -> Stock (scope optionnel)
+            modelBuilder.Entity<Stock>()
+                .HasOne(s => s.Plateforme)
+                .WithMany()
+                .HasForeignKey(s => s.PlateformeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // Stock -> MouvementStock (One-to-Many)
             modelBuilder.Entity<MouvementStock>()
                 .HasOne(ms => ms.Stock)
@@ -233,6 +247,20 @@ namespace Backend_Gestion_Magasin_API.Data
                 .WithMany()
                 .HasForeignKey(li => li.CommandeClientId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Client -> LigneImportation (scope Marque, optionnel)
+            modelBuilder.Entity<LigneImportation>()
+                .HasOne(li => li.Client)
+                .WithMany()
+                .HasForeignKey(li => li.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Plateforme -> LigneImportation (scope Plateforme, optionnel)
+            modelBuilder.Entity<LigneImportation>()
+                .HasOne(li => li.Plateforme)
+                .WithMany()
+                .HasForeignKey(li => li.PlateformeId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Role -> ApplicationUser (One-to-Many)
             modelBuilder.Entity<ApplicationUser>()
@@ -407,6 +435,15 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<FournitureBom>()
                 .Property(f => f.QteParPiece)
                 .HasPrecision(18, 4);
+
+            // LigneImportation — TypeOrigine et TypeDestination stockés en string
+            modelBuilder.Entity<LigneImportation>()
+                .Property(li => li.TypeOrigine)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<LigneImportation>()
+                .Property(li => li.TypeDestination)
+                .HasConversion<string>();
 
             // DocumentJoint — enum stocké en string
             modelBuilder.Entity<DocumentJoint>()

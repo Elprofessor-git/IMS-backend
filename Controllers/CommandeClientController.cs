@@ -104,6 +104,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var commande = await _context.CommandesClients
                 .Include(c => c.Besoins)
                 .ThenInclude(b => b.Article)
+                .Include(c => c.Client)
                 .FirstOrDefaultAsync(c => c.Id == id);
 
             if (commande == null)
@@ -116,16 +117,60 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             foreach (var besoin in commande.Besoins)
             {
-                // 1. Vérifier stock importé
-                var stockImporte = await _context.Stocks
-                    .Where(s => s.ArticleId == besoin.ArticleId && 
+                // 1. Stock importé — hiérarchie scopée : commande → client → plateforme → global
+                var stockImporteCommande = await _context.Stocks
+                    .Where(s => s.ArticleId == besoin.ArticleId &&
                                s.TypeStock == TypeStock.Importe &&
+                               s.CommandeClientId == commande.Id &&
                                s.Quantite > 0)
                     .SumAsync(s => s.Quantite);
 
+                decimal stockImporte;
+                if (stockImporteCommande > 0)
+                {
+                    stockImporte = stockImporteCommande;
+                }
+                else
+                {
+                    var stockImporteClient = await _context.Stocks
+                        .Where(s => s.ArticleId == besoin.ArticleId &&
+                                   s.TypeStock == TypeStock.Importe &&
+                                   s.ClientId == commande.ClientId &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite);
+
+                    if (stockImporteClient > 0)
+                    {
+                        stockImporte = stockImporteClient;
+                    }
+                    else
+                    {
+                        var plateformeId = commande.Client?.PlateformeId;
+                        var stockImportePlateforme = plateformeId.HasValue
+                            ? await _context.Stocks
+                                .Where(s => s.ArticleId == besoin.ArticleId &&
+                                           s.TypeStock == TypeStock.Importe &&
+                                           s.PlateformeId == plateformeId &&
+                                           s.Quantite > 0)
+                                .SumAsync(s => s.Quantite)
+                            : 0;
+
+                        stockImporte = stockImportePlateforme > 0
+                            ? stockImportePlateforme
+                            : await _context.Stocks
+                                .Where(s => s.ArticleId == besoin.ArticleId &&
+                                           s.TypeStock == TypeStock.Importe &&
+                                           s.CommandeClientId == null &&
+                                           s.ClientId == null &&
+                                           s.PlateformeId == null &&
+                                           s.Quantite > 0)
+                                .SumAsync(s => s.Quantite);
+                    }
+                }
+
                 besoin.QuantiteStockImporte = Math.Min(stockImporte, besoin.QuantiteTotale);
 
-                // 2. Vérifier les ressources réservées (Achats locaux ET Stock déjà réservé pour cette commande)
+                // 2. Ressources réservées pour cette commande (achats confirmés + stock TypeStock.Reserve scopé commande)
                 var achatsEnCours = await _context.LignesAchat
                     .Include(la => la.Achat)
                     .Where(la => la.ArticleId == besoin.ArticleId &&
@@ -135,7 +180,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 var stockDejaReserve = await _context.Stocks
                     .Where(s => s.ArticleId == besoin.ArticleId &&
-                               s.CommandeClientId == commande.Id)
+                               s.CommandeClientId == commande.Id &&
+                               s.TypeStock == TypeStock.Reserve)
                     .SumAsync(s => s.Quantite);
 
                 besoin.QuantiteAchatsLocaux = achatsEnCours + stockDejaReserve;

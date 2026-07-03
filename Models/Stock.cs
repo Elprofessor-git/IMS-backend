@@ -66,9 +66,17 @@ namespace Backend_Gestion_Magasin_API.Models
         
         public DateTime? DateValidation { get; set; }
         
+        [ForeignKey("Client")]
+        public int? ClientId { get; set; }
+
+        [ForeignKey("Plateforme")]
+        public int? PlateformeId { get; set; }
+
         // Relations
         public virtual Article Article { get; set; } = null!;
         public virtual CommandeClient? CommandeClient { get; set; }
+        public virtual Client? Client { get; set; }
+        public virtual Plateforme? Plateforme { get; set; }
         public virtual ICollection<MouvementStock> Mouvements { get; set; } = new List<MouvementStock>();
     }
 }

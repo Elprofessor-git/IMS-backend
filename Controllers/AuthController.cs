@@ -36,11 +36,15 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Register([FromBody] RegisterModel model)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
+
+        var allowedRoles = new[] { "Admin", "User" };
+        if (!allowedRoles.Contains(model.Role))
+            return BadRequest("Rôle invalide. Les valeurs acceptées sont : Admin, User.");
 
         var existingUser = await _userManager.FindByEmailAsync(model.Email);
         if (existingUser != null)
@@ -50,7 +54,8 @@ public class AuthController : ControllerBase
         {
             UserName = model.Email,
             Email = model.Email,
-            Nom = model.Nom
+            Nom = model.Nom,
+            Prenom = model.Prenom,
         };
 
         var result = await _userManager.CreateAsync(user, model.Password);

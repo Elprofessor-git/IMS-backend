@@ -177,6 +177,19 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Stock réservé avec succès" });
         }
 
+        // GET: api/Stock/Emplacements
+        [HttpGet("Emplacements")]
+        public async Task<ActionResult<IEnumerable<string>>> GetEmplacements()
+        {
+            var emplacements = await _context.Stocks
+                .Where(s => s.EmplacementPhysique != null && s.EmplacementPhysique != "")
+                .Select(s => s.EmplacementPhysique!)
+                .Distinct()
+                .OrderBy(e => e)
+                .ToListAsync();
+            return Ok(emplacements);
+        }
+
         // DELETE: api/Stock/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteStock(int id)
