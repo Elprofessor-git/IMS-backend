@@ -1,9 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using Backend_Gestion_Magasin_API.Data;
-using Backend_Gestion_Magasin_API.Models;
+using Backend_Gestion_Magasin_API.Services;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -12,11 +10,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
     [Route("api/[controller]")]
     public class PermissionController : ControllerBase
     {
-        private readonly ApplicationDbContext _db;
+        private readonly IPermissionService _permissionService;
 
-        public PermissionController(ApplicationDbContext db)
+        public PermissionController(IPermissionService permissionService)
         {
-            _db = db;
+            _permissionService = permissionService;
         }
 
         [HttpGet("me")]
@@ -25,52 +23,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null) return Unauthorized();
 
-            var user = await _db.Users
-                .Include(u => u.Role)
-                .FirstOrDefaultAsync(u => u.Id == userId);
+            var permissions = await _permissionService.GetAllPermissionsAsync(userId);
 
-            if (user == null) return NotFound();
-
-            // Administrateur → tout à true
-            if (user.Role?.EstAdministrateur == true)
-                return Ok(AllModules().Select(m =>
-                    new { module = m, canAccess = true, canWrite = true }));
-
-            // Pas de rôle → dashboard seulement
-            if (user.Role == null)
-                return Ok(new[]
-                {
-                    new { module = "dashboard", canAccess = true, canWrite = false }
-                });
-
-            // Rôle normal → mapping des booléens du rôle
-            var role = user.Role;
-            return Ok(new[]
+            return Ok(permissions.Select(p => new
             {
-                Perm("articles",      role.PeutGererStock,        role.PeutValiderStock),
-                Perm("stock",         role.PeutGererStock,        role.PeutValiderStock),
-                Perm("mouvements",    role.PeutGererMouvements,   role.PeutGererMouvements),
-                Perm("achats",        role.PeutGererAchats,       role.PeutConfirmerAchats),
-                Perm("importations",  role.PeutGererImportations, role.PeutValiderImportations),
-                Perm("commandes",     role.PeutGererCommandes,    role.PeutGererCommandes),
-                Perm("clients",       role.PeutGererClients,      role.PeutGererClients),
-                Perm("fournisseurs",  role.PeutGererFournisseurs, role.PeutGererFournisseurs),
-                Perm("taches",        role.PeutGererTaches,       role.PeutGererTaches),
-                Perm("utilisateurs",  role.PeutGererUtilisateurs, role.PeutGererUtilisateurs),
-                Perm("roles",         role.EstAdministrateur,     role.EstAdministrateur),
-                Perm("chatbot",       true,                       false),
-                Perm("dashboard",     true,                       false),
-            });
+                module = p.Module,
+                canAccess = p.CanAccess,
+                canWrite = p.CanWrite
+            }));
         }
-
-        private static string[] AllModules() =>
-        [
-            "articles", "stock", "mouvements", "achats", "importations",
-            "commandes", "clients", "fournisseurs", "taches",
-            "utilisateurs", "roles", "chatbot", "dashboard"
-        ];
-
-        private static object Perm(string module, bool canAccess, bool canWrite) =>
-            new { module, canAccess, canWrite };
     }
 }

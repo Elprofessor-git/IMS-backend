@@ -13,10 +13,11 @@ namespace Backend_Gestion_Magasin_API.Services
     /// </summary>
     public class ToolExecutor
     {
-        private readonly ApplicationDbContext _context;
-        private readonly IArticleService      _articles;
-        private readonly CommandeService      _commandes;
-        private readonly ImportationService   _importations;
+        private readonly ApplicationDbContext  _context;
+        private readonly IArticleService       _articles;
+        private readonly CommandeService       _commandes;
+        private readonly ImportationService    _importations;
+        private readonly IPermissionService    _permissions;
         private readonly ILogger<ToolExecutor> _logger;
 
         private static readonly JsonSerializerOptions _jsonOpts = new()
@@ -30,18 +31,41 @@ namespace Backend_Gestion_Magasin_API.Services
             IArticleService articles,
             CommandeService commandes,
             ImportationService importations,
+            IPermissionService permissions,
             ILogger<ToolExecutor> logger)
         {
             _context      = context;
             _articles     = articles;
             _commandes    = commandes;
             _importations = importations;
+            _permissions  = permissions;
             _logger       = logger;
         }
 
-        public async Task<string> ExecuteAsync(string toolName, JsonNode args)
+        public async Task<string> ExecuteAsync(string toolName, JsonNode args, string? userId)
         {
-            _logger.LogInformation("Outil : {Tool} | args : {Args}", toolName, args.ToJsonString());
+            if (string.IsNullOrEmpty(userId))
+                return Err("Accès refusé : authentification requise pour utiliser les outils de données.");
+
+            var module = toolName switch
+            {
+                "get_articles"     => "articles",
+                "get_stock"        => "stock",
+                "get_commandes"    => "commandes",
+                "get_achats"       => "achats",
+                "get_importations" => "importations",
+                "get_mouvements"   => "mouvements",
+                _                  => null
+            };
+
+            if (module is null)
+                return Err($"Outil inconnu : {toolName}");
+
+            var (canAccess, _) = await _permissions.GetPermissionAsync(userId, module);
+            if (!canAccess)
+                return Err($"Accès refusé au module « {module} » : vous n'avez pas les droits nécessaires.");
+
+            _logger.LogInformation("Outil : {Tool} | args : {Args} | user : {UserId}", toolName, args.ToJsonString(), userId);
             try
             {
                 return toolName switch
@@ -52,7 +76,7 @@ namespace Backend_Gestion_Magasin_API.Services
                     "get_achats"       => await GetAchats(args),
                     "get_importations" => await GetImportations(args),
                     "get_mouvements"   => await GetMouvements(args),
-                    _ => Err($"Outil inconnu : {toolName}")
+                    _                  => Err($"Outil inconnu : {toolName}")
                 };
             }
             catch (Exception ex)

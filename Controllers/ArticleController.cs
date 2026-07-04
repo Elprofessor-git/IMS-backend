@@ -1,4 +1,5 @@
 using Backend_Gestion_Magasin_API.Dtos.Article;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -22,6 +23,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpGet]
+        [RequireModulePermission("articles", requireWrite: false)]
         public async Task<IActionResult> GetArticles([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
             var articles = await _articleService.GetArticlesAsync(pageNumber, pageSize);
@@ -29,6 +31,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpGet("{id}")]
+        [RequireModulePermission("articles", requireWrite: false)]
         public async Task<IActionResult> GetArticle(int id)
         {
             var article = await _articleService.GetArticleByIdAsync(id);
@@ -39,7 +42,36 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(article);
         }
 
+        [HttpGet("Search/{terme}")]
+        [RequireModulePermission("articles", requireWrite: false)]
+        public async Task<IActionResult> SearchArticles(string terme)
+        {
+            var articles = await _articleService.SearchArticlesAsync(terme);
+            return Ok(articles);
+        }
+
+        [HttpGet("ByCategorie/{categorie}")]
+        [RequireModulePermission("articles", requireWrite: false)]
+        public async Task<IActionResult> GetArticlesByCategorie(string categorie)
+        {
+            var articles = await _articleService.GetArticlesByCategorieAsync(categorie);
+            return Ok(articles);
+        }
+
+        [HttpGet("{id}/StockTotal")]
+        [RequireModulePermission("articles", requireWrite: false)]
+        public async Task<IActionResult> GetStockTotal(int id)
+        {
+            var stockInfo = await _articleService.GetStockTotalAsync(id);
+            if (stockInfo == null)
+            {
+                return NotFound();
+            }
+            return Ok(stockInfo);
+        }
+
         [HttpPost]
+        [RequireModulePermission("articles", requireWrite: true)]
         public async Task<IActionResult> PostArticle(CreateArticleDto articleDto)
         {
             if (!ModelState.IsValid)
@@ -51,6 +83,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpPut("{id}")]
+        [RequireModulePermission("articles", requireWrite: true)]
         public async Task<IActionResult> PutArticle(int id, UpdateArticleDto articleDto)
         {
             if (!ModelState.IsValid)
@@ -69,6 +102,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [RequireModulePermission("articles", requireWrite: true)]
         public async Task<IActionResult> DeleteArticle(int id)
         {
             try
@@ -86,32 +120,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
         }
 
-        [HttpGet("Search/{terme}")]
-        public async Task<IActionResult> SearchArticles(string terme)
-        {
-            var articles = await _articleService.SearchArticlesAsync(terme);
-            return Ok(articles);
-        }
-
-        [HttpGet("ByCategorie/{categorie}")]
-        public async Task<IActionResult> GetArticlesByCategorie(string categorie)
-        {
-            var articles = await _articleService.GetArticlesByCategorieAsync(categorie);
-            return Ok(articles);
-        }
-
-        [HttpGet("{id}/StockTotal")]
-        public async Task<IActionResult> GetStockTotal(int id)
-        {
-            var stockInfo = await _articleService.GetStockTotalAsync(id);
-            if (stockInfo == null)
-            {
-                return NotFound();
-            }
-            return Ok(stockInfo);
-        }
-
         [HttpPost("{id}/Desactiver")]
+        [RequireModulePermission("articles", requireWrite: true)]
         public async Task<IActionResult> DesactiverArticle(int id)
         {
             var success = await _articleService.DeactivateArticleAsync(id);
@@ -123,6 +133,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpPost("{id}/Activer")]
+        [RequireModulePermission("articles", requireWrite: true)]
         public async Task<IActionResult> ActiverArticle(int id)
         {
             var success = await _articleService.ActivateArticleAsync(id);
@@ -134,6 +145,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpPost("{id}/image")]
+        [RequireModulePermission("articles", requireWrite: true)]
         public async Task<IActionResult> UploadImage(int id, IFormFile file)
         {
             if (file == null || file.Length == 0)

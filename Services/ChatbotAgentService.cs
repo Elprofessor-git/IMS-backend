@@ -105,7 +105,7 @@ namespace Backend_Gestion_Magasin_API.Services
                     var rawArgs  = tc["function"]!["arguments"]!.GetValue<string>();
                     var toolArgs = JsonNode.Parse(rawArgs) ?? new JsonObject();
 
-                    var result = await _executor.ExecuteAsync(toolName, toolArgs);
+                    var result = await _executor.ExecuteAsync(toolName, toolArgs, request.UserId);
 
                     messages.Add(new
                     {

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
@@ -19,8 +20,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context = context;
         }
 
-        // GET: api/TacheProduction
         [HttpGet]
+        [RequireModulePermission("taches", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<TacheProduction>>> GetTaches()
         {
             return await _context.TachesProduction
@@ -29,8 +30,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/TacheProduction/5
         [HttpGet("{id}")]
+        [RequireModulePermission("taches", requireWrite: false)]
         public async Task<ActionResult<TacheProduction>> GetTacheProduction(int id)
         {
             var tache = await _context.TachesProduction
@@ -49,8 +50,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return tache;
         }
 
-        // GET: api/TacheProduction/Statut/EnCours
         [HttpGet("Statut/{statut}")]
+        [RequireModulePermission("taches", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<TacheProduction>>> GetTachesByStatut(StatutTache statut)
         {
             return await _context.TachesProduction
@@ -60,8 +61,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/TacheProduction/Equipe/Production1
         [HttpGet("Equipe/{equipe}")]
+        [RequireModulePermission("taches", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<TacheProduction>>> GetTachesByEquipe(string equipe)
         {
             return await _context.TachesProduction
@@ -71,8 +72,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/TacheProduction/Dashboard
         [HttpGet("Dashboard")]
+        [RequireModulePermission("taches", requireWrite: false)]
         public async Task<ActionResult<object>> GetDashboard()
         {
             var dashboard = new
@@ -92,8 +93,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(dashboard);
         }
 
-        // POST: api/TacheProduction
         [HttpPost]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<ActionResult<TacheProduction>> PostTacheProduction(TacheProduction tache)
         {
             tache.DateCreation = DateTime.Now;
@@ -103,8 +104,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return CreatedAtAction("GetTacheProduction", new { id = tache.Id }, tache);
         }
 
-        // PUT: api/TacheProduction/5
         [HttpPut("{id}")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> PutTacheProduction(int id, TacheProduction tache)
         {
             if (id != tache.Id)
@@ -134,8 +135,38 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return NoContent();
         }
 
-        // POST: api/TacheProduction/5/Commencer
+        [HttpPut("{id}/statut")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<IActionResult> UpdateStatut(int id, [FromBody] UpdateStatutDto data)
+        {
+            var tache = await _context.TachesProduction.FindAsync(id);
+            if (tache == null) return NotFound();
+
+            if (Enum.TryParse<StatutTache>(data.Statut, out var statut))
+            {
+                tache.Statut = statut;
+                tache.DateMiseAJour = DateTime.Now;
+                await _context.SaveChangesAsync();
+                return NoContent();
+            }
+            return BadRequest("Statut invalide");
+        }
+
+        [HttpPut("{id}/equipe")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<IActionResult> AssignerEquipe(int id, [FromBody] AssignerEquipeDto data)
+        {
+            var tache = await _context.TachesProduction.FindAsync(id);
+            if (tache == null) return NotFound();
+
+            tache.EquipeAssignee = data.EquipeId;
+            tache.DateMiseAJour = DateTime.Now;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
         [HttpPost("{id}/Commencer")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> CommencerTache(int id, [FromBody] string responsable)
         {
             var tache = await _context.TachesProduction.FindAsync(id);
@@ -154,8 +185,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Tâche commencée avec succès" });
         }
 
-        // POST: api/TacheProduction/5/MettreAJourAvancement
         [HttpPost("{id}/MettreAJourAvancement")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> MettreAJourAvancement(int id, [FromBody] decimal pourcentage)
         {
             var tache = await _context.TachesProduction.FindAsync(id);
@@ -178,8 +209,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Avancement mis à jour avec succès" });
         }
 
-        // POST: api/TacheProduction/5/Bloquer
         [HttpPost("{id}/Bloquer")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> BloquerTache(int id, [FromBody] string motif)
         {
             var tache = await _context.TachesProduction.FindAsync(id);
@@ -197,8 +228,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Tâche bloquée avec succès" });
         }
 
-        // POST: api/TacheProduction/5/Debloquer
         [HttpPost("{id}/Debloquer")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> DebloquerTache(int id)
         {
             var tache = await _context.TachesProduction.FindAsync(id);
@@ -216,8 +247,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Tâche débloquée avec succès" });
         }
 
-        // POST: api/TacheProduction/5/Terminer
         [HttpPost("{id}/Terminer")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> TerminerTache(int id, [FromBody] string notes)
         {
             var tache = await _context.TachesProduction
@@ -235,12 +266,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             tache.NotesProgression = notes;
             tache.DateMiseAJour = DateTime.Now;
 
-            // Mettre à jour le statut de la commande si toutes les tâches sont terminées
             if (tache.CommandeClient != null)
             {
                 var tachesRestantes = await _context.TachesProduction
-                    .CountAsync(t => t.CommandeClientId == tache.CommandeClientId && 
-                                    t.Statut != StatutTache.Termine && 
+                    .CountAsync(t => t.CommandeClientId == tache.CommandeClientId &&
+                                    t.Statut != StatutTache.Termine &&
                                     t.Statut != StatutTache.Annule);
 
                 if (tachesRestantes == 0)
@@ -255,38 +285,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Tâche terminée avec succès" });
         }
 
-        // PUT: api/TacheProduction/5/statut
-        [HttpPut("{id}/statut")]
-        public async Task<IActionResult> UpdateStatut(int id, [FromBody] UpdateStatutDto data)
-        {
-            var tache = await _context.TachesProduction.FindAsync(id);
-            if (tache == null) return NotFound();
-
-            if (Enum.TryParse<StatutTache>(data.Statut, out var statut))
-            {
-                tache.Statut = statut;
-                tache.DateMiseAJour = DateTime.Now;
-                await _context.SaveChangesAsync();
-                return NoContent();
-            }
-            return BadRequest("Statut invalide");
-        }
-
-        // PUT: api/TacheProduction/5/equipe
-        [HttpPut("{id}/equipe")]
-        public async Task<IActionResult> AssignerEquipe(int id, [FromBody] AssignerEquipeDto data)
-        {
-            var tache = await _context.TachesProduction.FindAsync(id);
-            if (tache == null) return NotFound();
-
-            tache.EquipeAssignee = data.EquipeId;
-            tache.DateMiseAJour = DateTime.Now;
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-
-        // POST: api/TacheProduction/5/Assigner
         [HttpPost("{id}/Assigner")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> AssignerTache(int id, [FromBody] AssignerTacheDto data)
         {
             var tache = await _context.TachesProduction.FindAsync(id);
@@ -298,8 +298,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Tâche assignée avec succès" });
         }
 
-        // POST: api/TacheProduction/5/ModifierPriorite
         [HttpPost("{id}/ModifierPriorite")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> ModifierPriorite(int id, [FromBody] ModifierPrioriteDto data)
         {
             var tache = await _context.TachesProduction.FindAsync(id);
@@ -315,8 +315,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return BadRequest("Priorité invalide");
         }
 
-        // POST: api/TacheProduction/5/ModifierEcheance
         [HttpPost("{id}/ModifierEcheance")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> ModifierEcheance(int id, [FromBody] ModifierEcheanceDto data)
         {
             var tache = await _context.TachesProduction.FindAsync(id);
@@ -328,8 +328,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Échéance mise à jour" });
         }
 
-        // DELETE: api/TacheProduction/5
         [HttpDelete("{id}")]
+        [RequireModulePermission("taches", requireWrite: true)]
         public async Task<IActionResult> DeleteTacheProduction(int id)
         {
             var tache = await _context.TachesProduction.FindAsync(id);
@@ -350,4 +350,3 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
     }
 }
-

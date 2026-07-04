@@ -104,6 +104,7 @@ builder.Services.AddCors(options =>
 });
 
 // Register custom services
+builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<StockService>();
 builder.Services.AddScoped<CommandeService>();

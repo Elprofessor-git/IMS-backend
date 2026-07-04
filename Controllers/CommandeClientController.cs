@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +19,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context = context;
         }
 
-        // GET: api/CommandeClient
         [HttpGet]
+        [RequireModulePermission("commandes", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<CommandeClient>>> GetCommandes()
         {
             return await _context.CommandesClients
@@ -31,8 +32,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/CommandeClient/5
         [HttpGet("{id}")]
+        [RequireModulePermission("commandes", requireWrite: false)]
         public async Task<ActionResult<CommandeClient>> GetCommandeClient(int id)
         {
             var commande = await _context.CommandesClients
@@ -53,8 +54,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return commande;
         }
 
-        // GET: api/CommandeClient/Statut/Prete
         [HttpGet("Statut/{statut}")]
+        [RequireModulePermission("commandes", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<CommandeClient>>> GetCommandesByStatut(StatutCommande statut)
         {
             return await _context.CommandesClients
@@ -64,21 +65,61 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // POST: api/CommandeClient
+        [HttpGet("{id}/Tailles")]
+        [RequireModulePermission("commandes", requireWrite: false)]
+        public async Task<ActionResult<IEnumerable<ConfigTaille>>> GetTailles(int id)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            return await _context.ConfigTailles
+                .Where(ct => ct.CommandeId == id)
+                .OrderBy(ct => ct.Taille)
+                .ToListAsync();
+        }
+
+        [HttpGet("{id}/Bom")]
+        [RequireModulePermission("commandes", requireWrite: false)]
+        public async Task<ActionResult<IEnumerable<BomLigne>>> GetBom(int id)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            return await _context.BomLignes
+                .Include(b => b.Article)
+                .Where(b => b.CommandeId == id)
+                .ToListAsync();
+        }
+
+        [HttpGet("{id}/ResultatCalcul")]
+        [RequireModulePermission("commandes", requireWrite: false)]
+        public async Task<ActionResult<IEnumerable<ResultatCalcul>>> GetResultatCalcul(int id)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            return await _context.ResultatsCalcul
+                .Include(r => r.Article)
+                .Where(r => r.CommandeId == id)
+                .OrderBy(r => r.Article.Designation)
+                .ToListAsync();
+        }
+
         [HttpPost]
+        [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<ActionResult<CommandeClient>> PostCommandeClient(CommandeClient commande)
         {
             commande.DateCreation = DateTime.Now;
             commande.NumeroCommande = GenerateNumeroCommande();
-            
+
             _context.CommandesClients.Add(commande);
             await _context.SaveChangesAsync();
 
             return CreatedAtAction("GetCommandeClient", new { id = commande.Id }, commande);
         }
 
-        // POST: api/CommandeClient/5/Besoins
         [HttpPost("{id}/Besoins")]
+        [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<ActionResult<BesoinCommande>> AjouterBesoin(int id, BesoinCommande besoin)
         {
             var commande = await _context.CommandesClients.FindAsync(id);
@@ -97,8 +138,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return CreatedAtAction("GetCommandeClient", new { id = commande.Id }, besoin);
         }
 
-        // POST: api/CommandeClient/5/ValiderRessources
         [HttpPost("{id}/ValiderRessources")]
+        [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<ActionResult> ValiderRessources(int id)
         {
             var commande = await _context.CommandesClients
@@ -117,7 +158,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             foreach (var besoin in commande.Besoins)
             {
-                // 1. Stock importé — 4 buckets mutuellement exclusifs, sommés indépendamment
                 var plateformeId = commande.Client?.PlateformeId;
 
                 var s1 = await _context.Stocks
@@ -156,7 +196,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 besoin.QuantiteStockImporte = Math.Min(stockImporte, besoin.QuantiteTotale);
 
-                // 2. Achats confirmés — 3 buckets additifs (Commande / Marque / Plateforme)
                 var a1 = await _context.LignesAchat
                     .Include(la => la.Achat)
                     .Where(la => la.ArticleId == besoin.ArticleId &&
@@ -193,13 +232,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 besoin.QuantiteAchatsLocaux = achatsEnCours + stockDejaReserve;
 
-                // 3. Calculer le reste nécessaire depuis stock libre
                 var quantiteRestante = besoin.QuantiteTotale - besoin.QuantiteStockImporte - besoin.QuantiteAchatsLocaux;
-                
+
                 if (quantiteRestante > 0)
                 {
                     var stockLibre = await _context.Stocks
-                        .Where(s => s.ArticleId == besoin.ArticleId && 
+                        .Where(s => s.ArticleId == besoin.ArticleId &&
                                    s.TypeStock == TypeStock.Libre &&
                                    s.Quantite > s.QuantiteReservee)
                         .SumAsync(s => s.Quantite - s.QuantiteReservee);
@@ -215,7 +253,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
 
             commande.PourcentageRessourcesCouvertes = besoinsTraites > 0 ? totalCouverture / besoinsTraites : 0;
-            
+
             if (commande.PourcentageRessourcesCouvertes >= 100)
             {
                 commande.Statut = StatutCommande.Prete;
@@ -228,15 +266,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
             commande.DateMiseAJour = DateTime.Now;
             await _context.SaveChangesAsync();
 
-            return Ok(new { 
+            return Ok(new
+            {
                 message = "Validation des ressources terminée",
                 pourcentageCouverture = commande.PourcentageRessourcesCouvertes,
                 statut = commande.Statut.ToString()
             });
         }
 
-        // POST: api/CommandeClient/5/GenererTaches
         [HttpPost("{id}/GenererTaches")]
+        [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<ActionResult> GenererTaches(int id)
         {
             var commande = await _context.CommandesClients
@@ -274,74 +313,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Tâches de production générées avec succès", tacheId = tache.Id });
         }
 
-        // PUT: api/CommandeClient/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutCommandeClient(int id, CommandeClient commande)
-        {
-            if (id != commande.Id)
-            {
-                return BadRequest();
-            }
-
-            commande.DateMiseAJour = DateTime.Now;
-            _context.Entry(commande).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!CommandeClientExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
-        }
-
-        // DELETE: api/CommandeClient/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteCommandeClient(int id)
-        {
-            var commande = await _context.CommandesClients.FindAsync(id);
-            if (commande == null)
-            {
-                return NotFound();
-            }
-
-            if (commande.Statut == StatutCommande.EnProduction ||
-                commande.Statut == StatutCommande.Terminee)
-            {
-                return BadRequest(new { message = "Impossible de supprimer une commande en production ou terminée." });
-            }
-
-            _context.CommandesClients.Remove(commande);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        // GET: api/CommandeClient/5/Tailles
-        [HttpGet("{id}/Tailles")]
-        public async Task<ActionResult<IEnumerable<ConfigTaille>>> GetTailles(int id)
-        {
-            if (!CommandeClientExists(id))
-                return NotFound();
-
-            return await _context.ConfigTailles
-                .Where(ct => ct.CommandeId == id)
-                .OrderBy(ct => ct.Taille)
-                .ToListAsync();
-        }
-
-        // POST: api/CommandeClient/5/Tailles
         [HttpPost("{id}/Tailles")]
+        [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<ActionResult> SetTailles(int id, [FromBody] List<ConfigTailleDto> dtos)
         {
             if (!CommandeClientExists(id))
@@ -364,21 +337,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Configuration des tailles enregistrée", count = dtos.Count });
         }
 
-        // GET: api/CommandeClient/5/Bom
-        [HttpGet("{id}/Bom")]
-        public async Task<ActionResult<IEnumerable<BomLigne>>> GetBom(int id)
-        {
-            if (!CommandeClientExists(id))
-                return NotFound();
-
-            return await _context.BomLignes
-                .Include(b => b.Article)
-                .Where(b => b.CommandeId == id)
-                .ToListAsync();
-        }
-
-        // POST: api/CommandeClient/5/Bom
         [HttpPost("{id}/Bom")]
+        [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<ActionResult> SetBom(int id, [FromBody] List<BomLigneDto> dtos)
         {
             if (!CommandeClientExists(id))
@@ -402,8 +362,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "BOM enregistrée", count = dtos.Count });
         }
 
-        // POST: api/CommandeClient/5/Calculer
         [HttpPost("{id}/Calculer")]
+        [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<ActionResult> Calculer(int id, [FromBody] CalculerRequest request)
         {
             var commande = await _context.CommandesClients
@@ -473,9 +433,39 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 var qteAchat = b1 + b2 + b3;
 
-                var qteImport = await _context.LignesImportation
-                    .Where(li => li.ArticleId == ligne.ArticleId && li.CommandeClientId == id)
-                    .SumAsync(li => li.Quantite);
+                var si1 = await _context.Stocks
+                    .Where(s => s.ArticleId == ligne.ArticleId &&
+                               s.TypeStock == TypeStock.Importe &&
+                               s.CommandeClientId == id &&
+                               s.Quantite > 0)
+                    .SumAsync(s => s.Quantite);
+
+                var si2 = await _context.Stocks
+                    .Where(s => s.ArticleId == ligne.ArticleId &&
+                               s.TypeStock == TypeStock.Importe &&
+                               s.ClientId == commande.ClientId &&
+                               s.Quantite > 0)
+                    .SumAsync(s => s.Quantite);
+
+                var si3 = bomPlateformeId.HasValue
+                    ? await _context.Stocks
+                        .Where(s => s.ArticleId == ligne.ArticleId &&
+                                   s.TypeStock == TypeStock.Importe &&
+                                   s.PlateformeId == bomPlateformeId &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite)
+                    : 0;
+
+                var si4 = await _context.Stocks
+                    .Where(s => s.ArticleId == ligne.ArticleId &&
+                               s.TypeStock == TypeStock.Importe &&
+                               s.CommandeClientId == null &&
+                               s.ClientId == null &&
+                               s.PlateformeId == null &&
+                               s.Quantite > 0)
+                    .SumAsync(s => s.Quantite);
+
+                var qteImport = si1 + si2 + si3 + si4;
 
                 var qteDisponible = qteStockReserve + qteAchat + qteImport;
                 var manque = Math.Max(0, besoinFinal - qteDisponible);
@@ -509,18 +499,57 @@ namespace Backend_Gestion_Magasin_API.Controllers
             });
         }
 
-        // GET: api/CommandeClient/5/ResultatCalcul
-        [HttpGet("{id}/ResultatCalcul")]
-        public async Task<ActionResult<IEnumerable<ResultatCalcul>>> GetResultatCalcul(int id)
+        [HttpPut("{id}")]
+        [RequireModulePermission("commandes", requireWrite: true)]
+        public async Task<IActionResult> PutCommandeClient(int id, CommandeClient commande)
         {
-            if (!CommandeClientExists(id))
-                return NotFound();
+            if (id != commande.Id)
+            {
+                return BadRequest();
+            }
 
-            return await _context.ResultatsCalcul
-                .Include(r => r.Article)
-                .Where(r => r.CommandeId == id)
-                .OrderBy(r => r.Article.Designation)
-                .ToListAsync();
+            commande.DateMiseAJour = DateTime.Now;
+            _context.Entry(commande).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!CommandeClientExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return NoContent();
+        }
+
+        [HttpDelete("{id}")]
+        [RequireModulePermission("commandes", requireWrite: true)]
+        public async Task<IActionResult> DeleteCommandeClient(int id)
+        {
+            var commande = await _context.CommandesClients.FindAsync(id);
+            if (commande == null)
+            {
+                return NotFound();
+            }
+
+            if (commande.Statut == StatutCommande.EnProduction ||
+                commande.Statut == StatutCommande.Terminee)
+            {
+                return BadRequest(new { message = "Impossible de supprimer une commande en production ou terminée." });
+            }
+
+            _context.CommandesClients.Remove(commande);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
 
         private bool CommandeClientExists(int id)
@@ -541,4 +570,3 @@ namespace Backend_Gestion_Magasin_API.Controllers
     public record BomLigneDto(int ArticleId, decimal QuantiteParPiece, string? Unite);
     public record CalculerRequest(decimal MargeAppliquee);
 }
-

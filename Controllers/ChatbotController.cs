@@ -45,32 +45,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
         }
 
-        [HttpPost("chat/anonymous")]
-        public async Task<IActionResult> ChatAnonymous([FromBody] ChatRequest request)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(request.Message))
-                    return BadRequest(new { error = "Le message ne peut pas être vide." });
-
-                if (string.IsNullOrWhiteSpace(request.SessionId))
-                    request.SessionId = Guid.NewGuid().ToString();
-
-                _logger.LogInformation("Chat anonyme session={SessionId}: {Message}", request.SessionId, request.Message);
-
-                var response = await _agentService.SendMessageAsync(request);
-
-                return response.Success
-                    ? Ok(response)
-                    : StatusCode(500, new { error = "Erreur lors du traitement.", details = response.Error });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erreur inattendue dans ChatbotController.ChatAnonymous");
-                return StatusCode(500, new { error = "Une erreur inattendue s'est produite.", details = ex.Message });
-            }
-        }
-
         [HttpGet("health")]
         public async Task<IActionResult> Health()
         {
@@ -113,7 +87,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 endpoints = new
                 {
                     authenticated_chat = "/api/chatbot/chat",
-                    anonymous_chat     = "/api/chatbot/chat/anonymous",
                     health_check       = "/api/chatbot/health",
                     info               = "/api/chatbot/info"
                 }

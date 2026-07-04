@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +19,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context = context;
         }
 
-        // GET: api/Achat
         [HttpGet]
+        [RequireModulePermission("achats", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Achat>>> GetAchats()
         {
             return await _context.Achats
@@ -32,8 +33,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Achat/5
         [HttpGet("{id}")]
+        [RequireModulePermission("achats", requireWrite: false)]
         public async Task<ActionResult<Achat>> GetAchat(int id)
         {
             var achat = await _context.Achats
@@ -53,8 +54,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return achat;
         }
 
-        // GET: api/Achat/ByCommande/5
         [HttpGet("ByCommande/{commandeId}")]
+        [RequireModulePermission("achats", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Achat>>> GetAchatsByCommande(int commandeId)
         {
             return await _context.Achats
@@ -65,8 +66,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Achat/Statut/Confirme
         [HttpGet("Statut/{statut}")]
+        [RequireModulePermission("achats", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Achat>>> GetAchatsByStatut(StatutAchat statut)
         {
             return await _context.Achats
@@ -77,21 +78,21 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // POST: api/Achat
         [HttpPost]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<ActionResult<Achat>> PostAchat(Achat achat)
         {
             achat.DateCreation = DateTime.Now;
             achat.NumeroAchat = GenerateNumeroAchat();
-            
+
             _context.Achats.Add(achat);
             await _context.SaveChangesAsync();
 
             return CreatedAtAction("GetAchat", new { id = achat.Id }, achat);
         }
 
-        // POST: api/Achat/5/LignesAchat
         [HttpPost("{id}/LignesAchat")]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<ActionResult<LigneAchat>> AjouterLigneAchat(int id, LigneAchat ligneAchat)
         {
             var achat = await _context.Achats.FindAsync(id);
@@ -120,17 +121,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
 
             _context.LignesAchat.Add(ligneAchat);
-            
-            // Mettre à jour le montant total de l'achat
+
             await RecalculerMontantAchat(id);
-            
+
             await _context.SaveChangesAsync();
 
             return CreatedAtAction("GetAchat", new { id = achat.Id }, ligneAchat);
         }
 
-        // POST: api/Achat/5/Soumettre
         [HttpPost("{id}/Soumettre")]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<ActionResult> SoumettreAchat(int id)
         {
             var achat = await _context.Achats
@@ -148,7 +148,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest("Seuls les achats en brouillon peuvent être soumis");
             }
 
-            // Pour chaque commande référencée par les lignes, vérifier la cohérence avec ses besoins
             var erreurs = new List<string>();
 
             var lignesParCommande = achat.LignesAchat
@@ -190,8 +189,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Achat soumis avec succès" });
         }
 
-        // POST: api/Achat/5/Confirmer
         [HttpPost("{id}/Confirmer")]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<ActionResult> ConfirmerAchat(int id)
         {
             var achat = await _context.Achats.FindAsync(id);
@@ -208,12 +207,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             achat.Statut = StatutAchat.Confirme;
             achat.DateMiseAJour = DateTime.Now;
 
-            // Créer une tâche de réception (liée à la commande principale si elle existe)
             var tacheReception = new TacheProduction
             {
                 Titre = $"Réception Achat {achat.NumeroAchat}",
                 Description = $"Réception et contrôle des articles de l'achat {achat.NumeroAchat}",
-                CommandeClientId = achat.CommandeClientId,  // nullable — null si achat sans commande
+                CommandeClientId = achat.CommandeClientId,
                 Statut = StatutTache.NonCommence,
                 Priorite = PrioriteTache.Normale,
                 DateCreation = DateTime.Now,
@@ -227,8 +225,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Achat confirmé avec succès", tacheReceptionId = tacheReception.Id });
         }
 
-        // POST: api/Achat/5/Livrer
         [HttpPost("{id}/Livrer")]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<ActionResult> LivrerAchat(int id)
         {
             var achat = await _context.Achats
@@ -250,7 +248,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             achat.DateLivraisonReelle = DateTime.Now;
             achat.DateMiseAJour = DateTime.Now;
 
-            // Mettre à jour le stock pour chaque ligne d'achat (scope par ligne)
             foreach (var ligne in achat.LignesAchat)
             {
                 var stock = new Stock
@@ -274,7 +271,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 _context.Stocks.Add(stock);
 
-                // Créer un mouvement de stock
                 var mouvement = new MouvementStock
                 {
                     Stock = stock,
@@ -297,8 +293,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Achat livré et stock mis à jour avec succès" });
         }
 
-        // PUT: api/Achat/5
         [HttpPut("{id}")]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<IActionResult> PutAchat(int id, Achat achat)
         {
             if (id != achat.Id)
@@ -328,8 +324,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return NoContent();
         }
 
-        // DELETE: api/Achat/5
         [HttpDelete("{id}")]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<IActionResult> DeleteAchat(int id)
         {
             var achat = await _context.Achats.FindAsync(id);
@@ -375,4 +371,3 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
     }
 }
-

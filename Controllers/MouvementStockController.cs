@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +19,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context = context;
         }
 
-        // GET: api/MouvementStock
         [HttpGet]
+        [RequireModulePermission("mouvements", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<MouvementStock>>> GetMouvements()
         {
             return await _context.MouvementsStock
@@ -27,12 +28,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ThenInclude(s => s.Article)
                 .Include(ms => ms.TacheProduction)
                 .OrderByDescending(ms => ms.DateMouvement)
-                .Take(100) // Limiter à 100 derniers mouvements par défaut
+                .Take(100)
                 .ToListAsync();
         }
 
-        // GET: api/MouvementStock/5
         [HttpGet("{id}")]
+        [RequireModulePermission("mouvements", requireWrite: false)]
         public async Task<ActionResult<MouvementStock>> GetMouvementStock(int id)
         {
             var mouvement = await _context.MouvementsStock
@@ -49,8 +50,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return mouvement;
         }
 
-        // GET: api/MouvementStock/ByStock/5
         [HttpGet("ByStock/{stockId}")]
+        [RequireModulePermission("mouvements", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<MouvementStock>>> GetMouvementsByStock(int stockId)
         {
             return await _context.MouvementsStock
@@ -60,8 +61,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/MouvementStock/ByArticle/5
         [HttpGet("ByArticle/{articleId}")]
+        [RequireModulePermission("mouvements", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<MouvementStock>>> GetMouvementsByArticle(int articleId)
         {
             return await _context.MouvementsStock
@@ -73,8 +74,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/MouvementStock/Filtrer
         [HttpGet("Filtrer")]
+        [RequireModulePermission("mouvements", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<MouvementStock>>> FiltrerMouvements(
             [FromQuery] DateTime? dateDebut,
             [FromQuery] DateTime? dateFin,
@@ -109,12 +110,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             return await query
                 .OrderByDescending(ms => ms.DateMouvement)
-                .Take(500) // Limiter les résultats
+                .Take(500)
                 .ToListAsync();
         }
 
-        // GET: api/MouvementStock/Statistiques
         [HttpGet("Statistiques")]
+        [RequireModulePermission("mouvements", requireWrite: false)]
         public async Task<ActionResult<object>> GetStatistiques(
             [FromQuery] DateTime? dateDebut,
             [FromQuery] DateTime? dateFin)
@@ -156,27 +157,25 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(statistiques);
         }
 
-        // POST: api/MouvementStock
         [HttpPost]
+        [RequireModulePermission("mouvements", requireWrite: true)]
         public async Task<ActionResult<MouvementStock>> PostMouvementStock(MouvementStock mouvement)
         {
-            // Vérifier que le stock existe
             var stock = await _context.Stocks.FindAsync(mouvement.StockId);
             if (stock == null)
             {
                 return BadRequest("Stock introuvable");
             }
 
-            // Calculer les quantités avant et après
             mouvement.QuantiteAvant = stock.Quantite;
-            
+
             switch (mouvement.TypeMouvement)
             {
                 case TypeMouvement.Entree:
                     mouvement.QuantiteApres = stock.Quantite + mouvement.Quantite;
                     stock.Quantite += mouvement.Quantite;
                     break;
-                    
+
                 case TypeMouvement.Sortie:
                     if (stock.Quantite < mouvement.Quantite)
                     {
@@ -185,7 +184,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     mouvement.QuantiteApres = stock.Quantite - mouvement.Quantite;
                     stock.Quantite -= mouvement.Quantite;
                     break;
-                    
+
                 case TypeMouvement.Reservation:
                     if (stock.Quantite - stock.QuantiteReservee < mouvement.Quantite)
                     {
@@ -194,7 +193,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     stock.QuantiteReservee += mouvement.Quantite;
                     mouvement.QuantiteApres = stock.Quantite;
                     break;
-                    
+
                 case TypeMouvement.Liberation:
                     if (stock.QuantiteReservee < mouvement.Quantite)
                     {
@@ -203,29 +202,28 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     stock.QuantiteReservee -= mouvement.Quantite;
                     mouvement.QuantiteApres = stock.Quantite;
                     break;
-                    
+
                 case TypeMouvement.Ajustement:
-                    mouvement.QuantiteApres = mouvement.Quantite; // La quantité finale souhaitée
+                    mouvement.QuantiteApres = mouvement.Quantite;
                     stock.Quantite = mouvement.Quantite;
                     mouvement.Quantite = Math.Abs(mouvement.QuantiteApres - mouvement.QuantiteAvant);
                     break;
-                    
+
                 case TypeMouvement.Transfert:
-                    // Pour les transferts, la logique dépend de l'implémentation spécifique
                     mouvement.QuantiteApres = stock.Quantite;
                     break;
             }
 
             mouvement.DateMouvement = DateTime.Now;
-            
+
             _context.MouvementsStock.Add(mouvement);
             await _context.SaveChangesAsync();
 
             return CreatedAtAction("GetMouvementStock", new { id = mouvement.Id }, mouvement);
         }
 
-        // POST: api/MouvementStock/Transfert
         [HttpPost("Transfert")]
+        [RequireModulePermission("mouvements", requireWrite: true)]
         public async Task<ActionResult> EffectuerTransfert([FromBody] TransfertRequest request)
         {
             var stockSource = await _context.Stocks.FindAsync(request.StockSourceId);
@@ -241,7 +239,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest("Quantité insuffisante dans le stock source");
             }
 
-            // Mouvement de sortie du stock source
             var mouvementSortie = new MouvementStock
             {
                 StockId = request.StockSourceId,
@@ -257,7 +254,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 EffectuePar = request.EffectuePar
             };
 
-            // Mouvement d'entrée dans le stock destination
             var mouvementEntree = new MouvementStock
             {
                 StockId = request.StockDestinationId,
@@ -273,22 +269,22 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 EffectuePar = request.EffectuePar
             };
 
-            // Mettre à jour les quantités
             stockSource.Quantite -= request.Quantite;
             stockDestination.Quantite += request.Quantite;
 
             _context.MouvementsStock.AddRange(mouvementSortie, mouvementEntree);
             await _context.SaveChangesAsync();
 
-            return Ok(new { 
+            return Ok(new
+            {
                 message = "Transfert effectué avec succès",
                 mouvementSortieId = mouvementSortie.Id,
                 mouvementEntreeId = mouvementEntree.Id
             });
         }
 
-        // DELETE: api/MouvementStock/5
         [HttpDelete("{id}")]
+        [RequireModulePermission("mouvements", requireWrite: true)]
         public async Task<IActionResult> DeleteMouvementStock(int id)
         {
             var mouvement = await _context.MouvementsStock.FindAsync(id);
@@ -297,7 +293,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
-            // Vérifier si le mouvement peut être supprimé (par exemple, pas trop ancien)
             if (mouvement.DateMouvement < DateTime.Now.AddDays(-7))
             {
                 return BadRequest("Impossible de supprimer un mouvement de plus de 7 jours");
@@ -315,7 +310,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
     }
 
-    // Classe pour les requêtes de transfert
     public class TransfertRequest
     {
         public int StockSourceId { get; set; }
@@ -325,4 +319,3 @@ namespace Backend_Gestion_Magasin_API.Controllers
         public string EffectuePar { get; set; } = string.Empty;
     }
 }
-

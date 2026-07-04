@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +19,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context = context;
         }
 
-        // GET: api/Client
         [HttpGet]
+        [RequireModulePermission("clients", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Client>>> GetClients()
         {
             return await _context.Clients
@@ -28,8 +29,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Client/5
         [HttpGet("{id}")]
+        [RequireModulePermission("clients", requireWrite: false)]
         public async Task<ActionResult<Client>> GetClient(int id)
         {
             var client = await _context.Clients
@@ -45,8 +46,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return client;
         }
 
-        // GET: api/Client/ByPlateforme/5
         [HttpGet("ByPlateforme/{plateformeId}")]
+        [RequireModulePermission("clients", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Client>>> GetClientsByPlateforme(int plateformeId)
         {
             return await _context.Clients
@@ -55,8 +56,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Client/5/Historique
         [HttpGet("{id}/Historique")]
+        [RequireModulePermission("clients", requireWrite: false)]
         public async Task<ActionResult<object>> GetHistoriqueClient(int id)
         {
             var client = await _context.Clients.FindAsync(id);
@@ -101,8 +102,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(historique);
         }
 
-        // POST: api/Client
         [HttpPost]
+        [RequireModulePermission("clients", requireWrite: true)]
         public async Task<ActionResult<Client>> PostClient(Client client)
         {
             client.DateCreation = DateTime.Now;
@@ -112,8 +113,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return CreatedAtAction("GetClient", new { id = client.Id }, client);
         }
 
-        // PUT: api/Client/5
         [HttpPut("{id}")]
+        [RequireModulePermission("clients", requireWrite: true)]
         public async Task<IActionResult> PutClient(int id, Client client)
         {
             if (id != client.Id)
@@ -142,8 +143,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return NoContent();
         }
 
-        // POST: api/Client/5/Desactiver
         [HttpPost("{id}/Desactiver")]
+        [RequireModulePermission("clients", requireWrite: true)]
         public async Task<IActionResult> DesactiverClient(int id)
         {
             var client = await _context.Clients.FindAsync(id);
@@ -158,8 +159,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Client désactivé avec succès" });
         }
 
-        // POST: api/Client/5/Activer
         [HttpPost("{id}/Activer")]
+        [RequireModulePermission("clients", requireWrite: true)]
         public async Task<IActionResult> ActiverClient(int id)
         {
             var client = await _context.Clients.FindAsync(id);
@@ -174,8 +175,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Client activé avec succès" });
         }
 
-        // DELETE: api/Client/5
         [HttpDelete("{id}")]
+        [RequireModulePermission("clients", requireWrite: true)]
         public async Task<IActionResult> DeleteClient(int id)
         {
             var client = await _context.Clients.FindAsync(id);
@@ -184,7 +185,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
-            // Vérifier s'il y a des commandes liées
             var hasCommandes = await _context.CommandesClients.AnyAsync(c => c.ClientId == id);
             if (hasCommandes)
             {
@@ -203,4 +203,3 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
     }
 }
-

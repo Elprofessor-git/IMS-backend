@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +19,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context = context;
         }
 
-        // GET: api/Stock
         [HttpGet]
+        [RequireModulePermission("stock", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Stock>>> GetStocks()
         {
             return await _context.Stocks
@@ -27,8 +28,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Stock/5
         [HttpGet("{id}")]
+        [RequireModulePermission("stock", requireWrite: false)]
         public async Task<ActionResult<Stock>> GetStock(int id)
         {
             var stock = await _context.Stocks
@@ -44,8 +45,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return stock;
         }
 
-        // GET: api/Stock/ByArticle/5
         [HttpGet("ByArticle/{articleId}")]
+        [RequireModulePermission("stock", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Stock>>> GetStocksByArticle(int articleId)
         {
             return await _context.Stocks
@@ -54,8 +55,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Stock/Libre
         [HttpGet("Libre")]
+        [RequireModulePermission("stock", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Stock>>> GetStocksLibres()
         {
             return await _context.Stocks
@@ -64,8 +65,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Stock/Reserve
         [HttpGet("Reserve")]
+        [RequireModulePermission("stock", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Stock>>> GetStocksReserves()
         {
             return await _context.Stocks
@@ -75,8 +76,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Stock/Alertes
         [HttpGet("Alertes")]
+        [RequireModulePermission("stock", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<object>>> GetStocksAlertes()
         {
             var alertes = await _context.Stocks
@@ -96,8 +97,21 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(alertes);
         }
 
-        // POST: api/Stock
+        [HttpGet("Emplacements")]
+        [RequireModulePermission("stock", requireWrite: false)]
+        public async Task<ActionResult<IEnumerable<string>>> GetEmplacements()
+        {
+            var emplacements = await _context.Stocks
+                .Where(s => s.EmplacementPhysique != null && s.EmplacementPhysique != "")
+                .Select(s => s.EmplacementPhysique!)
+                .Distinct()
+                .OrderBy(e => e)
+                .ToListAsync();
+            return Ok(emplacements);
+        }
+
         [HttpPost]
+        [RequireModulePermission("stock", requireWrite: true)]
         public async Task<ActionResult<Stock>> PostStock(Stock stock)
         {
             stock.DateEntree = DateTime.Now;
@@ -107,8 +121,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return CreatedAtAction("GetStock", new { id = stock.Id }, stock);
         }
 
-        // PUT: api/Stock/5
         [HttpPut("{id}")]
+        [RequireModulePermission("stock", requireWrite: true)]
         public async Task<IActionResult> PutStock(int id, Stock stock)
         {
             if (id != stock.Id)
@@ -137,8 +151,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return NoContent();
         }
 
-        // POST: api/Stock/5/Valider
         [HttpPost("{id}/Valider")]
+        [RequireModulePermission("stock", requireWrite: true)]
         public async Task<IActionResult> ValiderStock(int id, [FromBody] string validePar)
         {
             var stock = await _context.Stocks.FindAsync(id);
@@ -156,8 +170,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Stock validé avec succès" });
         }
 
-        // POST: api/Stock/5/Reserver
         [HttpPost("{id}/Reserver")]
+        [RequireModulePermission("stock", requireWrite: true)]
         public async Task<IActionResult> ReserverStock(int id, [FromBody] decimal quantite)
         {
             var stock = await _context.Stocks.FindAsync(id);
@@ -177,21 +191,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Stock réservé avec succès" });
         }
 
-        // GET: api/Stock/Emplacements
-        [HttpGet("Emplacements")]
-        public async Task<ActionResult<IEnumerable<string>>> GetEmplacements()
-        {
-            var emplacements = await _context.Stocks
-                .Where(s => s.EmplacementPhysique != null && s.EmplacementPhysique != "")
-                .Select(s => s.EmplacementPhysique!)
-                .Distinct()
-                .OrderBy(e => e)
-                .ToListAsync();
-            return Ok(emplacements);
-        }
-
-        // DELETE: api/Stock/5
         [HttpDelete("{id}")]
+        [RequireModulePermission("stock", requireWrite: true)]
         public async Task<IActionResult> DeleteStock(int id)
         {
             var stock = await _context.Stocks.FindAsync(id);
@@ -212,4 +213,3 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
     }
 }
-

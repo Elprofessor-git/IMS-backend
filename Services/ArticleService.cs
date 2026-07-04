@@ -31,7 +31,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 SousCategorie = articleDto.SousCategorie,
                 Unite = articleDto.Unite,
                 Marque = articleDto.Marque,
-                Reference = articleDto.Reference,
+                Reference = GenerateReference(),
                 Caracteristiques = articleDto.Caracteristiques,
                 SeuilAlerte = articleDto.SeuilAlerte,
                 SeuilCritique = articleDto.SeuilCritique,
@@ -151,6 +151,15 @@ namespace Backend_Gestion_Magasin_API.Services
             article.SeuilCritique = articleDto.SeuilCritique;
 
             await _context.SaveChangesAsync();
+        }
+
+        private string GenerateReference()
+        {
+            var today = DateTime.Now;
+            var prefix = $"ART{today:yyyyMM}";
+            var count = _context.Articles
+                .Count(a => a.Reference != null && a.Reference.StartsWith(prefix)) + 1;
+            return $"{prefix}{count:D4}";
         }
 
         public async Task<bool> ActivateArticleAsync(int id)

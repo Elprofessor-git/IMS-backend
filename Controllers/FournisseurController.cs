@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +19,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context = context;
         }
 
-        // GET: api/Fournisseur
         [HttpGet]
+        [RequireModulePermission("fournisseurs", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Fournisseur>>> GetFournisseurs()
         {
             return await _context.Fournisseurs
@@ -27,8 +28,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Fournisseur/5
         [HttpGet("{id}")]
+        [RequireModulePermission("fournisseurs", requireWrite: false)]
         public async Task<ActionResult<Fournisseur>> GetFournisseur(int id)
         {
             var fournisseur = await _context.Fournisseurs
@@ -44,8 +45,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return fournisseur;
         }
 
-        // GET: api/Fournisseur/5/Historique
         [HttpGet("{id}/Historique")]
+        [RequireModulePermission("fournisseurs", requireWrite: false)]
         public async Task<ActionResult<object>> GetHistoriqueFournisseur(int id)
         {
             var fournisseur = await _context.Fournisseurs.FindAsync(id);
@@ -114,20 +115,20 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(historique);
         }
 
-        // GET: api/Fournisseur/Search/{terme}
         [HttpGet("Search/{terme}")]
+        [RequireModulePermission("fournisseurs", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Fournisseur>>> SearchFournisseurs(string terme)
         {
             return await _context.Fournisseurs
-                .Where(f => f.EstActif && 
-                           (f.NomEntreprise.Contains(terme) || 
+                .Where(f => f.EstActif &&
+                           (f.NomEntreprise.Contains(terme) ||
                             f.PersonneContact.Contains(terme) ||
                             f.Email.Contains(terme)))
                 .ToListAsync();
         }
 
-        // POST: api/Fournisseur
         [HttpPost]
+        [RequireModulePermission("fournisseurs", requireWrite: true)]
         public async Task<ActionResult<Fournisseur>> PostFournisseur(Fournisseur fournisseur)
         {
             fournisseur.DateCreation = DateTime.Now;
@@ -137,8 +138,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return CreatedAtAction("GetFournisseur", new { id = fournisseur.Id }, fournisseur);
         }
 
-        // PUT: api/Fournisseur/5
         [HttpPut("{id}")]
+        [RequireModulePermission("fournisseurs", requireWrite: true)]
         public async Task<IActionResult> PutFournisseur(int id, Fournisseur fournisseur)
         {
             if (id != fournisseur.Id)
@@ -167,8 +168,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return NoContent();
         }
 
-        // POST: api/Fournisseur/5/Desactiver
         [HttpPost("{id}/Desactiver")]
+        [RequireModulePermission("fournisseurs", requireWrite: true)]
         public async Task<IActionResult> DesactiverFournisseur(int id)
         {
             var fournisseur = await _context.Fournisseurs.FindAsync(id);
@@ -183,8 +184,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Fournisseur désactivé avec succès" });
         }
 
-        // POST: api/Fournisseur/5/Activer
         [HttpPost("{id}/Activer")]
+        [RequireModulePermission("fournisseurs", requireWrite: true)]
         public async Task<IActionResult> ActiverFournisseur(int id)
         {
             var fournisseur = await _context.Fournisseurs.FindAsync(id);
@@ -199,8 +200,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "Fournisseur activé avec succès" });
         }
 
-        // DELETE: api/Fournisseur/5
         [HttpDelete("{id}")]
+        [RequireModulePermission("fournisseurs", requireWrite: true)]
         public async Task<IActionResult> DeleteFournisseur(int id)
         {
             var fournisseur = await _context.Fournisseurs.FindAsync(id);
@@ -209,10 +210,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
-            // Vérifier s'il y a des achats ou importations liés
             var hasAchats = await _context.Achats.AnyAsync(a => a.FournisseurId == id);
             var hasImportations = await _context.Importations.AnyAsync(i => i.FournisseurId == id);
-            
+
             if (hasAchats || hasImportations)
             {
                 return BadRequest("Impossible de supprimer le fournisseur car il a des achats ou importations associés. Utilisez la désactivation à la place.");
@@ -230,4 +230,3 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
     }
 }
-
