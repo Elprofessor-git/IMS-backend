@@ -192,11 +192,12 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasForeignKey(a => a.FournisseurId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // CommandeClient -> Achat (One-to-Many)
+            // CommandeClient -> Achat (One-to-Many, optionnel — scope principal pour TacheProduction)
             modelBuilder.Entity<Achat>()
                 .HasOne(a => a.CommandeClient)
                 .WithMany(cc => cc.Achats)
                 .HasForeignKey(a => a.CommandeClientId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // Achat -> LigneAchat (One-to-Many)
@@ -211,6 +212,30 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasOne(la => la.Article)
                 .WithMany(a => a.LignesAchat)
                 .HasForeignKey(la => la.ArticleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // CommandeClient -> LigneAchat (scope Commande, optionnel)
+            modelBuilder.Entity<LigneAchat>()
+                .HasOne(la => la.CommandeClient)
+                .WithMany()
+                .HasForeignKey(la => la.CommandeClientId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Client -> LigneAchat (scope Marque, optionnel)
+            modelBuilder.Entity<LigneAchat>()
+                .HasOne(la => la.Client)
+                .WithMany()
+                .HasForeignKey(la => la.ClientId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Plateforme -> LigneAchat (scope Plateforme, optionnel)
+            modelBuilder.Entity<LigneAchat>()
+                .HasOne(la => la.Plateforme)
+                .WithMany()
+                .HasForeignKey(la => la.PlateformeId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // Fournisseur -> Importation (One-to-Many)
@@ -443,6 +468,11 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<LigneImportation>()
                 .Property(li => li.TypeDestination)
+                .HasConversion<string>();
+
+            // LigneAchat — TypeDestination stocké en string
+            modelBuilder.Entity<LigneAchat>()
+                .Property(la => la.TypeDestination)
                 .HasConversion<string>();
 
             // DocumentJoint — enum stocké en string

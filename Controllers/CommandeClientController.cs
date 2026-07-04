@@ -156,13 +156,34 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 besoin.QuantiteStockImporte = Math.Min(stockImporte, besoin.QuantiteTotale);
 
-                // 2. Ressources réservées pour cette commande (achats confirmés + stock TypeStock.Reserve scopé commande)
-                var achatsEnCours = await _context.LignesAchat
+                // 2. Achats confirmés — 3 buckets additifs (Commande / Marque / Plateforme)
+                var a1 = await _context.LignesAchat
                     .Include(la => la.Achat)
                     .Where(la => la.ArticleId == besoin.ArticleId &&
-                                la.Achat.CommandeClientId == commande.Id &&
+                                la.TypeDestination == TypeDestinationAchat.Commande &&
+                                la.CommandeClientId == commande.Id &&
                                 la.Achat.Statut == StatutAchat.Confirme)
                     .SumAsync(la => la.Quantite);
+
+                var a2 = await _context.LignesAchat
+                    .Include(la => la.Achat)
+                    .Where(la => la.ArticleId == besoin.ArticleId &&
+                                la.TypeDestination == TypeDestinationAchat.Marque &&
+                                la.ClientId == commande.ClientId &&
+                                la.Achat.Statut == StatutAchat.Confirme)
+                    .SumAsync(la => la.Quantite);
+
+                var a3 = plateformeId.HasValue
+                    ? await _context.LignesAchat
+                        .Include(la => la.Achat)
+                        .Where(la => la.ArticleId == besoin.ArticleId &&
+                                    la.TypeDestination == TypeDestinationAchat.Plateforme &&
+                                    la.PlateformeId == plateformeId &&
+                                    la.Achat.Statut == StatutAchat.Confirme)
+                        .SumAsync(la => la.Quantite)
+                    : 0;
+
+                var achatsEnCours = a1 + a2 + a3;
 
                 var stockDejaReserve = await _context.Stocks
                     .Where(s => s.ArticleId == besoin.ArticleId &&
@@ -385,9 +406,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [HttpPost("{id}/Calculer")]
         public async Task<ActionResult> Calculer(int id, [FromBody] CalculerRequest request)
         {
-            var commande = await _context.CommandesClients.FindAsync(id);
+            var commande = await _context.CommandesClients
+                .Include(c => c.Client)
+                .FirstOrDefaultAsync(c => c.Id == id);
             if (commande == null)
                 return NotFound();
+
+            var bomPlateformeId = commande.Client?.PlateformeId;
 
             var totalPieces = await _context.ConfigTailles
                 .Where(ct => ct.CommandeId == id)
@@ -415,15 +440,38 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 var besoinFinal = besoinBrut * (1 + marge / 100);
 
                 var qteStockReserve = await _context.Stocks
-                    .Where(s => s.ArticleId == ligne.ArticleId && s.CommandeClientId == id)
+                    .Where(s => s.ArticleId == ligne.ArticleId &&
+                               s.CommandeClientId == id &&
+                               s.TypeStock == TypeStock.Reserve)
                     .SumAsync(s => s.Quantite);
 
-                var qteAchat = await _context.LignesAchat
+                var b1 = await _context.LignesAchat
                     .Include(la => la.Achat)
-                    .Where(la => la.ArticleId == ligne.ArticleId
-                              && la.Achat.CommandeClientId == id
-                              && la.Achat.Statut == StatutAchat.Confirme)
+                    .Where(la => la.ArticleId == ligne.ArticleId &&
+                                la.TypeDestination == TypeDestinationAchat.Commande &&
+                                la.CommandeClientId == id &&
+                                la.Achat.Statut == StatutAchat.Confirme)
                     .SumAsync(la => la.Quantite);
+
+                var b2 = await _context.LignesAchat
+                    .Include(la => la.Achat)
+                    .Where(la => la.ArticleId == ligne.ArticleId &&
+                                la.TypeDestination == TypeDestinationAchat.Marque &&
+                                la.ClientId == commande.ClientId &&
+                                la.Achat.Statut == StatutAchat.Confirme)
+                    .SumAsync(la => la.Quantite);
+
+                var b3 = bomPlateformeId.HasValue
+                    ? await _context.LignesAchat
+                        .Include(la => la.Achat)
+                        .Where(la => la.ArticleId == ligne.ArticleId &&
+                                    la.TypeDestination == TypeDestinationAchat.Plateforme &&
+                                    la.PlateformeId == bomPlateformeId &&
+                                    la.Achat.Statut == StatutAchat.Confirme)
+                        .SumAsync(la => la.Quantite)
+                    : 0;
+
+                var qteAchat = b1 + b2 + b3;
 
                 var qteImport = await _context.LignesImportation
                     .Where(li => li.ArticleId == ligne.ArticleId && li.CommandeClientId == id)

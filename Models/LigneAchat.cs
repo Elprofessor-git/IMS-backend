@@ -3,6 +3,14 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Backend_Gestion_Magasin_API.Models
 {
+    public enum TypeDestinationAchat
+    {
+        Commande,
+        Marque,
+        Plateforme,
+        StockLibre,
+    }
+
     public class LigneAchat
     {
         [Key]
@@ -40,12 +48,26 @@ namespace Backend_Gestion_Magasin_API.Models
         
         [StringLength(1000)]
         public string? Notes { get; set; }
-        
+
         public DateTime DateCreation { get; set; } = DateTime.Now;
-        
+
+        public TypeDestinationAchat TypeDestination { get; set; } = TypeDestinationAchat.StockLibre;
+
+        [ForeignKey("CommandeClient")]
+        public int? CommandeClientId { get; set; }
+
+        [ForeignKey("Client")]
+        public int? ClientId { get; set; }
+
+        [ForeignKey("Plateforme")]
+        public int? PlateformeId { get; set; }
+
         // Relations
         public virtual Achat Achat { get; set; } = null!;
         public virtual Article Article { get; set; } = null!;
+        public virtual CommandeClient? CommandeClient { get; set; }
+        public virtual Client? Client { get; set; }
+        public virtual Plateforme? Plateforme { get; set; }
     }
 }
 

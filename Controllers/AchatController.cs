@@ -104,6 +104,21 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneAchat.MontantLigne = ligneAchat.Quantite * ligneAchat.PrixUnitaire;
             ligneAchat.DateCreation = DateTime.Now;
 
+            switch (ligneAchat.TypeDestination)
+            {
+                case TypeDestinationAchat.Commande when !ligneAchat.CommandeClientId.HasValue:
+                    return BadRequest("TypeDestination=Commande requiert un CommandeClientId.");
+                case TypeDestinationAchat.Marque when !ligneAchat.ClientId.HasValue:
+                    return BadRequest("TypeDestination=Marque requiert un ClientId.");
+                case TypeDestinationAchat.Plateforme when !ligneAchat.PlateformeId.HasValue:
+                    return BadRequest("TypeDestination=Plateforme requiert un PlateformeId.");
+                case TypeDestinationAchat.StockLibre:
+                    ligneAchat.CommandeClientId = null;
+                    ligneAchat.ClientId = null;
+                    ligneAchat.PlateformeId = null;
+                    break;
+            }
+
             _context.LignesAchat.Add(ligneAchat);
             
             // Mettre à jour le montant total de l'achat
@@ -120,8 +135,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             var achat = await _context.Achats
                 .Include(a => a.LignesAchat)
-                .Include(a => a.CommandeClient)
-                .ThenInclude(c => c.Besoins)
+                .ThenInclude(la => la.Article)
                 .FirstOrDefaultAsync(a => a.Id == id);
 
             if (achat == null)
@@ -134,21 +148,32 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest("Seuls les achats en brouillon peuvent être soumis");
             }
 
-            // Vérification des cohérences avec les besoins de la commande
+            // Pour chaque commande référencée par les lignes, vérifier la cohérence avec ses besoins
             var erreurs = new List<string>();
-            
-            foreach (var ligne in achat.LignesAchat)
+
+            var lignesParCommande = achat.LignesAchat
+                .Where(l => l.TypeDestination == TypeDestinationAchat.Commande && l.CommandeClientId.HasValue)
+                .GroupBy(l => l.CommandeClientId!.Value);
+
+            foreach (var groupe in lignesParCommande)
             {
-                var besoin = achat.CommandeClient.Besoins
-                    .FirstOrDefault(b => b.ArticleId == ligne.ArticleId);
-                
-                if (besoin == null)
+                var commande = await _context.CommandesClients
+                    .Include(c => c.Besoins)
+                    .FirstOrDefaultAsync(c => c.Id == groupe.Key);
+
+                if (commande == null) continue;
+
+                foreach (var ligne in groupe)
                 {
-                    erreurs.Add($"L'article {ligne.Article?.Designation} n'est pas requis pour cette commande");
-                }
-                else if (ligne.Quantite > besoin.QuantiteTotale)
-                {
-                    erreurs.Add($"Quantité excessive pour {ligne.Article?.Designation}: {ligne.Quantite} > {besoin.QuantiteTotale} requis");
+                    var besoin = commande.Besoins.FirstOrDefault(b => b.ArticleId == ligne.ArticleId);
+                    if (besoin == null)
+                    {
+                        erreurs.Add($"L'article {ligne.Article?.Designation} n'est pas requis pour la commande #{groupe.Key}");
+                    }
+                    else if (ligne.Quantite > besoin.QuantiteTotale)
+                    {
+                        erreurs.Add($"Quantité excessive pour {ligne.Article?.Designation}: {ligne.Quantite} > {besoin.QuantiteTotale} requis (commande #{groupe.Key})");
+                    }
                 }
             }
 
@@ -159,7 +184,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             achat.Statut = StatutAchat.Soumis;
             achat.DateMiseAJour = DateTime.Now;
-            
+
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Achat soumis avec succès" });
@@ -183,12 +208,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
             achat.Statut = StatutAchat.Confirme;
             achat.DateMiseAJour = DateTime.Now;
 
-            // Créer une tâche de réception
+            // Créer une tâche de réception (liée à la commande principale si elle existe)
             var tacheReception = new TacheProduction
             {
                 Titre = $"Réception Achat {achat.NumeroAchat}",
                 Description = $"Réception et contrôle des articles de l'achat {achat.NumeroAchat}",
-                CommandeClientId = achat.CommandeClientId,
+                CommandeClientId = achat.CommandeClientId,  // nullable — null si achat sans commande
                 Statut = StatutTache.NonCommence,
                 Priorite = PrioriteTache.Normale,
                 DateCreation = DateTime.Now,
@@ -225,7 +250,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             achat.DateLivraisonReelle = DateTime.Now;
             achat.DateMiseAJour = DateTime.Now;
 
-            // Mettre à jour le stock pour chaque ligne d'achat
+            // Mettre à jour le stock pour chaque ligne d'achat (scope par ligne)
             foreach (var ligne in achat.LignesAchat)
             {
                 var stock = new Stock
@@ -236,8 +261,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Taille = ligne.Taille,
                     Dimension = ligne.Dimension,
                     Quantite = ligne.Quantite,
-                    TypeStock = TypeStock.Reserve, // Stock réservé pour la commande
-                    CommandeClientId = achat.CommandeClientId,
+                    TypeStock = TypeStock.Reserve,
+                    CommandeClientId = ligne.TypeDestination == TypeDestinationAchat.Commande ? ligne.CommandeClientId : null,
+                    ClientId = ligne.TypeDestination == TypeDestinationAchat.Marque ? ligne.ClientId : null,
+                    PlateformeId = ligne.TypeDestination == TypeDestinationAchat.Plateforme ? ligne.PlateformeId : null,
                     PrixUnitaire = ligne.PrixUnitaire,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,

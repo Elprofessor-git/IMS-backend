@@ -25,7 +25,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public int FournisseurId { get; set; }
         
         [ForeignKey("CommandeClient")]
-        public int CommandeClientId { get; set; }
+        public int? CommandeClientId { get; set; }
         
         public StatutAchat Statut { get; set; } = StatutAchat.Brouillon;
         
