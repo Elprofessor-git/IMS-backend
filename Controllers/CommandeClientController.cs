@@ -117,56 +117,42 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             foreach (var besoin in commande.Besoins)
             {
-                // 1. Stock importé — hiérarchie scopée : commande → client → plateforme → global
-                var stockImporteCommande = await _context.Stocks
+                // 1. Stock importé — 4 buckets mutuellement exclusifs, sommés indépendamment
+                var plateformeId = commande.Client?.PlateformeId;
+
+                var s1 = await _context.Stocks
                     .Where(s => s.ArticleId == besoin.ArticleId &&
                                s.TypeStock == TypeStock.Importe &&
                                s.CommandeClientId == commande.Id &&
                                s.Quantite > 0)
                     .SumAsync(s => s.Quantite);
 
-                decimal stockImporte;
-                if (stockImporteCommande > 0)
-                {
-                    stockImporte = stockImporteCommande;
-                }
-                else
-                {
-                    var stockImporteClient = await _context.Stocks
+                var s2 = await _context.Stocks
+                    .Where(s => s.ArticleId == besoin.ArticleId &&
+                               s.TypeStock == TypeStock.Importe &&
+                               s.ClientId == commande.ClientId &&
+                               s.Quantite > 0)
+                    .SumAsync(s => s.Quantite);
+
+                var s3 = plateformeId.HasValue
+                    ? await _context.Stocks
                         .Where(s => s.ArticleId == besoin.ArticleId &&
                                    s.TypeStock == TypeStock.Importe &&
-                                   s.ClientId == commande.ClientId &&
+                                   s.PlateformeId == plateformeId &&
                                    s.Quantite > 0)
-                        .SumAsync(s => s.Quantite);
+                        .SumAsync(s => s.Quantite)
+                    : 0;
 
-                    if (stockImporteClient > 0)
-                    {
-                        stockImporte = stockImporteClient;
-                    }
-                    else
-                    {
-                        var plateformeId = commande.Client?.PlateformeId;
-                        var stockImportePlateforme = plateformeId.HasValue
-                            ? await _context.Stocks
-                                .Where(s => s.ArticleId == besoin.ArticleId &&
-                                           s.TypeStock == TypeStock.Importe &&
-                                           s.PlateformeId == plateformeId &&
-                                           s.Quantite > 0)
-                                .SumAsync(s => s.Quantite)
-                            : 0;
+                var s4 = await _context.Stocks
+                    .Where(s => s.ArticleId == besoin.ArticleId &&
+                               s.TypeStock == TypeStock.Importe &&
+                               s.CommandeClientId == null &&
+                               s.ClientId == null &&
+                               s.PlateformeId == null &&
+                               s.Quantite > 0)
+                    .SumAsync(s => s.Quantite);
 
-                        stockImporte = stockImportePlateforme > 0
-                            ? stockImportePlateforme
-                            : await _context.Stocks
-                                .Where(s => s.ArticleId == besoin.ArticleId &&
-                                           s.TypeStock == TypeStock.Importe &&
-                                           s.CommandeClientId == null &&
-                                           s.ClientId == null &&
-                                           s.PlateformeId == null &&
-                                           s.Quantite > 0)
-                                .SumAsync(s => s.Quantite);
-                    }
-                }
+                var stockImporte = s1 + s2 + s3 + s4;
 
                 besoin.QuantiteStockImporte = Math.Min(stockImporte, besoin.QuantiteTotale);
 
