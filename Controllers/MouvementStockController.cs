@@ -165,12 +165,17 @@ namespace Backend_Gestion_Magasin_API.Controllers
             [FromQuery] DateTime? dateDebut,
             [FromQuery] DateTime? dateFin)
         {
-            var debut = dateDebut ?? DateTime.Now.AddDays(-30);
-            var fin = dateFin ?? DateTime.Now;
+            // Cohérent avec FiltrerMouvements : pas de fenêtre par défaut.
+            // (La liste des mouvements n'applique la date que si le filtre est fourni.)
+            var query = _context.MouvementsStock.AsQueryable();
 
-            var mouvements = await _context.MouvementsStock
-                .Where(ms => ms.DateMouvement >= debut && ms.DateMouvement <= fin)
-                .ToListAsync();
+            if (dateDebut.HasValue)
+                query = query.Where(ms => ms.DateMouvement >= dateDebut.Value);
+
+            if (dateFin.HasValue)
+                query = query.Where(ms => ms.DateMouvement <= dateFin.Value);
+
+            var mouvements = await query.ToListAsync();
 
             var valeurStock = await _context.Stocks.SumAsync(s => s.Quantite * s.PrixUnitaire);
 
