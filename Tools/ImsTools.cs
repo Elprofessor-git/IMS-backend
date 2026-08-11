@@ -228,6 +228,31 @@ namespace Backend_Gestion_Magasin_API.Tools
                     }
                 }
             },
+
+            new {
+                type = "function",
+                function = new {
+                    name = "get_schema",
+                    description =
+                        "Décrit le MODÈLE DE DONNÉES de l'IMS : entités, relations entre elles " +
+                        "(hiérarchies comme Plateforme → Client → Commande → Achat), enums de statut " +
+                        "et champs clés. À appeler quand tu n'es pas sûr de l'entité concernée par la " +
+                        "question ou des relations (ex : la plateforme d'un achat peut venir des lignes " +
+                        "OU de la commande liée). Retourne le schéma complet, ou une partie si 'sujet' est fourni.",
+                    parameters = new {
+                        type = "object",
+                        properties = new {
+                            sujet = new {
+                                type = "string",
+                                description =
+                                    "Sujet à détailler (ex : 'achat', 'importation', 'commande', 'stock', " +
+                                    "'plateforme', 'fournisseur'). Si omis, retourne le schéma complet."
+                            }
+                        },
+                        required = Array.Empty<string>()
+                    }
+                }
+            },
         ];
     }
 }

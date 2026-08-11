@@ -58,6 +58,10 @@ namespace Backend_Gestion_Magasin_API.Services
                 _                  => null
             };
 
+            // get_schema est une métadonnée statique (aucune donnée de la base) : pas de module requis.
+            if (toolName == "get_schema")
+                return GetSchema(args);
+
             if (module is null)
                 return Err($"Outil inconnu : {toolName}");
 
@@ -76,6 +80,7 @@ namespace Backend_Gestion_Magasin_API.Services
                     "get_achats"       => await GetAchats(args),
                     "get_importations" => await GetImportations(args),
                     "get_mouvements"   => await GetMouvements(args),
+                    "get_schema"       => GetSchema(args),
                     _                  => Err($"Outil inconnu : {toolName}")
                 };
             }
@@ -429,6 +434,163 @@ namespace Backend_Gestion_Magasin_API.Services
                 .ToListAsync();
 
             return Json(new { count = mouvements.Count, mouvements });
+        }
+
+        // ── Schéma de données (métadonnées statiques, aucune donnée de la base) ──
+
+        private string GetSchema(JsonNode args)
+        {
+            var sujet = args["sujet"]?.GetValue<string>()?.Trim().ToLowerInvariant();
+
+            // Hiérarchies et relations entre entités — le cœur que le modèle doit connaître.
+            var entites = new object[]
+            {
+                new
+                {
+                    nom = "Plateforme",
+                    description = "Place de marché (ex : dandy's). EstActif.",
+                    relations = "A des Clients et des Marques.",
+                    motsCles = "plateforme market place dandy"
+                },
+                new
+                {
+                    nom = "Client",
+                    description = "Client/atelier, rattaché à UNE plateforme (PlateformeId).",
+                    relations = "Client → Plateforme ; Client → Commandes.",
+                    motsCles = "client atelier marque client"
+                },
+                new
+                {
+                    nom = "Marque",
+                    description = "Marque rattachée à UNE plateforme (PlateformeId).",
+                    relations = "Marque → Plateforme ; Marque → Commandes.",
+                    motsCles = "marque brand"
+                },
+                new
+                {
+                    nom = "CommandeClient",
+                    description = "Commande d'un client (ClientId) éventuellement d'une marque (MarqueId). Statuts : EnAttente, Prete, EnProduction, Terminee, Annulee.",
+                    relations = "Commande → Client → Plateforme ; Commande → Marque → Plateforme.",
+                    motsCles = "commande commandes client cde"
+                },
+                new
+                {
+                    nom = "Achat",
+                    description = "Achat fournisseur local. FournisseurId obligatoire, CommandeClientId optionnel. Statuts : Brouillon, Soumis, Confirme, Livre, Annule.",
+                    relations = "Achat → Fournisseur ; Achat → CommandeClient (→ Client → Plateforme / Marque → Plateforme) ; Achat → LignesAchat.",
+                    motsCles = "achat achats fournisseur"
+                },
+                new
+                {
+                    nom = "LigneAchat",
+                    description = "Article acheté. TypeDestination : Commande(0), Marque(1), Plateforme(2), StockLibre(3). Une ligne de destination Plateforme a un PlateformeId.",
+                    relations = "LigneAchat → Article ; LigneAchat → Plateforme (si destination Plateforme).",
+                    motsCles = "ligne achat article achete"
+                },
+                new
+                {
+                    nom = "Importation",
+                    description = "Importation fournisseur (souvent via import maritime/aérien). FournisseurId, Statuts : Brouillon, Soumise, Validee, Recue, Annulee. ModeExpedition : Maritime, Aerien, Terrestre, Express, Autre.",
+                    relations = "Importation → Fournisseur ; Importation → LignesImportation.",
+                    motsCles = "importation importations import"
+                },
+                new
+                {
+                    nom = "LigneImportation",
+                    description = "Article importé. TypeDestination : Commande(0), Marque(1), Plateforme(2), StockLibre(3). PlateformeId pour une destination Plateforme. TypeOrigine : Fournisseur(0), ClientCMT(1).",
+                    relations = "LigneImportation → Article ; LigneImportation → Plateforme.",
+                    motsCles = "ligne importation article importe"
+                },
+                new
+                {
+                    nom = "Fournisseur",
+                    description = "Fournisseur (fournisseur local ou d'importation). NomEntreprise, EstActif.",
+                    relations = "Fournisseur → Achats ; Fournisseur → Importations.",
+                    motsCles = "fournisseur supplier"
+                },
+                new
+                {
+                    nom = "Article",
+                    description = "Article du catalogue (matière première, accessoire, emballage). Designation, Reference, Categorie, Unite, SeuilAlerte/Critique.",
+                    relations = "Article → Stocks ; Article → LignesAchat ; Article → LignesImportation ; Article → BesoinsCommande.",
+                    motsCles = "article articles reference designation bobine bouton tissu"
+                },
+                new
+                {
+                    nom = "Stock",
+                    description = "Stock d'un article. TypeStock : Libre(0), Reserve(1), Importe(2). Quantite, QuantiteReservee, scopes optionnels (CommandeClientId, ClientId, PlateformeId).",
+                    relations = "Stock → Article.",
+                    motsCles = "stock inventaire quantite"
+                },
+                new
+                {
+                    nom = "MouvementStock",
+                    description = "Mouvement de stock. TypeMouvement : Entree, Sortie, Transfert, Ajustement, Reservation, Liberation. OrigineMouvement : Achat, Importation, Production, Ajustement, Transfert, Commande, Retour, Autre.",
+                    relations = "MouvementStock → Stock → Article.",
+                    motsCles = "mouvement mouvements entree sortie transfert historique"
+                },
+                new
+                {
+                    nom = "TacheProduction",
+                    description = "Tâche de production liée à une commande (optionnel). Statuts : NonCommence, EnCours, Bloque, Termine, Annule.",
+                    relations = "TacheProduction → CommandeClient.",
+                    motsCles = "tache production taches"
+                },
+                new
+                {
+                    nom = "BesoinCommande",
+                    description = "Besoin matière première d'une commande pour un article. QuantiteUnitaire, NombrePieces, QuantiteTotale.",
+                    relations = "BesoinCommande → CommandeClient ; BesoinCommande → Article.",
+                    motsCles = "besoin besoins matiere"
+                }
+            };
+
+            // Aide au choix de l'outil : quelle question → quel outil.
+            var guide = new object[]
+            {
+                new { question = "Article du catalogue / trouver un article par nom ou référence", outil = "get_articles(recherche=...) — puis utiliser l'id avec get_stock" },
+                new { question = "Stock d'un article (total, réservé, disponible)", outil = "get_stock(articleId=...)" },
+                new { question = "Commandes (statut, client, marque, plateforme, période)", outil = "get_commandes(clientNom/marqueNom/plateformeNom/dateDebut/dateFin/statut)" },
+                new { question = "Achats fournisseurs et leurs lignes/articles", outil = "get_achats(fournisseurNom/plateformeNom/articleNom/dateDebut/dateFin/statut)" },
+                new { question = "Importations et leurs lignes/articles", outil = "get_importations(fournisseurNom/plateformeNom/articleNom/dateDebut/dateFin/statut/modeExpedition)" },
+                new { question = "Historique des mouvements de stock d'un article ou période", outil = "get_mouvements(articleId/dateDebut/dateFin)" },
+                new { question = "Structure des données / relations / doute sur l'entité à interroger", outil = "get_schema(sujet=...)" }
+            };
+
+            // Règles critiques pour éviter les faux négatifs.
+            var regles = new object[]
+            {
+                "La plateforme d'un ACHAT peut venir des LIGNES (typeDestination=Plateforme + plateformeId) OU de la COMMANDE liée (commandeClient.client.plateforme / commandeClient.marque.plateforme). Pour filtrer par plateforme, get_achats couvre les deux sources.",
+                "Filtrer par NOM (fournisseur, client, marque, plateforme, article) via les paramètres texte des outils, JAMAIS par un ID.",
+                "Les enums voyagent en nombres côté API, mais les outils renvoient leur libellé texte (ex : statut = 'Confirme').",
+                "Les statuts des achats (Brouillon/Soumis/Confirme/Livre/Annule) diffèrent de ceux des importations (Brouillon/Soumise/Validee/Recue/Annulee)."
+            };
+
+            var schema = new
+            {
+                description = "Modèle de données de l'IMS (atelier textile tunisien). Utilisez ce schéma pour identifier l'entité et la relation concernées par la question, puis choisissez l'outil adapté.",
+                entites,
+                guide,
+                regles
+            };
+
+            // Filtre optionnel par sujet : on renvoie l'entité correspondante + le guide + les règles.
+            if (!string.IsNullOrEmpty(sujet))
+            {
+                var entite = entites.FirstOrDefault(e =>
+                {
+                    var json = Json(e);
+                    var nom = System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("nom").GetString();
+                    var mots = System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("motsCles").GetString();
+                    return (nom?.Contains(sujet, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                           (mots?.Contains(sujet, StringComparison.OrdinalIgnoreCase) ?? false);
+                });
+
+                if (entite != null)
+                    return Json(new { sujet, entite, guide, regles });
+            }
+
+            return Json(schema);
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────────
