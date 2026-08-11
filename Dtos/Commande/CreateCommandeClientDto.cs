@@ -1,0 +1,32 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace Backend_Gestion_Magasin_API.Dtos.Commande
+{
+    public class CreateCommandeClientDto
+    {
+        [Required]
+        public int ClientId { get; set; }
+
+        public int? MarqueId { get; set; }
+
+        [StringLength(200)]
+        public string? TitreCommande { get; set; }
+
+        [StringLength(1000)]
+        public string? DescriptionCommande { get; set; }
+
+        public DateTime? DateLivraisonSouhaitee { get; set; }
+
+        [StringLength(10)]
+        public string? Devise { get; set; } = "EUR";
+
+        [StringLength(1000)]
+        public string? NotesSpeciales { get; set; }
+
+        [StringLength(1000)]
+        public string? SpecificationsClient { get; set; }
+
+        [StringLength(100)]
+        public string? CreePar { get; set; }
+    }
+}

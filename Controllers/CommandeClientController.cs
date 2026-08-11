@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
+using Backend_Gestion_Magasin_API.Dtos.Commande;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -107,10 +108,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost]
         [RequireModulePermission("commandes", requireWrite: true)]
-        public async Task<ActionResult<CommandeClient>> PostCommandeClient(CommandeClient commande)
+        public async Task<ActionResult<CommandeClient>> PostCommandeClient(CreateCommandeClientDto dto)
         {
-            commande.DateCreation = DateTime.Now;
-            commande.NumeroCommande = GenerateNumeroCommande();
+            var commande = new CommandeClient
+            {
+                ClientId = dto.ClientId,
+                MarqueId = dto.MarqueId,
+                TitreCommande = dto.TitreCommande,
+                DescriptionCommande = dto.DescriptionCommande,
+                DateCommande = DateTime.Now,
+                DateLivraisonSouhaitee = dto.DateLivraisonSouhaitee,
+                Devise = dto.Devise ?? "EUR",
+                NotesSpeciales = dto.NotesSpeciales,
+                SpecificationsClient = dto.SpecificationsClient,
+                CreePar = dto.CreePar,
+                DateCreation = DateTime.Now,
+                NumeroCommande = GenerateNumeroCommande()
+            };
 
             _context.CommandesClients.Add(commande);
             await _context.SaveChangesAsync();

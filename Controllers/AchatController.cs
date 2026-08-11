@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
+using Backend_Gestion_Magasin_API.Dtos.Achat;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -80,10 +81,20 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost]
         [RequireModulePermission("achats", requireWrite: true)]
-        public async Task<ActionResult<Achat>> PostAchat(Achat achat)
+        public async Task<ActionResult<Achat>> PostAchat(CreateAchatDto dto)
         {
-            achat.DateCreation = DateTime.Now;
-            achat.NumeroAchat = GenerateNumeroAchat();
+            var achat = new Achat
+            {
+                FournisseurId = dto.FournisseurId,
+                CommandeClientId = dto.CommandeClientId,
+                DateLivraisonPrevue = dto.DateLivraisonPrevue,
+                Devise = dto.Devise,
+                ConditionsPaiement = dto.ConditionsPaiement,
+                NotesAchat = dto.NotesAchat,
+                CreePar = dto.CreePar,
+                DateCreation = DateTime.Now,
+                NumeroAchat = GenerateNumeroAchat()
+            };
 
             _context.Achats.Add(achat);
             await _context.SaveChangesAsync();
