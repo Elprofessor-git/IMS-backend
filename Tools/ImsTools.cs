@@ -158,13 +158,39 @@ namespace Backend_Gestion_Magasin_API.Tools
                     name = "get_importations",
                     description =
                         "Liste les importations de marchandises : référence, fournisseur, statut, " +
-                        "montant total, devise, date. Filtrage optionnel par statut.",
+                        "montant total, devise, dates de réception, mode d'expédition, commandé par, " +
+                        "et les lignes (articles, quantités, prix, plateforme). Filtrage optionnel par " +
+                        "fournisseur (NOM, pas d'ID), plateforme (NOM), article, plage de dates et mode d'expédition.",
                     parameters = new {
                         type = "object",
                         properties = new {
                             statut = new {
                                 type = "string",
                                 description = "Statut : Brouillon, Soumise, Validee, EnTransit, Recue, Annulee (optionnel)."
+                            },
+                            fournisseurNom = new {
+                                type = "string",
+                                description = "Nom du fournisseur (optionnel). Filtrer par nom, jamais par ID."
+                            },
+                            plateformeNom = new {
+                                type = "string",
+                                description = "Nom de la plateforme de destination (optionnel)."
+                            },
+                            articleNom = new {
+                                type = "string",
+                                description = "Nom ou référence de l'article (optionnel)."
+                            },
+                            dateDebut = new {
+                                type = "string",
+                                description = "Date de début (AAAA-MM-JJ) pour filtrer sur la date de l'importation (optionnel)."
+                            },
+                            dateFin = new {
+                                type = "string",
+                                description = "Date de fin (AAAA-MM-JJ) pour filtrer sur la date de l'importation (optionnel)."
+                            },
+                            modeExpedition = new {
+                                type = "string",
+                                description = "Mode d'expédition : Maritime, Aerien, Terrestre, Express, Autre (optionnel)."
                             }
                         },
                         required = Array.Empty<string>()

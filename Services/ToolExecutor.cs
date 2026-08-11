@@ -291,28 +291,84 @@ namespace Backend_Gestion_Magasin_API.Services
 
         private async Task<string> GetImportations(JsonNode args)
         {
-            var statutStr = args["statut"]?.GetValue<string>();
+            var statutStr      = args["statut"]?.GetValue<string>();
+            var fournisseurNom = args["fournisseurNom"]?.GetValue<string>();
+            var plateformeNom  = args["plateformeNom"]?.GetValue<string>();
+            var articleNom     = args["articleNom"]?.GetValue<string>();
+            var debutStr       = args["dateDebut"]?.GetValue<string>();
+            var finStr         = args["dateFin"]?.GetValue<string>();
+            var modeStr        = args["modeExpedition"]?.GetValue<string>();
 
-            var all = await _importations.GetAllAsync();
-            var filtered = all.AsEnumerable();
+            var query = _context.Importations
+                .Include(i => i.Fournisseur)
+                .Include(i => i.LignesImportation)
+                    .ThenInclude(li => li.Article)
+                .Include(i => i.LignesImportation)
+                    .ThenInclude(li => li.Plateforme)
+                .AsQueryable();
 
             if (!string.IsNullOrEmpty(statutStr) &&
                 Enum.TryParse<StatutImportation>(statutStr, ignoreCase: true, out var statut))
-                filtered = filtered.Where(i => i.Statut == statut);
+                query = query.Where(i => i.Statut == statut);
 
-            var result = filtered
+            if (!string.IsNullOrEmpty(modeStr) &&
+                Enum.TryParse<ModeExpedition>(modeStr, ignoreCase: true, out var mode))
+                query = query.Where(i => i.ModeExpedition == mode);
+
+            if (!string.IsNullOrEmpty(fournisseurNom))
+                query = query.Where(i => i.Fournisseur != null &&
+                    i.Fournisseur.NomEntreprise.ToLower().Contains(fournisseurNom.ToLower()));
+
+            if (!string.IsNullOrEmpty(plateformeNom))
+                query = query.Where(i => i.LignesImportation.Any(l =>
+                    l.Plateforme != null && l.Plateforme.Nom.ToLower().Contains(plateformeNom.ToLower())));
+
+            if (!string.IsNullOrEmpty(articleNom))
+                query = query.Where(i => i.LignesImportation.Any(l =>
+                    l.Article.Designation.ToLower().Contains(articleNom.ToLower()) ||
+                    (l.Article.Reference != null && l.Article.Reference.ToLower().Contains(articleNom.ToLower()))));
+
+            if (DateTimeOffset.TryParse(debutStr, out var debut))
+                query = query.Where(i => i.DateImportation >= debut.UtcDateTime);
+
+            if (DateTimeOffset.TryParse(finStr, out var fin))
+                query = query.Where(i => i.DateImportation < fin.UtcDateTime.AddDays(1)); // inclut la journée de fin
+
+            var result = await query
                 .OrderByDescending(i => i.DateCreation)
                 .Take(25)
                 .Select(i => new
                 {
                     i.Id,
                     i.ReferenceImportation,
-                    Fournisseur = i.Fournisseur?.NomEntreprise,
+                    Fournisseur = i.Fournisseur != null ? i.Fournisseur.NomEntreprise : null,
                     Statut      = i.Statut.ToString(),
+                    ModeExpedition = i.ModeExpedition.ToString(),
                     i.DateImportation,
+                    i.DateReceptionPrevue,
+                    i.DateReceptionReelle,
+                    i.CreePar,
                     i.MontantTotal,
-                    i.Devise
-                }).ToList();
+                    i.Devise,
+                    Lignes = i.LignesImportation.Select(l => new
+                    {
+                        l.Id,
+                        Article    = l.Article.Designation,
+                        ArticleRef = l.Article.Reference,
+                        l.Couleur,
+                        l.Dimension,
+                        l.Nature,
+                        l.Quantite,
+                        l.PrixUnitaire,
+                        l.MontantLigne,
+                        l.Devise,
+                        Plateforme   = l.Plateforme != null ? l.Plateforme.Nom : null,
+                        TypeOrigine  = l.TypeOrigine.ToString(),
+                        TypeDestination = l.TypeDestination.ToString(),
+                        l.EstAffecteStock
+                    })
+                })
+                .ToListAsync();
 
             return Json(new { count = result.Count, importations = result });
         }
