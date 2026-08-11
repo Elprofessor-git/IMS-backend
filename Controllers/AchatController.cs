@@ -104,7 +104,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost("{id}/LignesAchat")]
         [RequireModulePermission("achats", requireWrite: true)]
-        public async Task<ActionResult<LigneAchat>> AjouterLigneAchat(int id, LigneAchat ligneAchat)
+        public async Task<ActionResult<LigneAchat>> AjouterLigneAchat(int id, CreateLigneAchatDto dto)
         {
             var achat = await _context.Achats.FindAsync(id);
             if (achat == null)
@@ -112,9 +112,26 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
-            ligneAchat.AchatId = id;
-            ligneAchat.MontantLigne = ligneAchat.Quantite * ligneAchat.PrixUnitaire;
-            ligneAchat.DateCreation = DateTime.Now;
+            var ligneAchat = new LigneAchat
+            {
+                AchatId = id,
+                ArticleId = dto.ArticleId,
+                Quantite = dto.Quantite,
+                PrixUnitaire = dto.PrixUnitaire,
+                MontantLigne = dto.Quantite * dto.PrixUnitaire,
+                TypeDestination = dto.TypeDestination,
+                CommandeClientId = dto.CommandeClientId,
+                ClientId = dto.ClientId,
+                PlateformeId = dto.PlateformeId,
+                Couleur = dto.Couleur,
+                CodeCouleur = dto.CodeCouleur,
+                Taille = dto.Taille,
+                Dimension = dto.Dimension,
+                Devise = dto.Devise,
+                DescriptionSpecifique = dto.DescriptionSpecifique,
+                Notes = dto.Notes,
+                DateCreation = DateTime.Now
+            };
 
             switch (ligneAchat.TypeDestination)
             {

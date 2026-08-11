@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
+using Backend_Gestion_Magasin_API.Dtos.Importation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -104,13 +105,35 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost("{id}/LignesImportation")]
         [RequireModulePermission("importations", requireWrite: true)]
-        public async Task<ActionResult<LigneImportation>> AjouterLigneImportation(int id, LigneImportation ligneImportation)
+        public async Task<ActionResult<LigneImportation>> AjouterLigneImportation(int id, CreateLigneImportationDto dto)
         {
             var importation = await _context.Importations.FindAsync(id);
             if (importation == null)
             {
                 return NotFound();
             }
+
+            var ligneImportation = new LigneImportation
+            {
+                ImportationId = id,
+                ArticleId = dto.ArticleId,
+                TypeOrigine = dto.TypeOrigine,
+                TypeDestination = dto.TypeDestination,
+                CommandeClientId = dto.CommandeClientId,
+                ClientId = dto.ClientId,
+                PlateformeId = dto.PlateformeId,
+                Designation = dto.Designation,
+                Couleur = dto.Couleur,
+                CodeCouleur = dto.CodeCouleur,
+                Dimension = dto.Dimension,
+                Nature = dto.Nature,
+                Quantite = dto.Quantite,
+                PrixUnitaire = dto.PrixUnitaire,
+                MontantLigne = dto.Quantite * dto.PrixUnitaire,
+                Devise = dto.Devise,
+                Notes = dto.Notes,
+                DateCreation = DateTime.Now
+            };
 
             if (ligneImportation.TypeOrigine == TypeOrigineImportation.ClientCMT && !ligneImportation.CommandeClientId.HasValue)
             {
@@ -131,10 +154,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     ligneImportation.PlateformeId = null;
                     break;
             }
-
-            ligneImportation.ImportationId = id;
-            ligneImportation.MontantLigne = ligneImportation.Quantite * ligneImportation.PrixUnitaire;
-            ligneImportation.DateCreation = DateTime.Now;
 
             _context.LignesImportation.Add(ligneImportation);
 
