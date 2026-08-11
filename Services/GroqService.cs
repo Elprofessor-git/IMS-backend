@@ -49,21 +49,43 @@ namespace Backend_Gestion_Magasin_API.Services
             };
 
             var json = JsonSerializer.Serialize(payload, _jsonOpts);
-            using var req = new HttpRequestMessage(HttpMethod.Post, CompletionsUrl);
-            req.Headers.Add("Authorization", $"Bearer {_apiKey}");
-            req.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var resp = await _httpClient.SendAsync(req);
-            var body = await resp.Content.ReadAsStringAsync();
-
-            if (!resp.IsSuccessStatusCode)
+            // 429 rate limit (TPM) : on retente avec backoff en respectant Retry-After.
+            const int maxAttempts = 4;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                _logger.LogError("Groq API {Status}: {Body}", (int)resp.StatusCode, body);
-                throw new HttpRequestException($"Groq API {(int)resp.StatusCode}: {body}");
+                using var req = new HttpRequestMessage(HttpMethod.Post, CompletionsUrl);
+                req.Headers.Add("Authorization", $"Bearer {_apiKey}");
+                req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var resp = await _httpClient.SendAsync(req);
+                var body = await resp.Content.ReadAsStringAsync();
+
+                if ((int)resp.StatusCode == 429 && attempt < maxAttempts)
+                {
+                    var retryAfter = resp.Headers.RetryAfter?.Delta?.TotalSeconds
+                        ?? resp.Headers.RetryAfter?.Date?.Subtract(DateTimeOffset.Now).TotalSeconds
+                        ?? 4.0;
+                    // Sécurité : le serveur peut demander un délai très court ; on borne à [2s, 15s].
+                    var delay = Math.Clamp(retryAfter, 2, 15);
+                    _logger.LogWarning(
+                        "Groq 429 (rate limit) — tentative {Attempt}/{Max}, nouvelle tentative dans {Delay}s.",
+                        attempt, maxAttempts, delay.ToString("0.0"));
+                    await Task.Delay(TimeSpan.FromSeconds(delay));
+                    continue;
+                }
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Groq API {Status}: {Body}", (int)resp.StatusCode, body);
+                    throw new HttpRequestException($"Groq API {(int)resp.StatusCode}: {body}");
+                }
+
+                return JsonNode.Parse(body)
+                    ?? throw new InvalidOperationException("Réponse Groq nulle ou malformée.");
             }
 
-            return JsonNode.Parse(body)
-                ?? throw new InvalidOperationException("Réponse Groq nulle ou malformée.");
+            throw new HttpRequestException("Groq API 429: rate limit persistant après plusieurs tentatives.");
         }
 
         public async Task<bool> IsAvailableAsync()

@@ -220,7 +220,8 @@ namespace Backend_Gestion_Magasin_API.Services
 
             var query = _context.Achats
                 .Include(a => a.Fournisseur)
-                .Include(a => a.CommandeClient)
+                .Include(a => a.CommandeClient).ThenInclude(c => c.Client).ThenInclude(cl => cl.Plateforme)
+                .Include(a => a.CommandeClient).ThenInclude(c => c.Marque).ThenInclude(m => m.Plateforme)
                 .Include(a => a.LignesAchat).ThenInclude(l => l.Article)
                 .Include(a => a.LignesAchat).ThenInclude(l => l.Plateforme)
                 .AsQueryable();
@@ -239,7 +240,13 @@ namespace Backend_Gestion_Magasin_API.Services
             if (!string.IsNullOrWhiteSpace(plateformeNom))
                 query = query.Where(a =>
                     a.LignesAchat.Any(l => l.Plateforme != null &&
-                        l.Plateforme.Nom.Contains(plateformeNom)));
+                        l.Plateforme.Nom.Contains(plateformeNom)) ||
+                    (a.CommandeClient != null &&
+                     a.CommandeClient.Client != null && a.CommandeClient.Client.Plateforme != null &&
+                     a.CommandeClient.Client.Plateforme.Nom.Contains(plateformeNom)) ||
+                    (a.CommandeClient != null &&
+                     a.CommandeClient.Marque != null && a.CommandeClient.Marque.Plateforme != null &&
+                     a.CommandeClient.Marque.Plateforme.Nom.Contains(plateformeNom)));
 
             if (!string.IsNullOrWhiteSpace(articleNom))
                 query = query.Where(a =>
@@ -262,6 +269,11 @@ namespace Backend_Gestion_Magasin_API.Services
                     a.NumeroAchat,
                     Fournisseur = a.Fournisseur.NomEntreprise,
                     Commande    = a.CommandeClient != null ? a.CommandeClient.NumeroCommande : null,
+                    Plateforme  = a.LignesAchat.Where(l => l.Plateforme != null).Select(l => l.Plateforme!.Nom).FirstOrDefault()
+                                  ?? (a.CommandeClient != null && a.CommandeClient.Client != null && a.CommandeClient.Client.Plateforme != null
+                                      ? a.CommandeClient.Client.Plateforme.Nom : null)
+                                  ?? (a.CommandeClient != null && a.CommandeClient.Marque != null && a.CommandeClient.Marque.Plateforme != null
+                                      ? a.CommandeClient.Marque.Plateforme.Nom : null),
                     Statut      = a.Statut.ToString(),
                     a.DateAchat,
                     a.DateLivraisonPrevue,
