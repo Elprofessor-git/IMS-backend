@@ -19,10 +19,14 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Charger appsettings.json, appsettings.{env}.json et les variables d'environnement
+// Charger appsettings.json, appsettings.{env}.json, les arguments CLI et les variables d'environnement
+// NOTE (fix Render) : reloadOnChange désactivé pour éviter les watchers inotify (limite 128 sur Render).
+// La config ne se recharge plus à chaud : un changement nécessite un redémarrage/redéploiement.
+builder.Configuration.Sources.Clear();
 builder.Configuration
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false)
+    .AddCommandLine(args)
     .AddEnvironmentVariables();
 
 // Lire la connexion DB (depuis appsettings OU variable d'environnement)
