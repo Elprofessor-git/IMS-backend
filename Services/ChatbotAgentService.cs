@@ -20,6 +20,9 @@ namespace Backend_Gestion_Magasin_API.Services
               Si l'utilisateur demande une action d'écriture, décline poliment en expliquant que tu es en lecture seule.
             - Tu utilises les outils disponibles pour accéder aux données réelles — jamais tu n'inventes de chiffres.
             - Si une donnée n'existe pas dans le système, dis-le clairement plutôt que d'inventer.
+            - Quand l'utilisateur cite un NOM (fournisseur, marque, client ou plateforme comme \"dandy's\"),
+              filtre par nom en utilisant les paramètres texte des outils (ex : fournisseurNom, plateformeNom,
+              marqueNom, clientNom) — jamais par un ID.
             - Sois concis et précis. Pour les listes, utilise des puces ou des tableaux lisibles.
             - Quand tu présentes des quantités, précise toujours l'unité.
             """;
@@ -58,6 +61,28 @@ namespace Backend_Gestion_Magasin_API.Services
                 }
                 catch (HttpRequestException ex)
                 {
+                    // 400 "tool_use_failed" : Groq a rejeté l'appel d'outil car un paramètre
+                    // ne respectait pas le schéma (ex : texte dans un champ entier). Plutôt que
+                    // de faire échouer tout l'échange, on guide le modèle et on relance le tour.
+                    if (ex.Message.Contains("tool_use_failed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning(
+                            "Groq a rejeté un appel d'outil (tool_use_failed) au tour {Turn} : {Error}",
+                            turn, ex.Message);
+                        messages.Add(new
+                        {
+                            role = "system",
+                            content =
+                                "Ton appel d'outil précédent a été rejeté car un paramètre avait un " +
+                                "type invalide (un ID entier a reçu un texte). Si l'utilisateur donne un " +
+                                "NOM (fournisseur, marque, client ou plateforme), utilise le paramètre " +
+                                "texte dédié (fournisseurNom, plateformeNom, marqueNom, clientNom) au lieu " +
+                                "d'un ID. Relance l'outil avec les bons paramètres, ou réponds poliment que " +
+                                "tu ne trouves pas de données correspondantes."
+                        });
+                        continue;
+                    }
+
                     _logger.LogError(ex, "Erreur Groq au tour {Turn}", turn);
                     return Failure("Le service IA est temporairement indisponible.", request.SessionId);
                 }
@@ -100,19 +125,28 @@ namespace Backend_Gestion_Magasin_API.Services
                 // Exécution de chaque outil et injection des résultats
                 foreach (var tc in toolCalls)
                 {
-                    var toolId   = tc!["id"]!.GetValue<string>();
-                    var toolName = tc["function"]!["name"]!.GetValue<string>();
-                    var rawArgs  = tc["function"]!["arguments"]!.GetValue<string>();
-                    var toolArgs = JsonNode.Parse(rawArgs) ?? new JsonObject();
-
-                    var result = await _executor.ExecuteAsync(toolName, toolArgs, request.UserId);
-
-                    messages.Add(new
+                    try
                     {
-                        role         = "tool",
-                        tool_call_id = toolId,
-                        content      = result
-                    });
+                        var toolId   = tc?["id"]?.GetValue<string>() ?? Guid.NewGuid().ToString("N");
+                        var toolName = tc?["function"]?["name"]?.GetValue<string>() ?? "inconnu";
+                        var rawArgs  = tc?["function"]?["arguments"]?.GetValue<string>();
+                        var toolArgs = string.IsNullOrWhiteSpace(rawArgs)
+                            ? new JsonObject()
+                            : JsonNode.Parse(rawArgs) as JsonObject ?? new JsonObject();
+
+                        var result = await _executor.ExecuteAsync(toolName, toolArgs, request.UserId);
+
+                        messages.Add(new
+                        {
+                            role         = "tool",
+                            tool_call_id = toolId,
+                            content      = result
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Exécution d'un outil du chatbot ignorée (tour {Turn}).", turn);
+                    }
                 }
             }
 

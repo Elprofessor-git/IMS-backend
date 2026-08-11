@@ -17,6 +17,9 @@ namespace Backend_Gestion_Magasin_API.Services
         {
             return await _context.CommandesClients
                 .Include(c => c.Client)
+                .ThenInclude(cl => cl.Plateforme)
+                .Include(c => c.Marque)
+                .ThenInclude(m => m.Plateforme)
                 .Include(c => c.Besoins)
                 .ThenInclude(b => b.Article)
                 .ToListAsync();

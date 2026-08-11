@@ -145,8 +145,11 @@ namespace Backend_Gestion_Magasin_API.Services
 
         private async Task<string> GetCommandes(JsonNode args)
         {
-            var statutStr = args["statut"]?.GetValue<string>();
-            var marqueId  = args["marqueId"]?.GetValue<int?>();
+            var statutStr      = args["statut"]?.GetValue<string>();
+            var marqueNom      = args["marqueNom"]?.GetValue<string>();
+            var clientNom      = args["clientNom"]?.GetValue<string>();
+            var plateformeNom  = args["plateformeNom"]?.GetValue<string>();
+            var marqueId       = args["marqueId"]?.GetValue<int?>();
 
             var all = await _commandes.GetAllCommandesAsync();
             var filtered = all.AsEnumerable();
@@ -158,6 +161,24 @@ namespace Backend_Gestion_Magasin_API.Services
             if (marqueId.HasValue)
                 filtered = filtered.Where(c => c.MarqueId == marqueId.Value);
 
+            if (!string.IsNullOrWhiteSpace(marqueNom))
+                filtered = filtered.Where(c =>
+                    c.Marque != null && c.Marque.Nom.Contains(marqueNom, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(clientNom))
+                filtered = filtered.Where(c =>
+                    c.Client != null &&
+                    (c.Client.Nom.Contains(clientNom, StringComparison.OrdinalIgnoreCase) ||
+                     (c.Client.NomEntreprise != null &&
+                      c.Client.NomEntreprise.Contains(clientNom, StringComparison.OrdinalIgnoreCase))));
+
+            if (!string.IsNullOrWhiteSpace(plateformeNom))
+                filtered = filtered.Where(c =>
+                    (c.Client != null && c.Client.Plateforme != null &&
+                     c.Client.Plateforme.Nom.Contains(plateformeNom, StringComparison.OrdinalIgnoreCase)) ||
+                    (c.Marque != null && c.Marque.Plateforme != null &&
+                     c.Marque.Plateforme.Nom.Contains(plateformeNom, StringComparison.OrdinalIgnoreCase)));
+
             var result = filtered
                 .OrderByDescending(c => c.DateCreation)
                 .Take(25)
@@ -166,8 +187,10 @@ namespace Backend_Gestion_Magasin_API.Services
                     c.Id,
                     c.NumeroCommande,
                     c.TitreCommande,
-                    Client = c.Client?.Nom,
-                    Statut = c.Statut.ToString(),
+                    Client   = c.Client?.Nom,
+                    Marque   = c.Marque?.Nom,
+                    Plateforme = c.Client?.Plateforme?.Nom ?? c.Marque?.Plateforme?.Nom,
+                    Statut   = c.Statut.ToString(),
                     c.DateLivraisonSouhaitee,
                     c.MontantTotal,
                     c.PourcentageRessourcesCouvertes
@@ -178,12 +201,16 @@ namespace Backend_Gestion_Magasin_API.Services
 
         private async Task<string> GetAchats(JsonNode args)
         {
-            var statutStr     = args["statut"]?.GetValue<string>();
-            var fournisseurId = args["fournisseurId"]?.GetValue<int?>();
+            var statutStr      = args["statut"]?.GetValue<string>();
+            var fournisseurNom = args["fournisseurNom"]?.GetValue<string>();
+            var plateformeNom  = args["plateformeNom"]?.GetValue<string>();
+            var fournisseurId  = args["fournisseurId"]?.GetValue<int?>();
 
             var query = _context.Achats
                 .Include(a => a.Fournisseur)
                 .Include(a => a.CommandeClient)
+                .Include(a => a.LignesAchat).ThenInclude(l => l.Article)
+                .Include(a => a.LignesAchat).ThenInclude(l => l.Plateforme)
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(statutStr) &&
@@ -192,6 +219,15 @@ namespace Backend_Gestion_Magasin_API.Services
 
             if (fournisseurId.HasValue)
                 query = query.Where(a => a.FournisseurId == fournisseurId.Value);
+
+            if (!string.IsNullOrWhiteSpace(fournisseurNom))
+                query = query.Where(a =>
+                    a.Fournisseur != null && a.Fournisseur.NomEntreprise.Contains(fournisseurNom));
+
+            if (!string.IsNullOrWhiteSpace(plateformeNom))
+                query = query.Where(a =>
+                    a.LignesAchat.Any(l => l.Plateforme != null &&
+                        l.Plateforme.Nom.Contains(plateformeNom)));
 
             var achats = await query
                 .OrderByDescending(a => a.DateAchat)
@@ -205,7 +241,22 @@ namespace Backend_Gestion_Magasin_API.Services
                     Statut      = a.Statut.ToString(),
                     a.MontantTotal,
                     a.Devise,
-                    a.DateLivraisonPrevue
+                    a.DateLivraisonPrevue,
+                    Lignes = a.LignesAchat.Select(l => new
+                    {
+                        l.Id,
+                        Article       = l.Article.Designation,
+                        ArticleRef    = l.Article.Reference,
+                        l.Couleur,
+                        l.Taille,
+                        l.Dimension,
+                        l.Quantite,
+                        l.PrixUnitaire,
+                        l.MontantLigne,
+                        l.Devise,
+                        Plateforme    = l.Plateforme != null ? l.Plateforme.Nom : null,
+                        TypeDestination = l.TypeDestination.ToString()
+                    })
                 })
                 .ToListAsync();
 

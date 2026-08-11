@@ -57,19 +57,34 @@ namespace Backend_Gestion_Magasin_API.Tools
                 function = new {
                     name = "get_commandes",
                     description =
-                        "Liste les commandes clients avec client, marque, statut, montant total, " +
+                        "Liste les commandes clients avec client, marque, plateforme, statut, montant total, " +
                         "date de livraison souhaitée et taux de couverture des ressources. " +
-                        "Filtrage optionnel par statut et/ou marque.",
+                        "Filtrage optionnel par statut, marque (nom), client (nom) ou plateforme (nom). " +
+                        "Exemple : « commandes pour dandy's » → plateformeNom = \"dandy's\".",
                     parameters = new {
                         type = "object",
                         properties = new {
                             statut = new {
                                 type = "string",
-                                description = "Statut de la commande : EnAttente, Prete, EnProduction, Terminee (optionnel)."
+                                description = "Statut de la commande : EnAttente, Prete, EnProduction, Terminee, Annulee (optionnel)."
+                            },
+                            marqueNom = new {
+                                type = "string",
+                                description = "Nom (ou partie) de la marque pour filtrer les commandes (optionnel). Exemple : \"zara\"."
+                            },
+                            clientNom = new {
+                                type = "string",
+                                description = "Nom (ou partie) du client pour filtrer les commandes (optionnel)."
+                            },
+                            plateformeNom = new {
+                                type = "string",
+                                description =
+                                    "Nom (ou partie) de la plateforme pour filtrer les commandes (optionnel). " +
+                                    "Exemple : \"dandy's\", \"vinted\", \"ebay\"."
                             },
                             marqueId = new {
                                 type = "integer",
-                                description = "ID de la marque pour filtrer les commandes (optionnel)."
+                                description = "ID numérique exact de la marque (optionnel). Préférez marqueNom si l'utilisateur donne un nom."
                             }
                         },
                         required = Array.Empty<string>()
@@ -83,7 +98,9 @@ namespace Backend_Gestion_Magasin_API.Tools
                     name = "get_achats",
                     description =
                         "Liste les achats locaux auprès des fournisseurs : numéro, fournisseur, statut, " +
-                        "montant total, date de livraison prévue. Filtrage optionnel par statut et/ou fournisseur.",
+                        "montant total, date de livraison prévue, et les lignes d'achat (articles, quantités). " +
+                        "Filtrage optionnel par statut, fournisseur (nom) ou plateforme (nom). " +
+                        "Exemple : « articles achetées pour dandy's » → plateformeNom = \"dandy's\".",
                     parameters = new {
                         type = "object",
                         properties = new {
@@ -91,9 +108,19 @@ namespace Backend_Gestion_Magasin_API.Tools
                                 type = "string",
                                 description = "Statut : Brouillon, Soumis, Confirme, Livre, Annule (optionnel)."
                             },
+                            fournisseurNom = new {
+                                type = "string",
+                                description = "Nom (ou partie) du fournisseur pour filtrer les achats (optionnel)."
+                            },
+                            plateformeNom = new {
+                                type = "string",
+                                description =
+                                    "Nom (ou partie) de la plateforme pour filtrer les achats (optionnel). " +
+                                    "Exemple : \"dandy's\", \"vinted\", \"ebay\"."
+                            },
                             fournisseurId = new {
                                 type = "integer",
-                                description = "ID du fournisseur pour filtrer les achats (optionnel)."
+                                description = "ID numérique exact du fournisseur (optionnel). Préférez fournisseurNom si l'utilisateur donne un nom."
                             }
                         },
                         required = Array.Empty<string>()
