@@ -201,15 +201,27 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost]
         [RequireModulePermission("mouvements", requireWrite: true)]
-        public async Task<ActionResult<MouvementStock>> PostMouvementStock(MouvementStock mouvement)
+        public async Task<ActionResult<MouvementStock>> PostMouvementStock(CreateMouvementStockDto dto)
         {
-            var stock = await _context.Stocks.FindAsync(mouvement.StockId);
+            var stock = await _context.Stocks.FindAsync(dto.StockId);
             if (stock == null)
             {
                 return BadRequest("Stock introuvable");
             }
 
-            mouvement.QuantiteAvant = stock.Quantite;
+            var mouvement = new MouvementStock
+            {
+                StockId = dto.StockId,
+                TypeMouvement = dto.TypeMouvement,
+                OrigineMouvement = dto.OrigineMouvement,
+                Quantite = dto.Quantite,
+                EmplacementSource = dto.EmplacementSource,
+                EmplacementDestination = dto.EmplacementDestination,
+                NumeroLot = dto.NumeroReference,
+                Motif = dto.Motif,
+                EffectuePar = dto.EffectuePar,
+                QuantiteAvant = stock.Quantite
+            };
 
             switch (mouvement.TypeMouvement)
             {

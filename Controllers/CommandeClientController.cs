@@ -134,7 +134,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost("{id}/Besoins")]
         [RequireModulePermission("commandes", requireWrite: true)]
-        public async Task<ActionResult<BesoinCommande>> AjouterBesoin(int id, BesoinCommande besoin)
+        public async Task<ActionResult<BesoinCommande>> AjouterBesoin(int id, CreateBesoinCommandeDto dto)
         {
             var commande = await _context.CommandesClients.FindAsync(id);
             if (commande == null)
@@ -142,9 +142,20 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
-            besoin.CommandeClientId = id;
-            besoin.QuantiteTotale = besoin.QuantiteUnitaire * besoin.NombrePieces;
-            besoin.DateCreation = DateTime.Now;
+            var besoin = new BesoinCommande
+            {
+                CommandeClientId = id,
+                ArticleId = dto.ArticleId,
+                TypeBesoin = dto.TypeBesoin,
+                Couleur = dto.Couleur,
+                Taille = dto.Taille,
+                Dimension = dto.Dimension,
+                QuantiteUnitaire = dto.QuantiteUnitaire,
+                NombrePieces = dto.NombrePieces,
+                QuantiteTotale = dto.QuantiteUnitaire * dto.NombrePieces,
+                Notes = dto.Notes,
+                DateCreation = DateTime.Now
+            };
 
             _context.BesoinsCommandes.Add(besoin);
             await _context.SaveChangesAsync();

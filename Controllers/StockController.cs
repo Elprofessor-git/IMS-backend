@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
+using Backend_Gestion_Magasin_API.Dtos.Stock;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -112,9 +113,29 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost]
         [RequireModulePermission("stock", requireWrite: true)]
-        public async Task<ActionResult<Stock>> PostStock(Stock stock)
+        public async Task<ActionResult<Stock>> PostStock(CreateStockDto dto)
         {
-            stock.DateEntree = DateTime.Now;
+            var stock = new Stock
+            {
+                ArticleId = dto.ArticleId,
+                Couleur = dto.Couleur,
+                CodeCouleur = dto.CodeCouleur,
+                Taille = dto.Taille,
+                Dimension = dto.Dimension,
+                EmplacementPhysique = dto.EmplacementPhysique,
+                NumeroLot = dto.NumeroLot,
+                Quantite = dto.Quantite,
+                TypeStock = dto.TypeStock,
+                CommandeClientId = dto.CommandeClientId,
+                PrixUnitaire = dto.PrixUnitaire,
+                Devise = dto.Devise ?? "EUR",
+                DateEntree = DateTime.Now,
+                DatePeremption = dto.DatePeremption,
+                Notes = dto.Notes,
+                ClientId = dto.ClientId,
+                PlateformeId = dto.PlateformeId
+            };
+
             _context.Stocks.Add(stock);
             await _context.SaveChangesAsync();
 
@@ -123,14 +144,30 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPut("{id}")]
         [RequireModulePermission("stock", requireWrite: true)]
-        public async Task<IActionResult> PutStock(int id, Stock stock)
+        public async Task<IActionResult> PutStock(int id, CreateStockDto dto)
         {
-            if (id != stock.Id)
+            var stock = await _context.Stocks.FindAsync(id);
+            if (stock == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
-            _context.Entry(stock).State = EntityState.Modified;
+            stock.ArticleId = dto.ArticleId;
+            stock.Couleur = dto.Couleur;
+            stock.CodeCouleur = dto.CodeCouleur;
+            stock.Taille = dto.Taille;
+            stock.Dimension = dto.Dimension;
+            stock.EmplacementPhysique = dto.EmplacementPhysique;
+            stock.NumeroLot = dto.NumeroLot;
+            stock.Quantite = dto.Quantite;
+            stock.TypeStock = dto.TypeStock;
+            stock.CommandeClientId = dto.CommandeClientId;
+            stock.PrixUnitaire = dto.PrixUnitaire;
+            stock.Devise = dto.Devise ?? "EUR";
+            stock.DatePeremption = dto.DatePeremption;
+            stock.Notes = dto.Notes;
+            stock.ClientId = dto.ClientId;
+            stock.PlateformeId = dto.PlateformeId;
 
             try
             {
