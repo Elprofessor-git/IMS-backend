@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
+using Backend_Gestion_Magasin_API.Dtos.Mouvement;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -19,22 +20,58 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context = context;
         }
 
+        private static MouvementStockDto ToDto(MouvementStock ms)
+        {
+            return new MouvementStockDto
+            {
+                Id = ms.Id,
+                StockId = ms.StockId,
+                ArticleId = ms.Stock?.ArticleId ?? 0,
+                TypeMouvement = ms.TypeMouvement,
+                OrigineMouvement = ms.OrigineMouvement,
+                Quantite = ms.Quantite,
+                StockAvant = ms.QuantiteAvant,
+                StockApres = ms.QuantiteApres,
+                Motif = ms.Motif,
+                NumeroReference = ms.NumeroLot,
+                EmplacementSource = ms.EmplacementSource,
+                EmplacementDestination = ms.EmplacementDestination,
+                EffectuePar = ms.EffectuePar,
+                DateMouvement = ms.DateMouvement,
+                Article = ms.Stock?.Article == null
+                    ? null
+                    : new MouvementArticleDto
+                    {
+                        Id = ms.Stock.Article.Id,
+                        Designation = ms.Stock.Article.Designation,
+                        Reference = ms.Stock.Article.Reference
+                    }
+            };
+        }
+
+        private static List<MouvementStockDto> ToDtoList(IEnumerable<MouvementStock> mouvements)
+        {
+            return mouvements.Select(ToDto).ToList();
+        }
+
         [HttpGet]
         [RequireModulePermission("mouvements", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<MouvementStock>>> GetMouvements()
+        public async Task<ActionResult<IEnumerable<MouvementStockDto>>> GetMouvements()
         {
-            return await _context.MouvementsStock
+            var mouvements = await _context.MouvementsStock
                 .Include(ms => ms.Stock)
                 .ThenInclude(s => s.Article)
                 .Include(ms => ms.TacheProduction)
                 .OrderByDescending(ms => ms.DateMouvement)
                 .Take(100)
                 .ToListAsync();
+
+            return Ok(ToDtoList(mouvements));
         }
 
         [HttpGet("{id}")]
         [RequireModulePermission("mouvements", requireWrite: false)]
-        public async Task<ActionResult<MouvementStock>> GetMouvementStock(int id)
+        public async Task<ActionResult<MouvementStockDto>> GetMouvementStock(int id)
         {
             var mouvement = await _context.MouvementsStock
                 .Include(ms => ms.Stock)
@@ -47,36 +84,42 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
-            return mouvement;
+            return Ok(ToDto(mouvement));
         }
 
         [HttpGet("ByStock/{stockId}")]
         [RequireModulePermission("mouvements", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<MouvementStock>>> GetMouvementsByStock(int stockId)
+        public async Task<ActionResult<IEnumerable<MouvementStockDto>>> GetMouvementsByStock(int stockId)
         {
-            return await _context.MouvementsStock
+            var mouvements = await _context.MouvementsStock
+                .Include(ms => ms.Stock)
+                .ThenInclude(s => s.Article)
                 .Include(ms => ms.TacheProduction)
                 .Where(ms => ms.StockId == stockId)
                 .OrderByDescending(ms => ms.DateMouvement)
                 .ToListAsync();
+
+            return Ok(ToDtoList(mouvements));
         }
 
         [HttpGet("ByArticle/{articleId}")]
         [RequireModulePermission("mouvements", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<MouvementStock>>> GetMouvementsByArticle(int articleId)
+        public async Task<ActionResult<IEnumerable<MouvementStockDto>>> GetMouvementsByArticle(int articleId)
         {
-            return await _context.MouvementsStock
+            var mouvements = await _context.MouvementsStock
                 .Include(ms => ms.Stock)
                 .ThenInclude(s => s.Article)
                 .Include(ms => ms.TacheProduction)
                 .Where(ms => ms.Stock.ArticleId == articleId)
                 .OrderByDescending(ms => ms.DateMouvement)
                 .ToListAsync();
+
+            return Ok(ToDtoList(mouvements));
         }
 
         [HttpGet("Filtrer")]
         [RequireModulePermission("mouvements", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<MouvementStock>>> FiltrerMouvements(
+        public async Task<ActionResult<IEnumerable<MouvementStockDto>>> FiltrerMouvements(
             [FromQuery] DateTime? dateDebut,
             [FromQuery] DateTime? dateFin,
             [FromQuery] TypeMouvement? typeMouvement,
@@ -108,15 +151,17 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (!string.IsNullOrEmpty(effectuePar))
                 query = query.Where(ms => ms.EffectuePar.Contains(effectuePar));
 
-            return await query
+            var mouvements = await query
                 .OrderByDescending(ms => ms.DateMouvement)
                 .Take(500)
                 .ToListAsync();
+
+            return Ok(ToDtoList(mouvements));
         }
 
         [HttpGet("Statistiques")]
         [RequireModulePermission("mouvements", requireWrite: false)]
-        public async Task<ActionResult<object>> GetStatistiques(
+        public async Task<ActionResult<MouvementStatistiquesDto>> GetStatistiques(
             [FromQuery] DateTime? dateDebut,
             [FromQuery] DateTime? dateFin)
         {
@@ -127,30 +172,27 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .Where(ms => ms.DateMouvement >= debut && ms.DateMouvement <= fin)
                 .ToListAsync();
 
-            var statistiques = new
+            var valeurStock = await _context.Stocks.SumAsync(s => s.Quantite * s.PrixUnitaire);
+
+            var statistiques = new MouvementStatistiquesDto
             {
-                Periode = new { DateDebut = debut, DateFin = fin },
                 TotalMouvements = mouvements.Count,
-                Entrees = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Entree),
-                Sorties = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Sortie),
-                Transferts = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Transfert),
-                Ajustements = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Ajustement),
-                Reservations = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Reservation),
-                Liberations = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Liberation),
+                TotalEntrees = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Entree),
+                TotalSorties = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Sortie),
+                TotalTransferts = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Transfert),
+                TotalAjustements = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Ajustement),
+                TotalReservations = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Reservation),
+                TotalLiberations = mouvements.Count(m => m.TypeMouvement == TypeMouvement.Liberation),
                 QuantiteTotaleEntree = mouvements
                     .Where(m => m.TypeMouvement == TypeMouvement.Entree)
                     .Sum(m => m.Quantite),
                 QuantiteTotaleSortie = mouvements
                     .Where(m => m.TypeMouvement == TypeMouvement.Sortie)
                     .Sum(m => m.Quantite),
+                StockValeurTotale = valeurStock,
                 MouvementsParOrigine = mouvements
                     .GroupBy(m => m.OrigineMouvement)
-                    .Select(g => new { Origine = g.Key.ToString(), Nombre = g.Count() })
-                    .ToList(),
-                MouvementsParJour = mouvements
-                    .GroupBy(m => m.DateMouvement.Date)
-                    .Select(g => new { Date = g.Key, Nombre = g.Count() })
-                    .OrderBy(x => x.Date)
+                    .Select(g => new MouvementParOrigineDto { Origine = g.Key.ToString(), Nombre = g.Count() })
                     .ToList()
             };
 
