@@ -82,6 +82,14 @@ namespace Backend_Gestion_Magasin_API.Tools
                                     "Nom (ou partie) de la plateforme pour filtrer les commandes (optionnel). " +
                                     "Exemple : \"dandy's\", \"vinted\", \"ebay\"."
                             },
+                            dateDebut = new {
+                                type = "string",
+                                description = "Date de début au format YYYY-MM-DD (optionnel) — filtre sur la date de création."
+                            },
+                            dateFin = new {
+                                type = "string",
+                                description = "Date de fin au format YYYY-MM-DD (optionnel, incluse) — filtre sur la date de création."
+                            },
                             marqueId = new {
                                 type = "integer",
                                 description = "ID numérique exact de la marque (optionnel). Préférez marqueNom si l'utilisateur donne un nom."
@@ -98,9 +106,11 @@ namespace Backend_Gestion_Magasin_API.Tools
                     name = "get_achats",
                     description =
                         "Liste les achats locaux auprès des fournisseurs : numéro, fournisseur, statut, " +
-                        "montant total, date de livraison prévue, et les lignes d'achat (articles, quantités). " +
-                        "Filtrage optionnel par statut, fournisseur (nom) ou plateforme (nom). " +
-                        "Exemple : « articles achetées pour dandy's » → plateformeNom = \"dandy's\".",
+                        "montant total, date achat, date livraison prévue, commandé par, et les lignes d'achat " +
+                        "(articles, désignations, quantités, prix, plateforme). " +
+                        "Filtrage combinable par statut, fournisseur (nom), plateforme (nom), article (nom) et période. " +
+                        "Exemple : « bobines achetées en avril pour dandy's » → plateformeNom = \"dandy's\", " +
+                        "dateDebut = \"2026-04-01\", dateFin = \"2026-04-30\".",
                     parameters = new {
                         type = "object",
                         properties = new {
@@ -117,6 +127,20 @@ namespace Backend_Gestion_Magasin_API.Tools
                                 description =
                                     "Nom (ou partie) de la plateforme pour filtrer les achats (optionnel). " +
                                     "Exemple : \"dandy's\", \"vinted\", \"ebay\"."
+                            },
+                            articleNom = new {
+                                type = "string",
+                                description =
+                                    "Nom (ou partie) de l'article pour filtrer les achats (optionnel). " +
+                                    "Exemple : \"bobine\", \"bouton\", \"pion\"."
+                            },
+                            dateDebut = new {
+                                type = "string",
+                                description = "Date de début au format YYYY-MM-DD (optionnel) — filtre sur la date d'achat."
+                            },
+                            dateFin = new {
+                                type = "string",
+                                description = "Date de fin au format YYYY-MM-DD (optionnel, incluse) — filtre sur la date d'achat."
                             },
                             fournisseurId = new {
                                 type = "integer",

@@ -149,6 +149,8 @@ namespace Backend_Gestion_Magasin_API.Services
             var marqueNom      = args["marqueNom"]?.GetValue<string>();
             var clientNom      = args["clientNom"]?.GetValue<string>();
             var plateformeNom  = args["plateformeNom"]?.GetValue<string>();
+            var dateDebutStr   = args["dateDebut"]?.GetValue<string>();
+            var dateFinStr     = args["dateFin"]?.GetValue<string>();
             var marqueId       = args["marqueId"]?.GetValue<int?>();
 
             var all = await _commandes.GetAllCommandesAsync();
@@ -179,6 +181,12 @@ namespace Backend_Gestion_Magasin_API.Services
                     (c.Marque != null && c.Marque.Plateforme != null &&
                      c.Marque.Plateforme.Nom.Contains(plateformeNom, StringComparison.OrdinalIgnoreCase)));
 
+            if (DateTimeOffset.TryParse(dateDebutStr, out var debut))
+                filtered = filtered.Where(c => c.DateCreation >= debut.UtcDateTime);
+
+            if (DateTimeOffset.TryParse(dateFinStr, out var fin))
+                filtered = filtered.Where(c => c.DateCreation < fin.UtcDateTime.AddDays(1));
+
             var result = filtered
                 .OrderByDescending(c => c.DateCreation)
                 .Take(25)
@@ -191,6 +199,7 @@ namespace Backend_Gestion_Magasin_API.Services
                     Marque   = c.Marque?.Nom,
                     Plateforme = c.Client?.Plateforme?.Nom ?? c.Marque?.Plateforme?.Nom,
                     Statut   = c.Statut.ToString(),
+                    c.DateCreation,
                     c.DateLivraisonSouhaitee,
                     c.MontantTotal,
                     c.PourcentageRessourcesCouvertes
@@ -204,6 +213,9 @@ namespace Backend_Gestion_Magasin_API.Services
             var statutStr      = args["statut"]?.GetValue<string>();
             var fournisseurNom = args["fournisseurNom"]?.GetValue<string>();
             var plateformeNom  = args["plateformeNom"]?.GetValue<string>();
+            var articleNom     = args["articleNom"]?.GetValue<string>();
+            var dateDebutStr   = args["dateDebut"]?.GetValue<string>();
+            var dateFinStr     = args["dateFin"]?.GetValue<string>();
             var fournisseurId  = args["fournisseurId"]?.GetValue<int?>();
 
             var query = _context.Achats
@@ -229,6 +241,18 @@ namespace Backend_Gestion_Magasin_API.Services
                     a.LignesAchat.Any(l => l.Plateforme != null &&
                         l.Plateforme.Nom.Contains(plateformeNom)));
 
+            if (!string.IsNullOrWhiteSpace(articleNom))
+                query = query.Where(a =>
+                    a.LignesAchat.Any(l =>
+                        l.Article.Designation.Contains(articleNom) ||
+                        (l.Article.Reference != null && l.Article.Reference.Contains(articleNom))));
+
+            if (DateTimeOffset.TryParse(dateDebutStr, out var debut))
+                query = query.Where(a => a.DateAchat >= debut.UtcDateTime);
+
+            if (DateTimeOffset.TryParse(dateFinStr, out var fin))
+                query = query.Where(a => a.DateAchat < fin.UtcDateTime.AddDays(1)); // inclut la journée de fin
+
             var achats = await query
                 .OrderByDescending(a => a.DateAchat)
                 .Take(25)
@@ -239,9 +263,11 @@ namespace Backend_Gestion_Magasin_API.Services
                     Fournisseur = a.Fournisseur.NomEntreprise,
                     Commande    = a.CommandeClient != null ? a.CommandeClient.NumeroCommande : null,
                     Statut      = a.Statut.ToString(),
+                    a.DateAchat,
+                    a.DateLivraisonPrevue,
+                    a.CreePar,
                     a.MontantTotal,
                     a.Devise,
-                    a.DateLivraisonPrevue,
                     Lignes = a.LignesAchat.Select(l => new
                     {
                         l.Id,
