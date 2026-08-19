@@ -527,6 +527,82 @@ namespace Backend_Gestion_Magasin_API.Controllers
             });
         }
 
+        // Convertit la BOM (nomenclature par pièce) + les tailles configurées en besoins
+        // "officiels" (BesoinCommande) : QuantiteUnitaire = QuantiteParPiece, NombrePieces = total
+        // des tailles. Idempotent : les besoins déjà générés (marqués via Notes) sont mis à jour
+        // plutôt que dupliqués ; les besoins saisis manuellement (sans le marqueur) ne sont jamais
+        // touchés. Un besoin généré dont l'article a été retiré de la BOM est supprimé.
+        private const string TagGenereDepuisBom = "[Généré depuis BOM]";
+
+        [HttpPost("{id}/GenererBesoinsDepuisBom")]
+        [RequireModulePermission("commandes", requireWrite: true)]
+        public async Task<ActionResult> GenererBesoinsDepuisBom(int id)
+        {
+            if (!CommandeClientExists(id))
+                return NotFound();
+
+            var totalPieces = await _context.ConfigTailles
+                .Where(ct => ct.CommandeId == id)
+                .SumAsync(ct => (decimal)ct.Quantite);
+
+            if (totalPieces <= 0)
+                return BadRequest("Aucune configuration de tailles définie pour cette commande.");
+
+            var bomLignes = await _context.BomLignes.Where(b => b.CommandeId == id).ToListAsync();
+            if (!bomLignes.Any())
+                return BadRequest("Aucune ligne BOM définie pour cette commande.");
+
+            var nombrePieces = (int)Math.Round(totalPieces, MidpointRounding.AwayFromZero);
+
+            var besoinsGeneresExistants = await _context.BesoinsCommandes
+                .Where(b => b.CommandeClientId == id && b.Notes != null && b.Notes.Contains(TagGenereDepuisBom))
+                .ToListAsync();
+
+            int crees = 0, misAJour = 0;
+
+            foreach (var ligne in bomLignes)
+            {
+                var existant = besoinsGeneresExistants.FirstOrDefault(b => b.ArticleId == ligne.ArticleId);
+                if (existant != null)
+                {
+                    existant.QuantiteUnitaire = ligne.QuantiteParPiece;
+                    existant.NombrePieces = nombrePieces;
+                    existant.QuantiteTotale = ligne.QuantiteParPiece * nombrePieces;
+                    misAJour++;
+                }
+                else
+                {
+                    _context.BesoinsCommandes.Add(new BesoinCommande
+                    {
+                        CommandeClientId = id,
+                        ArticleId = ligne.ArticleId,
+                        TypeBesoin = TypeBesoin.MatierePremiere,
+                        QuantiteUnitaire = ligne.QuantiteParPiece,
+                        NombrePieces = nombrePieces,
+                        QuantiteTotale = ligne.QuantiteParPiece * nombrePieces,
+                        Notes = TagGenereDepuisBom,
+                        DateCreation = DateTime.Now
+                    });
+                    crees++;
+                }
+            }
+
+            // Nettoie les besoins générés dont l'article n'est plus dans la BOM courante.
+            var articleIdsBom = bomLignes.Select(b => b.ArticleId).ToHashSet();
+            var obsoletes = besoinsGeneresExistants.Where(b => !articleIdsBom.Contains(b.ArticleId)).ToList();
+            _context.BesoinsCommandes.RemoveRange(obsoletes);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Besoins générés depuis la BOM",
+                crees,
+                misAJour,
+                supprimes = obsoletes.Count
+            });
+        }
+
         [HttpPut("{id}")]
         [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<IActionResult> PutCommandeClient(int id, CommandeClient commande)
