@@ -33,6 +33,11 @@ namespace Backend_Gestion_Magasin_API.Models
         [ForeignKey("Fournisseur")]
         public int? FournisseurId { get; set; }
         
+        // Source alternative à Fournisseur : la marchandise provient du stock d'une plateforme
+        // plutôt que d'un achat externe. Exclusif avec FournisseurId (voir ImportationController).
+        [ForeignKey("Plateforme")]
+        public int? PlateformeId { get; set; }
+        
         public StatutImportation Statut { get; set; } = StatutImportation.Brouillon;
         
         public DateTime DateImportation { get; set; } = DateTime.Now;
@@ -75,6 +80,7 @@ namespace Backend_Gestion_Magasin_API.Models
         
         // Relations
         public virtual Fournisseur? Fournisseur { get; set; }
+        public virtual Plateforme? Plateforme { get; set; }
         public virtual ICollection<LigneImportation> LignesImportation { get; set; } = new List<LigneImportation>();
         public virtual ICollection<DocumentImportation> Documents { get; set; } = new List<DocumentImportation>();
     }

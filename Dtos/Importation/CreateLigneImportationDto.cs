@@ -8,8 +8,6 @@ namespace Backend_Gestion_Magasin_API.Dtos.Importation
         [Required]
         public int ArticleId { get; set; }
 
-        public TypeOrigineImportation TypeOrigine { get; set; } = TypeOrigineImportation.Fournisseur;
-
         public TypeDestinationImportation TypeDestination { get; set; } = TypeDestinationImportation.StockLibre;
 
         public int? CommandeClientId { get; set; }

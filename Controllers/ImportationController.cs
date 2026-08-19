@@ -26,6 +26,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             return await _context.Importations
                 .Include(i => i.Fournisseur)
+                .Include(i => i.Plateforme)
                 .Include(i => i.LignesImportation)
                 .ThenInclude(li => li.Article)
                 .ToListAsync();
@@ -37,6 +38,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             var importation = await _context.Importations
                 .Include(i => i.Fournisseur)
+                .Include(i => i.Plateforme)
                 .Include(i => i.LignesImportation)
                 .ThenInclude(li => li.Article)
                 .Include(i => i.LignesImportation)
@@ -69,10 +71,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
             [FromQuery] DateTime? dateDebut,
             [FromQuery] DateTime? dateFin,
             [FromQuery] int? fournisseurId,
+            [FromQuery] int? plateformeId,
             [FromQuery] StatutImportation? statut)
         {
             var query = _context.Importations
                 .Include(i => i.Fournisseur)
+                .Include(i => i.Plateforme)
                 .AsQueryable();
 
             if (dateDebut.HasValue)
@@ -84,6 +88,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (fournisseurId.HasValue)
                 query = query.Where(i => i.FournisseurId == fournisseurId.Value);
 
+            if (plateformeId.HasValue)
+                query = query.Where(i => i.PlateformeId == plateformeId.Value);
+
             if (statut.HasValue)
                 query = query.Where(i => i.Statut == statut.Value);
 
@@ -94,6 +101,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("importations", requireWrite: true)]
         public async Task<ActionResult<Importation>> PostImportation(Importation importation)
         {
+            if (importation.FournisseurId.HasValue && importation.PlateformeId.HasValue)
+            {
+                return BadRequest("La source de l'importation doit être soit un fournisseur, soit une plateforme, pas les deux.");
+            }
+
             importation.DateCreation = DateTime.Now;
             importation.ReferenceImportation = GenerateReferenceImportation();
 
@@ -117,7 +129,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             {
                 ImportationId = id,
                 ArticleId = dto.ArticleId,
-                TypeOrigine = dto.TypeOrigine,
                 TypeDestination = dto.TypeDestination,
                 CommandeClientId = dto.CommandeClientId,
                 ClientId = dto.ClientId,
@@ -134,11 +145,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Notes = dto.Notes,
                 DateCreation = DateTime.Now
             };
-
-            if (ligneImportation.TypeOrigine == TypeOrigineImportation.ClientCMT && !ligneImportation.CommandeClientId.HasValue)
-            {
-                return BadRequest("Une ligne de type Client (CMT) doit être liée à une commande client.");
-            }
 
             switch (ligneImportation.TypeDestination)
             {
@@ -359,6 +365,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (id != importation.Id)
             {
                 return BadRequest();
+            }
+
+            if (importation.FournisseurId.HasValue && importation.PlateformeId.HasValue)
+            {
+                return BadRequest("La source de l'importation doit être soit un fournisseur, soit une plateforme, pas les deux.");
             }
 
             importation.DateMiseAJour = DateTime.Now;

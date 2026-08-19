@@ -318,6 +318,7 @@ namespace Backend_Gestion_Magasin_API.Services
 
             var query = _context.Importations
                 .Include(i => i.Fournisseur)
+                .Include(i => i.Plateforme)
                 .Include(i => i.LignesImportation)
                     .ThenInclude(li => li.Article)
                 .Include(i => i.LignesImportation)
@@ -337,8 +338,10 @@ namespace Backend_Gestion_Magasin_API.Services
                     i.Fournisseur.NomEntreprise.ToLower().Contains(fournisseurNom.ToLower()));
 
             if (!string.IsNullOrEmpty(plateformeNom))
-                query = query.Where(i => i.LignesImportation.Any(l =>
-                    l.Plateforme != null && l.Plateforme.Nom.ToLower().Contains(plateformeNom.ToLower())));
+                query = query.Where(i =>
+                    (i.Plateforme != null && i.Plateforme.Nom.ToLower().Contains(plateformeNom.ToLower())) ||
+                    i.LignesImportation.Any(l =>
+                        l.Plateforme != null && l.Plateforme.Nom.ToLower().Contains(plateformeNom.ToLower())));
 
             if (!string.IsNullOrEmpty(articleNom))
                 query = query.Where(i => i.LignesImportation.Any(l =>
@@ -359,6 +362,7 @@ namespace Backend_Gestion_Magasin_API.Services
                     i.Id,
                     i.ReferenceImportation,
                     Fournisseur = i.Fournisseur != null ? i.Fournisseur.NomEntreprise : null,
+                    PlateformeSource = i.Plateforme != null ? i.Plateforme.Nom : null,
                     Statut      = i.Statut.ToString(),
                     ModeExpedition = i.ModeExpedition.ToString(),
                     i.DateImportation,
@@ -380,7 +384,6 @@ namespace Backend_Gestion_Magasin_API.Services
                         l.MontantLigne,
                         l.Devise,
                         Plateforme   = l.Plateforme != null ? l.Plateforme.Nom : null,
-                        TypeOrigine  = l.TypeOrigine.ToString(),
                         TypeDestination = l.TypeDestination.ToString(),
                         l.EstAffecteStock
                     })
@@ -490,15 +493,15 @@ namespace Backend_Gestion_Magasin_API.Services
                 new
                 {
                     nom = "Importation",
-                    description = "Importation fournisseur (souvent via import maritime/aérien). FournisseurId, Statuts : Brouillon, Soumise, Validee, Recue, Annulee. ModeExpedition : Maritime, Aerien, Terrestre, Express, Autre.",
-                    relations = "Importation → Fournisseur ; Importation → LignesImportation.",
+                    description = "Importation (souvent via import maritime/aérien). Origine du shipment entier (pas par ligne) : soit FournisseurId (achat direct), soit PlateformeId (la plateforme a groupé les commandes de plusieurs fournisseurs et envoie tout en un seul envoi) — exclusifs. Statuts : Brouillon, Soumise, Validee, Recue, Annulee. ModeExpedition : Maritime, Aerien, Terrestre, Express, Autre.",
+                    relations = "Importation → Fournisseur ; Importation → Plateforme (source) ; Importation → LignesImportation.",
                     motsCles = "importation importations import"
                 },
                 new
                 {
                     nom = "LigneImportation",
-                    description = "Article importé. TypeDestination : Commande(0), Marque(1), Plateforme(2), StockLibre(3). PlateformeId pour une destination Plateforme. TypeOrigine : Fournisseur(0), ClientCMT(1).",
-                    relations = "LigneImportation → Article ; LigneImportation → Plateforme.",
+                    description = "Article importé. TypeDestination : Commande(0), Marque(1), Plateforme(2), StockLibre(3). PlateformeId pour une destination Plateforme. L'origine (Fournisseur ou Plateforme) est portée par l'Importation (en-tête), pas par la ligne.",
+                    relations = "LigneImportation → Article ; LigneImportation → Plateforme (destination).",
                     motsCles = "ligne importation article importe"
                 },
                 new

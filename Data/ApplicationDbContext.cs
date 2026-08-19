@@ -245,6 +245,13 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasForeignKey(i => i.FournisseurId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Plateforme -> Importation (source alternative au Fournisseur, optionnelle)
+            modelBuilder.Entity<Importation>()
+                .HasOne(i => i.Plateforme)
+                .WithMany()
+                .HasForeignKey(i => i.PlateformeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // Importation -> DocumentImportation (One-to-Many)
             modelBuilder.Entity<DocumentImportation>()
                 .HasOne(d => d.Importation)
@@ -280,12 +287,13 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasForeignKey(li => li.ClientId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Plateforme -> LigneImportation (scope Plateforme, optionnel)
+            // Plateforme -> LigneImportation (scope Plateforme = DESTINATION, optionnel)
             modelBuilder.Entity<LigneImportation>()
                 .HasOne(li => li.Plateforme)
                 .WithMany()
                 .HasForeignKey(li => li.PlateformeId)
                 .OnDelete(DeleteBehavior.Restrict);
+
 
             // Role -> ApplicationUser (One-to-Many)
             modelBuilder.Entity<ApplicationUser>()
@@ -461,11 +469,7 @@ namespace Backend_Gestion_Magasin_API.Data
                 .Property(f => f.QteParPiece)
                 .HasPrecision(18, 4);
 
-            // LigneImportation — TypeOrigine et TypeDestination stockés en string
-            modelBuilder.Entity<LigneImportation>()
-                .Property(li => li.TypeOrigine)
-                .HasConversion<string>();
-
+            // LigneImportation — TypeDestination stocké en string
             modelBuilder.Entity<LigneImportation>()
                 .Property(li => li.TypeDestination)
                 .HasConversion<string>();

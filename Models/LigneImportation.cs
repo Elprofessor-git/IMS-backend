@@ -3,12 +3,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Backend_Gestion_Magasin_API.Models
 {
-    public enum TypeOrigineImportation
-    {
-        Fournisseur,
-        ClientCMT,
-    }
-
     public enum TypeDestinationImportation
     {
         Commande,
@@ -60,8 +54,9 @@ namespace Backend_Gestion_Magasin_API.Models
         
         public bool EstAffecteStock { get; set; } = false;
 
-        public TypeOrigineImportation TypeOrigine { get; set; } = TypeOrigineImportation.Fournisseur;
-
+        // Pas de notion d'origine par ligne : l'origine (Fournisseur direct ou Plateforme qui
+        // regroupe plusieurs fournisseurs) est un attribut de l'IMPORTATION (en-tête), pas de la
+        // ligne. Seule la DESTINATION varie par ligne (elle entre dans le calcul BOM/besoins).
         public TypeDestinationImportation TypeDestination { get; set; } = TypeDestinationImportation.StockLibre;
 
         [ForeignKey("Client")]
