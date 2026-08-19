@@ -45,6 +45,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ThenInclude(b => b.Article)
                 .Include(c => c.Taches)
                 .Include(c => c.Achats)
+                .Include(c => c.ConfigTailles)
+                .Include(c => c.BomLignes)
+                .ThenInclude(bl => bl.Article)
                 .FirstOrDefaultAsync(c => c.Id == id);
 
             if (commande == null)
