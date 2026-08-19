@@ -1,0 +1,17 @@
+name: Keep-alive Render
+
+# Ping périodique du backend Render pour éviter la mise en veille (cold start)
+# des services gratuits après ~15 min d'inactivité.
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # toutes les 10 minutes (marge sous les 15 min de Render)
+  workflow_dispatch: {}       # permet de le lancer manuellement depuis l'onglet Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: |
+          echo "Ping $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          curl -fsS --max-time 30 https://ims-backend-g95v.onrender.com/health
