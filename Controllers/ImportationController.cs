@@ -99,15 +99,25 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost]
         [RequireModulePermission("importations", requireWrite: true)]
-        public async Task<ActionResult<Importation>> PostImportation(Importation importation)
+        public async Task<ActionResult<Importation>> PostImportation(CreateImportationDto dto)
         {
-            if (importation.FournisseurId.HasValue && importation.PlateformeId.HasValue)
+            if (dto.FournisseurId.HasValue && dto.PlateformeId.HasValue)
             {
                 return BadRequest("La source de l'importation doit être soit un fournisseur, soit une plateforme, pas les deux.");
             }
 
-            importation.DateCreation = DateTime.Now;
-            importation.ReferenceImportation = GenerateReferenceImportation();
+            var importation = new Importation
+            {
+                ReferenceImportation = GenerateReferenceImportation(),
+                FournisseurId = dto.FournisseurId,
+                PlateformeId = dto.PlateformeId,
+                DateReceptionPrevue = dto.DateReceptionPrevue,
+                ModeExpedition = dto.ModeExpedition,
+                Devise = dto.Devise,
+                NotesImportation = dto.NotesImportation,
+                CreePar = dto.CreePar,
+                DateCreation = DateTime.Now
+            };
 
             _context.Importations.Add(importation);
             await _context.SaveChangesAsync();
