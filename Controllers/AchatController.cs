@@ -176,6 +176,101 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return CreatedAtAction("GetAchat", new { id = achat.Id }, ligneAchat);
         }
 
+        [HttpPut("{id}/LignesAchat/{ligneId}")]
+        [RequireModulePermission("achats", requireWrite: true)]
+        public async Task<IActionResult> ModifierLigneAchat(int id, int ligneId, CreateLigneAchatDto dto)
+        {
+            var achat = await _context.Achats.FindAsync(id);
+            if (achat == null)
+            {
+                return NotFound();
+            }
+
+            if (achat.Statut != StatutAchat.Brouillon)
+            {
+                return BadRequest("Seuls les achats en Brouillon peuvent être modifiés");
+            }
+
+            var ligneAchat = await _context.LignesAchat
+                .FirstOrDefaultAsync(l => l.Id == ligneId && l.AchatId == id);
+            if (ligneAchat == null)
+            {
+                return NotFound();
+            }
+
+            var commandeClientId = dto.CommandeClientId;
+            var clientId = dto.ClientId;
+            var plateformeId = dto.PlateformeId;
+
+            switch (dto.TypeDestination)
+            {
+                case TypeDestinationAchat.Commande when !commandeClientId.HasValue:
+                    return BadRequest("TypeDestination=Commande requiert un CommandeClientId.");
+                case TypeDestinationAchat.Marque when !clientId.HasValue:
+                    return BadRequest("TypeDestination=Marque requiert un ClientId.");
+                case TypeDestinationAchat.Plateforme when !plateformeId.HasValue:
+                    return BadRequest("TypeDestination=Plateforme requiert un PlateformeId.");
+                case TypeDestinationAchat.StockLibre:
+                    commandeClientId = null;
+                    clientId = null;
+                    plateformeId = null;
+                    break;
+            }
+
+            ligneAchat.ArticleId = dto.ArticleId;
+            ligneAchat.TypeDestination = dto.TypeDestination;
+            ligneAchat.CommandeClientId = commandeClientId;
+            ligneAchat.ClientId = clientId;
+            ligneAchat.PlateformeId = plateformeId;
+            ligneAchat.Couleur = dto.Couleur;
+            ligneAchat.CodeCouleur = dto.CodeCouleur;
+            ligneAchat.Taille = dto.Taille;
+            ligneAchat.Dimension = dto.Dimension;
+            ligneAchat.Quantite = dto.Quantite;
+            ligneAchat.PrixUnitaire = dto.PrixUnitaire;
+            ligneAchat.MontantLigne = dto.Quantite * dto.PrixUnitaire;
+            ligneAchat.Devise = dto.Devise;
+            ligneAchat.DescriptionSpecifique = dto.DescriptionSpecifique;
+            ligneAchat.Notes = dto.Notes;
+
+            await RecalculerMontantAchat(id);
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        [HttpDelete("{id}/LignesAchat/{ligneId}")]
+        [RequireModulePermission("achats", requireWrite: true)]
+        public async Task<IActionResult> SupprimerLigneAchat(int id, int ligneId)
+        {
+            var achat = await _context.Achats.FindAsync(id);
+            if (achat == null)
+            {
+                return NotFound();
+            }
+
+            if (achat.Statut != StatutAchat.Brouillon)
+            {
+                return BadRequest("Seules les lignes d'achats en Brouillon peuvent être supprimées");
+            }
+
+            var ligneAchat = await _context.LignesAchat
+                .FirstOrDefaultAsync(l => l.Id == ligneId && l.AchatId == id);
+            if (ligneAchat == null)
+            {
+                return NotFound();
+            }
+
+            _context.LignesAchat.Remove(ligneAchat);
+
+            await RecalculerMontantAchat(id);
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
         [HttpPost("{id}/Soumettre")]
         [RequireModulePermission("achats", requireWrite: true)]
         public async Task<ActionResult> SoumettreAchat(int id)
