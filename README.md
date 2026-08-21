@@ -27,7 +27,7 @@ Le projet a été construit et fait évoluer de façon incrémentale : chaque fo
 | Base de données | PostgreSQL (hébergée sur Neon) |
 | Authentification | ASP.NET Core Identity + JWT Bearer |
 | Documentation API | Swagger / OpenAPI |
-| IA conversationnelle | Groq API (Llama), function calling (tool use) |
+| IA conversationnelle | Groq API (`openai/gpt-oss-120b` par défaut, modèle surchargable via `GROQ_MODEL`), function calling (tool use) |
 | Déploiement | Docker → Render |
 
 ---

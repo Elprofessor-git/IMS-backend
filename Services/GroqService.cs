@@ -31,7 +31,7 @@ namespace Backend_Gestion_Magasin_API.Services
 
             _model = Environment.GetEnvironmentVariable("GROQ_MODEL")
                 ?? config["GroqSettings:Model"]
-                ?? "llama-3.3-70b-versatile";
+                ?? "openai/gpt-oss-120b";
         }
 
         public string Model => _model;
