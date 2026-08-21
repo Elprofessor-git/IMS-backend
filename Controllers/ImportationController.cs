@@ -384,20 +384,31 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPut("{id}")]
         [RequireModulePermission("importations", requireWrite: true)]
-        public async Task<IActionResult> PutImportation(int id, Importation importation)
+        public async Task<IActionResult> PutImportation(int id, UpdateImportationDto dto)
         {
-            if (id != importation.Id)
+            var importation = await _context.Importations.FindAsync(id);
+            if (importation == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
-            if (importation.FournisseurId.HasValue && importation.PlateformeId.HasValue)
+            if (dto.FournisseurId.HasValue && dto.PlateformeId.HasValue)
             {
                 return BadRequest("La source de l'importation doit être soit un fournisseur, soit une plateforme, pas les deux.");
             }
 
+            if (dto.FournisseurId.HasValue && !await _context.Fournisseurs.AnyAsync(f => f.Id == dto.FournisseurId.Value))
+            {
+                return BadRequest("Fournisseur introuvable");
+            }
+
+            importation.FournisseurId = dto.FournisseurId;
+            importation.PlateformeId = dto.PlateformeId;
+            importation.DateReceptionPrevue = dto.DateReceptionPrevue;
+            importation.ModeExpedition = dto.ModeExpedition;
+            importation.Devise = dto.Devise;
+            importation.NotesImportation = dto.NotesImportation;
             importation.DateMiseAJour = DateTime.Now;
-            _context.Entry(importation).State = EntityState.Modified;
 
             try
             {

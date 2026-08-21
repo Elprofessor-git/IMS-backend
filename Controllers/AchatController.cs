@@ -84,6 +84,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("achats", requireWrite: true)]
         public async Task<ActionResult<Achat>> PostAchat(CreateAchatDto dto)
         {
+            if (!await FournisseurExiste(dto.FournisseurId))
+            {
+                return BadRequest("Fournisseur introuvable");
+            }
+
             var achat = new Achat
             {
                 FournisseurId = dto.FournisseurId,
@@ -337,15 +342,26 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPut("{id}")]
         [RequireModulePermission("achats", requireWrite: true)]
-        public async Task<IActionResult> PutAchat(int id, Achat achat)
+        public async Task<IActionResult> PutAchat(int id, UpdateAchatDto dto)
         {
-            if (id != achat.Id)
+            var achat = await _context.Achats.FindAsync(id);
+            if (achat == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
+            if (!await FournisseurExiste(dto.FournisseurId))
+            {
+                return BadRequest("Fournisseur introuvable");
+            }
+
+            achat.FournisseurId = dto.FournisseurId;
+            achat.CommandeClientId = dto.CommandeClientId;
+            achat.DateLivraisonPrevue = dto.DateLivraisonPrevue;
+            achat.Devise = dto.Devise;
+            achat.ConditionsPaiement = dto.ConditionsPaiement;
+            achat.NotesAchat = dto.NotesAchat;
             achat.DateMiseAJour = DateTime.Now;
-            _context.Entry(achat).State = EntityState.Modified;
 
             try
             {
@@ -402,6 +418,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private bool AchatExists(int id)
         {
             return _context.Achats.Any(e => e.Id == id);
+        }
+
+        private async Task<bool> FournisseurExiste(int fournisseurId)
+        {
+            return await _context.Fournisseurs.AnyAsync(f => f.Id == fournisseurId);
         }
 
         private string GenerateNumeroAchat()
