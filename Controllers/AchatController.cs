@@ -5,6 +5,7 @@ using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Achat;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -97,7 +98,20 @@ namespace Backend_Gestion_Magasin_API.Controllers
             };
 
             _context.Achats.Add(achat);
-            await _context.SaveChangesAsync();
+
+            const int maxTentatives = 5;
+            for (var tentative = 1; ; tentative++)
+            {
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    break;
+                }
+                catch (DbUpdateException ex) when (EstConflitNumeroAchat(ex) && tentative < maxTentatives)
+                {
+                    achat.NumeroAchat = GenerateNumeroAchat();
+                }
+            }
 
             return CreatedAtAction("GetAchat", new { id = achat.Id }, achat);
         }
@@ -394,8 +408,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             var today = DateTime.Now;
             var prefix = $"ACH{today:yyyyMM}";
-            var count = _context.Achats.Count(a => a.NumeroAchat.StartsWith(prefix)) + 1;
-            return $"{prefix}{count:D4}";
+            var numeros = _context.Achats
+                .Where(a => a.NumeroAchat.StartsWith(prefix))
+                .Select(a => a.NumeroAchat)
+                .ToList();
+            var maxSuffix = numeros
+                .Where(n => n.Length > prefix.Length)
+                .Select(n => int.TryParse(n.Substring(prefix.Length), out var suffix) ? suffix : 0)
+                .DefaultIfEmpty(0)
+                .Max();
+            return $"{prefix}{(maxSuffix + 1):D4}";
+        }
+
+        private static bool EstConflitNumeroAchat(DbUpdateException ex)
+        {
+            return ex.InnerException is PostgresException pg
+                && pg.SqlState == "23505"
+                && string.Equals(pg.ConstraintName, "IX_Achats_NumeroAchat", StringComparison.Ordinal);
         }
     }
 }

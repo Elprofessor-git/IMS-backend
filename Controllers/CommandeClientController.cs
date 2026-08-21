@@ -5,6 +5,7 @@ using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Commande;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -130,7 +131,20 @@ namespace Backend_Gestion_Magasin_API.Controllers
             };
 
             _context.CommandesClients.Add(commande);
-            await _context.SaveChangesAsync();
+
+            const int maxTentatives = 5;
+            for (var tentative = 1; ; tentative++)
+            {
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    break;
+                }
+                catch (DbUpdateException ex) when (EstConflitNumeroCommande(ex) && tentative < maxTentatives)
+                {
+                    commande.NumeroCommande = GenerateNumeroCommande();
+                }
+            }
 
             return CreatedAtAction("GetCommandeClient", new { id = commande.Id }, commande);
         }
@@ -665,8 +679,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             var today = DateTime.Now;
             var prefix = $"CMD{today:yyyyMM}";
-            var count = _context.CommandesClients.Count(c => c.NumeroCommande.StartsWith(prefix)) + 1;
-            return $"{prefix}{count:D4}";
+            var numeros = _context.CommandesClients
+                .Where(c => c.NumeroCommande.StartsWith(prefix))
+                .Select(c => c.NumeroCommande)
+                .ToList();
+            var maxSuffix = numeros
+                .Where(n => n.Length > prefix.Length)
+                .Select(n => int.TryParse(n.Substring(prefix.Length), out var suffix) ? suffix : 0)
+                .DefaultIfEmpty(0)
+                .Max();
+            return $"{prefix}{(maxSuffix + 1):D4}";
+        }
+
+        private static bool EstConflitNumeroCommande(DbUpdateException ex)
+        {
+            return ex.InnerException is PostgresException pg
+                && pg.SqlState == "23505"
+                && string.Equals(pg.ConstraintName, "IX_CommandesClients_NumeroCommande", StringComparison.Ordinal);
         }
     }
 
