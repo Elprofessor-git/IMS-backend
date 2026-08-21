@@ -198,6 +198,106 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return CreatedAtAction("GetImportation", new { id = importation.Id }, ligneImportation);
         }
 
+        [HttpPut("{id}/LignesImportation/{ligneId}")]
+        [RequireModulePermission("importations", requireWrite: true)]
+        public async Task<IActionResult> ModifierLigneImportation(int id, int ligneId, CreateLigneImportationDto dto)
+        {
+            var importation = await _context.Importations.FindAsync(id);
+            if (importation == null)
+            {
+                return NotFound();
+            }
+
+            if (importation.Statut != StatutImportation.Brouillon)
+            {
+                return BadRequest("Seules les importations en Brouillon peuvent être modifiées");
+            }
+
+            var ligneImportation = await _context.LignesImportation
+                .FirstOrDefaultAsync(l => l.Id == ligneId && l.ImportationId == id);
+            if (ligneImportation == null)
+            {
+                return NotFound();
+            }
+
+            var commandeClientId = dto.CommandeClientId;
+            var clientId = dto.ClientId;
+            var plateformeId = dto.PlateformeId;
+
+            switch (dto.TypeDestination)
+            {
+                case TypeDestinationImportation.Commande when !commandeClientId.HasValue:
+                    return BadRequest("TypeDestination=Commande requiert un CommandeClientId.");
+                case TypeDestinationImportation.Marque when !clientId.HasValue:
+                    return BadRequest("TypeDestination=Marque requiert un ClientId.");
+                case TypeDestinationImportation.Plateforme when !plateformeId.HasValue:
+                    return BadRequest("TypeDestination=Plateforme requiert un PlateformeId.");
+                case TypeDestinationImportation.StockLibre:
+                    commandeClientId = null;
+                    clientId = null;
+                    plateformeId = null;
+                    break;
+            }
+
+            ligneImportation.ArticleId = dto.ArticleId;
+            ligneImportation.TypeDestination = dto.TypeDestination;
+            ligneImportation.CommandeClientId = commandeClientId;
+            ligneImportation.ClientId = clientId;
+            ligneImportation.PlateformeId = plateformeId;
+            ligneImportation.Designation = dto.Designation;
+            ligneImportation.Couleur = dto.Couleur;
+            ligneImportation.CodeCouleur = dto.CodeCouleur;
+            ligneImportation.Dimension = dto.Dimension;
+            ligneImportation.Nature = dto.Nature;
+            ligneImportation.Quantite = dto.Quantite;
+            ligneImportation.PrixUnitaire = dto.PrixUnitaire;
+            ligneImportation.MontantLigne = dto.Quantite * dto.PrixUnitaire;
+            ligneImportation.Devise = dto.Devise;
+            ligneImportation.Notes = dto.Notes;
+
+            await RecalculerMontantImportation(id);
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        [HttpDelete("{id}/LignesImportation/{ligneId}")]
+        [RequireModulePermission("importations", requireWrite: true)]
+        public async Task<IActionResult> SupprimerLigneImportation(int id, int ligneId)
+        {
+            var importation = await _context.Importations.FindAsync(id);
+            if (importation == null)
+            {
+                return NotFound();
+            }
+
+            if (importation.Statut != StatutImportation.Brouillon)
+            {
+                return BadRequest("Seules les lignes d'importations en Brouillon peuvent être supprimées");
+            }
+
+            var ligneImportation = await _context.LignesImportation
+                .FirstOrDefaultAsync(l => l.Id == ligneId && l.ImportationId == id);
+            if (ligneImportation == null)
+            {
+                return NotFound();
+            }
+
+            if (ligneImportation.EstAffecteStock)
+            {
+                return BadRequest("Impossible de supprimer une ligne déjà affectée au stock");
+            }
+
+            _context.LignesImportation.Remove(ligneImportation);
+
+            await RecalculerMontantImportation(id);
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
         [HttpPost("{id}/Soumettre")]
         [RequireModulePermission("importations", requireWrite: true)]
         public async Task<ActionResult> SoumettreImportation(int id)
