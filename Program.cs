@@ -8,6 +8,12 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
+// Fix Render (Bug 13) : désactiver le rechargement à chaud AVANT CreateBuilder.
+// C'est CreateBuilder qui charge appsettings.json en interne et crée le FileSystemWatcher
+// (crash « inotify instances limit (128) reached » sur Render) — le Sources.Clear() seul,
+// exécuté après, agissait trop tard : le watcher était déjà créé.
+Environment.SetEnvironmentVariable("DOTNET_hostBuilder:reloadConfigOnChange", "false");
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
