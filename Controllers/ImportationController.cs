@@ -73,6 +73,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             [FromQuery] DateTime? dateFin,
             [FromQuery] int? fournisseurId,
             [FromQuery] int? plateformeId,
+            [FromQuery] int? commandeClientId,
             [FromQuery] StatutImportation? statut)
         {
             var query = _context.Importations
@@ -91,6 +92,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             if (plateformeId.HasValue)
                 query = query.Where(i => i.PlateformeId == plateformeId.Value);
+
+            if (commandeClientId.HasValue)
+                query = query.Where(i => i.LignesImportation.Any(l => l.CommandeClientId == commandeClientId.Value));
 
             if (statut.HasValue)
                 query = query.Where(i => i.Statut == statut.Value);

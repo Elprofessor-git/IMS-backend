@@ -23,15 +23,19 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpGet]
         [RequireModulePermission("commandes", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<CommandeClient>>> GetCommandes()
+        public async Task<ActionResult<IEnumerable<CommandeClient>>> GetCommandes([FromQuery] string? recherche)
         {
-            return await _context.CommandesClients
+            var query = _context.CommandesClients
                 .Include(c => c.Client)
                 .ThenInclude(cl => cl.Plateforme)
                 .Include(c => c.Marque)
                 .Include(c => c.Besoins)
                 .ThenInclude(b => b.Article)
-                .ToListAsync();
+                .AsQueryable();
+
+            query = AppliquerRecherche(query, recherche);
+
+            return await query.ToListAsync();
         }
 
         [HttpGet("{id}")]
@@ -61,13 +65,30 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpGet("Statut/{statut}")]
         [RequireModulePermission("commandes", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<CommandeClient>>> GetCommandesByStatut(StatutCommande statut)
+        public async Task<ActionResult<IEnumerable<CommandeClient>>> GetCommandesByStatut(StatutCommande statut, [FromQuery] string? recherche)
         {
-            return await _context.CommandesClients
+            var query = _context.CommandesClients
                 .Include(c => c.Client)
                 .ThenInclude(cl => cl.Plateforme)
-                .Where(c => c.Statut == statut)
-                .ToListAsync();
+                .Where(c => c.Statut == statut);
+
+            query = AppliquerRecherche(query, recherche);
+
+            return await query.ToListAsync();
+        }
+
+        // Recherche texte combinable (façon Excel) : numéro, titre, client ou marque.
+        private static IQueryable<CommandeClient> AppliquerRecherche(IQueryable<CommandeClient> query, string? recherche)
+        {
+            if (string.IsNullOrWhiteSpace(recherche))
+                return query;
+
+            var terme = recherche.Trim().ToLower();
+            return query.Where(c =>
+                c.NumeroCommande.ToLower().Contains(terme) ||
+                (c.TitreCommande != null && c.TitreCommande.ToLower().Contains(terme)) ||
+                c.Client.Nom.ToLower().Contains(terme) ||
+                (c.Marque != null && c.Marque.Nom.ToLower().Contains(terme)));
         }
 
         [HttpGet("{id}/Tailles")]
