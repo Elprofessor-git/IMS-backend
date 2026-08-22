@@ -1014,6 +1014,14 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
 
+                    b.Property<decimal>("QuantiteRecue")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("StatutLigne")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Taille")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -1109,6 +1117,14 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Property<decimal>("Quantite")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("QuantiteRecue")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("StatutLigne")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

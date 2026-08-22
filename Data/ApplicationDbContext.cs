@@ -510,14 +510,22 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<HistoriquePrixArticle>()
                 .HasIndex(h => h.LigneImportationId);
 
-            // LigneImportation — TypeDestination stocké en string
+            // LigneImportation — TypeDestination et StatutLigne stockés en string
             modelBuilder.Entity<LigneImportation>()
                 .Property(li => li.TypeDestination)
                 .HasConversion<string>();
 
-            // LigneAchat — TypeDestination stocké en string
+            modelBuilder.Entity<LigneImportation>()
+                .Property(li => li.StatutLigne)
+                .HasConversion<string>();
+
+            // LigneAchat — TypeDestination et StatutLigne stockés en string
             modelBuilder.Entity<LigneAchat>()
                 .Property(la => la.TypeDestination)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<LigneAchat>()
+                .Property(la => la.StatutLigne)
                 .HasConversion<string>();
 
             // DocumentJoint — enum stocké en string
