@@ -150,6 +150,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Taille = dto.Taille,
                 Dimension = dto.Dimension,
                 Devise = dto.Devise,
+                Unite = dto.Unite,
                 DescriptionSpecifique = dto.DescriptionSpecifique,
                 Notes = dto.Notes,
                 DateCreation = DateTime.Now
@@ -368,6 +369,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneAchat.PrixUnitaire = dto.PrixUnitaire;
             ligneAchat.MontantLigne = dto.Quantite * dto.PrixUnitaire;
             ligneAchat.Devise = dto.Devise;
+            ligneAchat.Unite = dto.Unite;
             ligneAchat.DescriptionSpecifique = dto.DescriptionSpecifique;
             ligneAchat.Notes = dto.Notes;
 

@@ -640,15 +640,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPut("{id}")]
         [RequireModulePermission("commandes", requireWrite: true)]
-        public async Task<IActionResult> PutCommandeClient(int id, CommandeClient commande)
+        public async Task<IActionResult> PutCommandeClient(int id, UpdateCommandeClientDto dto)
         {
-            if (id != commande.Id)
+            var commande = await _context.CommandesClients.FindAsync(id);
+            if (commande == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
+            if (commande.Statut > StatutCommande.Prete)
+            {
+                return BadRequest(new { message = "La commande ne peut plus être modifiée après le statut Prête." });
+            }
+
+            commande.TitreCommande = dto.TitreCommande;
+            commande.DateLivraisonSouhaitee = dto.DateLivraisonSouhaitee;
+            commande.NotesSpeciales = dto.NotesSpeciales;
             commande.DateMiseAJour = DateTime.Now;
-            _context.Entry(commande).State = EntityState.Modified;
 
             try
             {

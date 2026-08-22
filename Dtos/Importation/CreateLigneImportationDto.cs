@@ -40,6 +40,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Importation
         [StringLength(10)]
         public string? Devise { get; set; }
 
+        [StringLength(50)]
+        public string? Unite { get; set; }
+
         [StringLength(1000)]
         public string? Notes { get; set; }
     }

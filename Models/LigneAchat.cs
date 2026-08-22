@@ -58,6 +58,9 @@ namespace Backend_Gestion_Magasin_API.Models
         [StringLength(500)]
         public string? DescriptionSpecifique { get; set; }
         
+        [StringLength(50)]
+        public string? Unite { get; set; }
+        
         [StringLength(1000)]
         public string? Notes { get; set; }
 

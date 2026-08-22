@@ -173,6 +173,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PrixUnitaire = dto.PrixUnitaire,
                 MontantLigne = dto.Quantite * dto.PrixUnitaire,
                 Devise = dto.Devise,
+                Unite = dto.Unite,
                 Notes = dto.Notes,
                 DateCreation = DateTime.Now
             };
@@ -268,6 +269,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneImportation.PrixUnitaire = dto.PrixUnitaire;
             ligneImportation.MontantLigne = dto.Quantite * dto.PrixUnitaire;
             ligneImportation.Devise = dto.Devise;
+            ligneImportation.Unite = dto.Unite;
             ligneImportation.Notes = dto.Notes;
 
             await RecalculerMontantImportation(id);

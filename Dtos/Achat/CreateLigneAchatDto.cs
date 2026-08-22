@@ -37,6 +37,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
         [StringLength(10)]
         public string? Devise { get; set; }
 
+        [StringLength(50)]
+        public string? Unite { get; set; }
+
         [StringLength(500)]
         public string? DescriptionSpecifique { get; set; }
 
