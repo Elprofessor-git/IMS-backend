@@ -393,6 +393,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             foreach (var ligne in importation.LignesImportation)
             {
+                var quantiteRestante = ligne.Quantite - ligne.QuantiteRecue;
+                if (quantiteRestante <= 0)
+                {
+                    continue; // Déjà entièrement reçue via réceptions partielles
+                }
+
                 var stock = new Stock
                 {
                     ArticleId = ligne.ArticleId,
@@ -400,7 +406,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     CodeCouleur = ligne.CodeCouleur,
                     Dimension = ligne.Dimension,
                     Notes = ligne.Designation ?? ligne.Nature ?? ligne.Notes,
-                    Quantite = ligne.Quantite,
+                    Quantite = quantiteRestante,
                     TypeStock = TypeStock.Importe,
                     CommandeClientId = ligne.TypeDestination == TypeDestinationImportation.Commande ? ligne.CommandeClientId : null,
                     ClientId = ligne.TypeDestination == TypeDestinationImportation.Marque ? ligne.ClientId : null,
@@ -419,9 +425,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Stock = stock,
                     TypeMouvement = TypeMouvement.Entree,
                     OrigineMouvement = OrigineMouvement.Importation,
-                    Quantite = ligne.Quantite,
+                    Quantite = quantiteRestante,
                     QuantiteAvant = 0,
-                    QuantiteApres = ligne.Quantite,
+                    QuantiteApres = quantiteRestante,
                     Motif = $"Réception importation {importation.ReferenceImportation}",
                     DocumentReference = importation.ReferenceImportation,
                     DateMouvement = DateTime.Now,
@@ -430,12 +436,142 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 _context.MouvementsStock.Add(mouvement);
 
+                ligne.QuantiteRecue = ligne.Quantite;
+                ligne.StatutLigne = StatutLigneImportation.Complete;
                 ligne.EstAffecteStock = true;
             }
 
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Importation reçue et stock mis à jour avec succès" });
+        }
+
+        [HttpPost("{id}/LignesImportation/{ligneId}/RecevoirPartiel")]
+        [RequireModulePermission("importations", requireWrite: true)]
+        public async Task<IActionResult> RecevoirPartiel(int id, int ligneId, RecevoirPartielDto dto)
+        {
+            var importation = await _context.Importations
+                .Include(i => i.LignesImportation)
+                .ThenInclude(li => li.Article)
+                .FirstOrDefaultAsync(i => i.Id == id);
+
+            if (importation == null)
+            {
+                return NotFound();
+            }
+
+            if (importation.Statut != StatutImportation.Validee)
+            {
+                return BadRequest("Seules les importations validées peuvent enregistrer une réception partielle");
+            }
+
+            var ligne = importation.LignesImportation.FirstOrDefault(l => l.Id == ligneId);
+            if (ligne == null)
+            {
+                return NotFound();
+            }
+
+            if (ligne.StatutLigne != StatutLigneImportation.EnAttente && ligne.StatutLigne != StatutLigneImportation.PartielleEnCours)
+            {
+                return BadRequest("Seules les lignes en attente ou partiellement reçues peuvent être reçues partiellement");
+            }
+
+            var quantiteRestante = ligne.Quantite - ligne.QuantiteRecue;
+            if (dto.Quantite <= 0 || dto.Quantite > quantiteRestante)
+            {
+                return BadRequest($"La quantité doit être comprise entre 0.01 et le reliquat restant ({quantiteRestante})");
+            }
+
+            var stock = new Stock
+            {
+                ArticleId = ligne.ArticleId,
+                Couleur = ligne.Couleur,
+                CodeCouleur = ligne.CodeCouleur,
+                Dimension = ligne.Dimension,
+                Notes = ligne.Designation ?? ligne.Nature ?? ligne.Notes,
+                Quantite = dto.Quantite,
+                TypeStock = TypeStock.Importe,
+                CommandeClientId = ligne.TypeDestination == TypeDestinationImportation.Commande ? ligne.CommandeClientId : null,
+                ClientId = ligne.TypeDestination == TypeDestinationImportation.Marque ? ligne.ClientId : null,
+                PlateformeId = ligne.TypeDestination == TypeDestinationImportation.Plateforme ? ligne.PlateformeId : null,
+                PrixUnitaire = ligne.PrixUnitaire,
+                Devise = ligne.Devise,
+                DateEntree = DateTime.Now,
+                EstValide = true,
+                ValidePar = "Système - Réception Partielle Importation"
+            };
+
+            _context.Stocks.Add(stock);
+
+            var mouvement = new MouvementStock
+            {
+                Stock = stock,
+                TypeMouvement = TypeMouvement.Entree,
+                OrigineMouvement = OrigineMouvement.Importation,
+                Quantite = dto.Quantite,
+                QuantiteAvant = 0,
+                QuantiteApres = dto.Quantite,
+                Motif = $"Réception partielle importation {importation.ReferenceImportation} - ligne {ligne.Id}",
+                DocumentReference = importation.ReferenceImportation,
+                DateMouvement = DateTime.Now,
+                EffectuePar = "Système"
+            };
+
+            _context.MouvementsStock.Add(mouvement);
+
+            ligne.QuantiteRecue += dto.Quantite;
+            if (ligne.QuantiteRecue >= ligne.Quantite)
+            {
+                ligne.StatutLigne = StatutLigneImportation.Complete;
+                ligne.EstAffecteStock = true;
+            }
+            else
+            {
+                ligne.StatutLigne = StatutLigneImportation.PartielleEnCours;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Réception partielle enregistrée avec succès", ligneId = ligne.Id });
+        }
+
+        [HttpPost("{id}/ClotureForcee")]
+        [RequireModulePermission("importations", requireWrite: true)]
+        public async Task<IActionResult> ClotureForcee(int id, ClotureForceeDto dto)
+        {
+            var importation = await _context.Importations
+                .Include(i => i.LignesImportation)
+                .FirstOrDefaultAsync(i => i.Id == id);
+
+            if (importation == null)
+            {
+                return NotFound();
+            }
+
+            if (importation.Statut != StatutImportation.Validee)
+            {
+                return BadRequest("Seules les importations validées peuvent être clôturées");
+            }
+
+            foreach (var ligne in importation.LignesImportation)
+            {
+                if (ligne.StatutLigne != StatutLigneImportation.Complete)
+                {
+                    ligne.StatutLigne = StatutLigneImportation.ClotureeForcee;
+                    if (!ligne.EstAffecteStock && ligne.QuantiteRecue > 0)
+                    {
+                        ligne.EstAffecteStock = true;
+                    }
+                }
+            }
+
+            importation.Statut = StatutImportation.Recue;
+            importation.DateReceptionReelle = DateTime.Now;
+            importation.DateMiseAJour = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Importation clôturée avec succès" });
         }
 
         [HttpPost("{id}/AffecterCommandes")]

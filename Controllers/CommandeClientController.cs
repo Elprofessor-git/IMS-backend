@@ -265,7 +265,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                                 la.TypeDestination == TypeDestinationAchat.Commande &&
                                 la.CommandeClientId == commande.Id &&
                                 la.Achat.Statut == StatutAchat.Confirme)
-                    .SumAsync(la => la.Quantite);
+                    .SumAsync(la => la.Quantite - la.QuantiteRecue);
 
                 var a2 = await _context.LignesAchat
                     .Include(la => la.Achat)
@@ -273,7 +273,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                                 la.TypeDestination == TypeDestinationAchat.Marque &&
                                 la.ClientId == commande.ClientId &&
                                 la.Achat.Statut == StatutAchat.Confirme)
-                    .SumAsync(la => la.Quantite);
+                    .SumAsync(la => la.Quantite - la.QuantiteRecue);
 
                 var a3 = plateformeId.HasValue
                     ? await _context.LignesAchat
@@ -282,7 +282,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                                     la.TypeDestination == TypeDestinationAchat.Plateforme &&
                                     la.PlateformeId == plateformeId &&
                                     la.Achat.Statut == StatutAchat.Confirme)
-                        .SumAsync(la => la.Quantite)
+                        .SumAsync(la => la.Quantite - la.QuantiteRecue)
                     : 0;
 
                 var achatsEnCours = a1 + a2 + a3;
@@ -474,7 +474,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                                 la.TypeDestination == TypeDestinationAchat.Commande &&
                                 la.CommandeClientId == id &&
                                 la.Achat.Statut == StatutAchat.Confirme)
-                    .SumAsync(la => la.Quantite);
+                    .SumAsync(la => la.Quantite - la.QuantiteRecue);
 
                 var b2 = await _context.LignesAchat
                     .Include(la => la.Achat)
@@ -482,7 +482,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                                 la.TypeDestination == TypeDestinationAchat.Marque &&
                                 la.ClientId == commande.ClientId &&
                                 la.Achat.Statut == StatutAchat.Confirme)
-                    .SumAsync(la => la.Quantite);
+                    .SumAsync(la => la.Quantite - la.QuantiteRecue);
 
                 var b3 = bomPlateformeId.HasValue
                     ? await _context.LignesAchat
@@ -491,7 +491,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                                     la.TypeDestination == TypeDestinationAchat.Plateforme &&
                                     la.PlateformeId == bomPlateformeId &&
                                     la.Achat.Statut == StatutAchat.Confirme)
-                        .SumAsync(la => la.Quantite)
+                        .SumAsync(la => la.Quantite - la.QuantiteRecue)
                     : 0;
 
                 var qteAchat = b1 + b2 + b3;

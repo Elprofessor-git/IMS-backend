@@ -11,6 +11,14 @@ namespace Backend_Gestion_Magasin_API.Models
         StockLibre,
     }
 
+    public enum StatutLigneImportation
+    {
+        EnAttente,
+        PartielleEnCours,
+        Complete,
+        ClotureeForcee
+    }
+
     public class LigneImportation
     {
         [Key]
@@ -41,6 +49,10 @@ namespace Backend_Gestion_Magasin_API.Models
         public string? Nature { get; set; }
         
         public decimal Quantite { get; set; } = 0;
+        
+        public decimal QuantiteRecue { get; set; } = 0; // quantité déjà reçue (cumulée)
+        
+        public StatutLigneImportation StatutLigne { get; set; } = StatutLigneImportation.EnAttente;
         
         public decimal PrixUnitaire { get; set; } = 0;
         

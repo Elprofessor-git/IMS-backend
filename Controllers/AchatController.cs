@@ -190,6 +190,130 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return CreatedAtAction("GetAchat", new { id = achat.Id }, ligneAchat);
         }
 
+        [HttpPost("{id}/LignesAchat/{ligneId}/RecevoirPartiel")]
+        [RequireModulePermission("achats", requireWrite: true)]
+        public async Task<IActionResult> RecevoirPartiel(int id, int ligneId, RecevoirPartielDto dto)
+        {
+            var achat = await _context.Achats
+                .Include(a => a.LignesAchat)
+                .ThenInclude(la => la.Article)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (achat == null)
+            {
+                return NotFound();
+            }
+
+            if (achat.Statut != StatutAchat.Confirme)
+            {
+                return BadRequest("Seuls les achats confirmés peuvent enregistrer une réception partielle");
+            }
+
+            var ligne = achat.LignesAchat.FirstOrDefault(l => l.Id == ligneId);
+            if (ligne == null)
+            {
+                return NotFound();
+            }
+
+            if (ligne.StatutLigne != StatutLigneAchat.EnAttente && ligne.StatutLigne != StatutLigneAchat.PartielleEnCours)
+            {
+                return BadRequest("Seules les lignes en attente ou partiellement reçues peuvent être reçues partiellement");
+            }
+
+            var quantiteRestante = ligne.Quantite - ligne.QuantiteRecue;
+            if (dto.Quantite <= 0 || dto.Quantite > quantiteRestante)
+            {
+                return BadRequest($"La quantité doit être comprise entre 0.01 et le reliquat restant ({quantiteRestante})");
+            }
+
+            // Créer le stock pour cette réception partielle
+            var stock = new Stock
+            {
+                ArticleId = ligne.ArticleId,
+                Couleur = ligne.Couleur,
+                CodeCouleur = ligne.CodeCouleur,
+                Taille = ligne.Taille,
+                Dimension = ligne.Dimension,
+                Quantite = dto.Quantite,
+                TypeStock = TypeStock.Reserve,
+                CommandeClientId = ligne.TypeDestination == TypeDestinationAchat.Commande ? ligne.CommandeClientId : null,
+                ClientId = ligne.TypeDestination == TypeDestinationAchat.Marque ? ligne.ClientId : null,
+                PlateformeId = ligne.TypeDestination == TypeDestinationAchat.Plateforme ? ligne.PlateformeId : null,
+                PrixUnitaire = ligne.PrixUnitaire,
+                Devise = ligne.Devise,
+                DateEntree = DateTime.Now,
+                EstValide = true,
+                ValidePar = "Système - Réception Partielle Achat"
+            };
+
+            _context.Stocks.Add(stock);
+
+            var mouvement = new MouvementStock
+            {
+                Stock = stock,
+                TypeMouvement = TypeMouvement.Entree,
+                OrigineMouvement = OrigineMouvement.Achat,
+                Quantite = dto.Quantite,
+                QuantiteAvant = 0,
+                QuantiteApres = dto.Quantite,
+                Motif = $"Réception partielle achat {achat.NumeroAchat} - ligne {ligne.Id}",
+                DocumentReference = achat.NumeroAchat,
+                DateMouvement = DateTime.Now,
+                EffectuePar = "Système"
+            };
+
+            _context.MouvementsStock.Add(mouvement);
+
+            // Mettre à jour la ligne
+            ligne.QuantiteRecue += dto.Quantite;
+            if (ligne.QuantiteRecue >= ligne.Quantite)
+            {
+                ligne.StatutLigne = StatutLigneAchat.Complete;
+            }
+            else
+            {
+                ligne.StatutLigne = StatutLigneAchat.PartielleEnCours;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Réception partielle enregistrée avec succès", ligneId = ligne.Id });
+        }
+
+        [HttpPost("{id}/ClotureForcee")]
+        [RequireModulePermission("achats", requireWrite: true)]
+        public async Task<IActionResult> ClotureForcee(int id, ClotureForceeDto dto)
+        {
+            var achat = await _context.Achats
+                .Include(a => a.LignesAchat)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (achat == null)
+            {
+                return NotFound();
+            }
+
+            if (achat.Statut != StatutAchat.Confirme)
+            {
+                return BadRequest("Seuls les achats confirmés peuvent être clôturés");
+            }
+
+            foreach (var ligne in achat.LignesAchat)
+            {
+                if (ligne.StatutLigne != StatutLigneAchat.Complete)
+                {
+                    ligne.StatutLigne = StatutLigneAchat.ClotureeForcee;
+                }
+            }
+
+            achat.Statut = StatutAchat.Livre;
+            achat.DateMiseAJour = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Achat clôturé avec succès" });
+        }
+
         [HttpPut("{id}/LignesAchat/{ligneId}")]
         [RequireModulePermission("achats", requireWrite: true)]
         public async Task<IActionResult> ModifierLigneAchat(int id, int ligneId, CreateLigneAchatDto dto)
@@ -406,6 +530,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             foreach (var ligne in achat.LignesAchat)
             {
+                var quantiteRestante = ligne.Quantite - ligne.QuantiteRecue;
+                if (quantiteRestante <= 0)
+                {
+                    continue; // Déjà entièrement reçue, pas besoin de créer de stock
+                }
+
                 var stock = new Stock
                 {
                     ArticleId = ligne.ArticleId,
@@ -413,7 +543,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     CodeCouleur = ligne.CodeCouleur,
                     Taille = ligne.Taille,
                     Dimension = ligne.Dimension,
-                    Quantite = ligne.Quantite,
+                    Quantite = quantiteRestante,
                     TypeStock = TypeStock.Reserve,
                     CommandeClientId = ligne.TypeDestination == TypeDestinationAchat.Commande ? ligne.CommandeClientId : null,
                     ClientId = ligne.TypeDestination == TypeDestinationAchat.Marque ? ligne.ClientId : null,
@@ -432,9 +562,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Stock = stock,
                     TypeMouvement = TypeMouvement.Entree,
                     OrigineMouvement = OrigineMouvement.Achat,
-                    Quantite = ligne.Quantite,
+                    Quantite = quantiteRestante,
                     QuantiteAvant = 0,
-                    QuantiteApres = ligne.Quantite,
+                    QuantiteApres = quantiteRestante,
                     Motif = $"Réception achat {achat.NumeroAchat}",
                     DocumentReference = achat.NumeroAchat,
                     DateMouvement = DateTime.Now,
@@ -442,6 +572,17 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 };
 
                 _context.MouvementsStock.Add(mouvement);
+
+                // Mettre à jour la ligne
+                ligne.QuantiteRecue = ligne.Quantite;
+                if (ligne.QuantiteRecue >= ligne.Quantite)
+                {
+                    ligne.StatutLigne = StatutLigneAchat.Complete;
+                }
+                else
+                {
+                    ligne.StatutLigne = StatutLigneAchat.PartielleEnCours;
+                }
             }
 
             await _context.SaveChangesAsync();
