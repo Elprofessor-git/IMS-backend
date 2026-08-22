@@ -411,8 +411,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpPost("{id}/Soumettre")]
         [RequireModulePermission("achats", requireWrite: true)]
-        public async Task<ActionResult> SoumettreAchat(int id)
+        public async Task<ActionResult> SoumettreAchat(int id, [FromBody] Dtos.Achat.SoumettreAchatDto? dto = null)
         {
+            var forcerDepassement = dto?.ForcerDepassement == true;
+
             var achat = await _context.Achats
                 .Include(a => a.LignesAchat)
                 .ThenInclude(la => la.Article)
@@ -429,6 +431,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
 
             var erreurs = new List<string>();
+            var depassements = new List<object>();
 
             var lignesParCommande = achat.LignesAchat
                 .Where(l => l.TypeDestination == TypeDestinationAchat.Commande && l.CommandeClientId.HasValue)
@@ -451,7 +454,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     }
                     else if (ligne.Quantite > besoin.QuantiteTotale)
                     {
-                        erreurs.Add($"Quantité excessive pour {ligne.Article?.Designation}: {ligne.Quantite} > {besoin.QuantiteTotale} requis (commande #{groupe.Key})");
+                        depassements.Add(new
+                        {
+                            ligneId = ligne.Id,
+                            articleDesignation = ligne.Article?.Designation ?? "N/A",
+                            quantiteCommandee = ligne.Quantite,
+                            besoinTotal = besoin.QuantiteTotale,
+                            exces = ligne.Quantite - besoin.QuantiteTotale
+                        });
                     }
                 }
             }
@@ -459,6 +469,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (erreurs.Any())
             {
                 return BadRequest(new { message = "Erreurs de cohérence détectées", erreurs });
+            }
+
+            if (depassements.Any() && !forcerDepassement)
+            {
+                return StatusCode(409, new
+                {
+                    avertissement = true,
+                    message = " certaines lignes dépassent le besoin de la commande",
+                    depassements
+                });
             }
 
             achat.Statut = StatutAchat.Soumis;
