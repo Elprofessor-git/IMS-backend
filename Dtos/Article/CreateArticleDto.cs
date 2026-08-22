@@ -32,5 +32,16 @@ namespace Backend_Gestion_Magasin_API.Dtos.Article
         public int SeuilAlerte { get; set; } = 0;
 
         public int SeuilCritique { get; set; } = 0;
+
+        /// <summary>
+        /// Prix de référence initial (« dernier prix connu », voir Article.PrixUnitaireMoyen).
+        /// Si > 0, une première entrée HistoriquePrixArticle (Source=Manuel) est créée.
+        /// </summary>
+        [Range(0, double.MaxValue)]
+        public decimal PrixUnitaireMoyen { get; set; } = 0;
+
+        /// <summary>Devise associée au prix initial (optionnel).</summary>
+        [StringLength(10)]
+        public string? Devise { get; set; }
     }
 }

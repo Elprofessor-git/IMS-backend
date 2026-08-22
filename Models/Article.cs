@@ -32,6 +32,15 @@ namespace Backend_Gestion_Magasin_API.Models
         [StringLength(1000)]
         public string? Caracteristiques { get; set; }
         
+        /// <summary>
+        /// DERNIER prix unitaire connu de l'article (prix de référence).
+        /// ATTENTION : le nom « Moyen » est historique — ce champ n'a jamais réellement
+        /// stocké une moyenne calculée ; il contient le dernier prix saisi (création,
+        /// ligne d'achat, ligne d'importation ou mise à jour manuelle via l'endpoint dédié).
+        /// La colonne DB garde son nom d'origine (pas de migration destructive) ;
+        /// chaque changement est tracé dans HistoriquePrixArticle.
+        /// Ce prix n'intervient PAS dans le calcul de couverture BOM ni dans aucun workflow.
+        /// </summary>
         public decimal PrixUnitaireMoyen { get; set; } = 0;
         
         public int SeuilAlerte { get; set; } = 0;

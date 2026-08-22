@@ -70,6 +70,40 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(stockInfo);
         }
 
+        [HttpGet("{id}/HistoriquePrix")]
+        [RequireModulePermission("articles", requireWrite: false)]
+        public async Task<IActionResult> GetHistoriquePrix(int id)
+        {
+            var article = await _articleService.GetArticleByIdAsync(id);
+            if (article == null)
+            {
+                return NotFound();
+            }
+            var historique = await _articleService.GetHistoriquePrixAsync(id);
+            return Ok(historique);
+        }
+
+        [HttpPut("{id}/PrixUnitaire")]
+        [RequireModulePermission("articles", requireWrite: true)]
+        public async Task<IActionResult> PutPrixUnitaire(int id, UpdatePrixArticleDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+            try
+            {
+                var changed = await _articleService.UpdatePrixArticleAsync(id, dto);
+                return changed
+                    ? Ok(new { message = "Prix de référence mis à jour" })
+                    : Ok(new { message = "Prix inchangé — aucune entrée d'historique créée" });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
         [HttpPost]
         [RequireModulePermission("articles", requireWrite: true)]
         public async Task<IActionResult> PostArticle(CreateArticleDto articleDto)

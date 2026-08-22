@@ -18,5 +18,17 @@ namespace Backend_Gestion_Magasin_API.Services
         Task<bool> ActivateArticleAsync(int id);
         Task DeleteArticleAsync(int id);
         Task<string> UploadImageAsync(int id, IFormFile file);
+
+        /// <summary>
+        /// Historique des prix de l'article trié par DateEffective décroissante.
+        /// </summary>
+        Task<IEnumerable<ReadHistoriquePrixDto>> GetHistoriquePrixAsync(int articleId);
+
+        /// <summary>
+        /// Mise à jour manuelle du prix de référence (dernier prix connu) : modifie
+        /// Article.PrixUnitaireMoyen et crée une entrée HistoriquePrixArticle (Source=Manuel).
+        /// Ne fait rien si le prix est identique.
+        /// </summary>
+        Task<bool> UpdatePrixArticleAsync(int id, UpdatePrixArticleDto dto);
     }
 }

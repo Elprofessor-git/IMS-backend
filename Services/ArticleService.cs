@@ -6,9 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
-
-namespace Backend_Gestion_Magasin_API.Services
+using System.Threading.Tasks;namespace Backend_Gestion_Magasin_API.Services
 {
     public class ArticleService : IArticleService
     {
@@ -35,11 +33,27 @@ namespace Backend_Gestion_Magasin_API.Services
                 Caracteristiques = articleDto.Caracteristiques,
                 SeuilAlerte = articleDto.SeuilAlerte,
                 SeuilCritique = articleDto.SeuilCritique,
+                PrixUnitaireMoyen = articleDto.PrixUnitaireMoyen,
                 DateCreation = System.DateTime.UtcNow,
                 EstActif = true
             };
 
             _context.Articles.Add(article);
+
+            // Prix initial fourni → première entrée d'historique (Source=Manuel).
+            // Insérée dans la même transaction que l'article : EF résout ArticleId via la navigation.
+            if (articleDto.PrixUnitaireMoyen > 0)
+            {
+                _context.HistoriquesPrixArticles.Add(new HistoriquePrixArticle
+                {
+                    Article = article,
+                    PrixUnitaire = articleDto.PrixUnitaireMoyen,
+                    Devise = articleDto.Devise,
+                    DateEffective = DateTime.UtcNow,
+                    Source = SourcePrix.Manuel
+                });
+            }
+
             await _context.SaveChangesAsync();
             return article;
         }
@@ -215,6 +229,60 @@ namespace Backend_Gestion_Magasin_API.Services
             await _context.SaveChangesAsync();
 
             return imageUrl;
+        }
+
+        public async Task<IEnumerable<ReadHistoriquePrixDto>> GetHistoriquePrixAsync(int articleId)
+        {
+            return await _context.HistoriquesPrixArticles
+                .AsNoTracking()
+                .Where(h => h.ArticleId == articleId)
+                .OrderByDescending(h => h.DateEffective)
+                .ThenByDescending(h => h.Id)
+                .Select(h => new ReadHistoriquePrixDto
+                {
+                    Id = h.Id,
+                    ArticleId = h.ArticleId,
+                    PrixUnitaire = h.PrixUnitaire,
+                    Devise = h.Devise,
+                    DateEffective = h.DateEffective,
+                    Source = h.Source.ToString(),
+                    LigneAchatId = h.LigneAchatId,
+                    LigneImportationId = h.LigneImportationId,
+                    NumeroAchat = h.LigneAchat != null ? h.LigneAchat.Achat.NumeroAchat : null,
+                    ReferenceImportation = h.LigneImportation != null
+                        ? h.LigneImportation.Importation.ReferenceImportation
+                        : null
+                })
+                .ToListAsync();
+        }
+
+        public async Task<bool> UpdatePrixArticleAsync(int id, UpdatePrixArticleDto dto)
+        {
+            var article = await _context.Articles.FindAsync(id);
+            if (article == null)
+            {
+                throw new KeyNotFoundException("Article not found.");
+            }
+
+            if (article.PrixUnitaireMoyen == dto.PrixUnitaire)
+            {
+                // Prix identique : rien à tracer
+                return false;
+            }
+
+            article.PrixUnitaireMoyen = dto.PrixUnitaire;
+
+            _context.HistoriquesPrixArticles.Add(new HistoriquePrixArticle
+            {
+                ArticleId = id,
+                PrixUnitaire = dto.PrixUnitaire,
+                Devise = dto.Devise,
+                DateEffective = DateTime.UtcNow,
+                Source = SourcePrix.Manuel
+            });
+
+            await _context.SaveChangesAsync();
+            return true;
         }
     }
 }

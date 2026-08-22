@@ -39,6 +39,7 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<ResultatCalcul> ResultatsCalcul { get; set; }
         public DbSet<ModeleBom> ModeleBoms { get; set; }
         public DbSet<FournitureBom> FournituresBom { get; set; }
+        public DbSet<HistoriquePrixArticle> HistoriquesPrixArticles { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -468,6 +469,46 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<FournitureBom>()
                 .Property(f => f.QteParPiece)
                 .HasPrecision(18, 4);
+
+            // HistoriquePrixArticle — prix de référence tracé par article
+            modelBuilder.Entity<HistoriquePrixArticle>()
+                .HasOne(h => h.Article)
+                .WithMany()
+                .HasForeignKey(h => h.ArticleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Lignes référencées : SetNull pour conserver l'entrée d'historique
+            // même si l'achat/l'importation d'origine est supprimé(e).
+            modelBuilder.Entity<HistoriquePrixArticle>()
+                .HasOne(h => h.LigneAchat)
+                .WithMany()
+                .HasForeignKey(h => h.LigneAchatId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<HistoriquePrixArticle>()
+                .HasOne(h => h.LigneImportation)
+                .WithMany()
+                .HasForeignKey(h => h.LigneImportationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<HistoriquePrixArticle>()
+                .Property(h => h.PrixUnitaire)
+                .HasPrecision(18, 4);
+
+            // Source (enum) stocké en string, comme les autres enums du projet
+            modelBuilder.Entity<HistoriquePrixArticle>()
+                .Property(h => h.Source)
+                .HasConversion<string>();
+
+            // Lecture triée par date décroissante pour un article donné
+            modelBuilder.Entity<HistoriquePrixArticle>()
+                .HasIndex(h => new { h.ArticleId, h.DateEffective });
+
+            modelBuilder.Entity<HistoriquePrixArticle>()
+                .HasIndex(h => h.LigneAchatId);
+
+            modelBuilder.Entity<HistoriquePrixArticle>()
+                .HasIndex(h => h.LigneImportationId);
 
             // LigneImportation — TypeDestination stocké en string
             modelBuilder.Entity<LigneImportation>()

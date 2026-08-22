@@ -4,6 +4,7 @@ using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Importation;
+using Backend_Gestion_Magasin_API.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -15,10 +16,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
     public class ImportationController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILogger<ImportationController> _logger;
 
-        public ImportationController(ApplicationDbContext context)
+        public ImportationController(ApplicationDbContext context, ILogger<ImportationController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -194,6 +197,18 @@ namespace Backend_Gestion_Magasin_API.Controllers
             await RecalculerMontantImportation(id);
 
             await _context.SaveChangesAsync();
+
+            // Prix de référence + historique (Fonctionnalité 12) : actif aussi pour les
+            // importations (le prix d'import devient le dernier prix connu). Best effort,
+            // ne doit JAMAIS faire échouer la création de la ligne — erreurs loguées et avalées.
+            await PrixHistoriqueService.EnregistrerPrixAsync(
+                _context,
+                ligneImportation.ArticleId,
+                ligneImportation.PrixUnitaire,
+                ligneImportation.Devise,
+                SourcePrix.LigneImportation,
+                ligneImportationId: ligneImportation.Id,
+                logger: _logger);
 
             return CreatedAtAction("GetImportation", new { id = importation.Id }, ligneImportation);
         }

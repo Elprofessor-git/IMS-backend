@@ -4,6 +4,7 @@ using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Achat;
+using Backend_Gestion_Magasin_API.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -15,10 +16,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
     public class AchatController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILogger<AchatController> _logger;
 
-        public AchatController(ApplicationDbContext context)
+        public AchatController(ApplicationDbContext context, ILogger<AchatController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -172,6 +175,17 @@ namespace Backend_Gestion_Magasin_API.Controllers
             await RecalculerMontantAchat(id);
 
             await _context.SaveChangesAsync();
+
+            // Prix de référence + historique (Fonctionnalité 12) : best effort, ne doit
+            // JAMAIS faire échouer la création de la ligne — erreurs loguées et avalées.
+            await PrixHistoriqueService.EnregistrerPrixAsync(
+                _context,
+                ligneAchat.ArticleId,
+                ligneAchat.PrixUnitaire,
+                ligneAchat.Devise,
+                SourcePrix.LigneAchat,
+                ligneAchatId: ligneAchat.Id,
+                logger: _logger);
 
             return CreatedAtAction("GetAchat", new { id = achat.Id }, ligneAchat);
         }
