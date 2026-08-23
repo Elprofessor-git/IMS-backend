@@ -41,6 +41,10 @@ namespace Backend_Gestion_Magasin_API.Models
         public bool PeutConfirmerAchats { get; set; } = false;
         public bool PeutValiderImportations { get; set; } = false;
         public bool EstAdministrateur { get; set; } = false;
+
+        // Dashboard & Rapports (lecture seule)
+        public bool PeutVoirDashboard { get; set; } = true;
+        public bool PeutVoirRapports { get; set; } = true;
         
         public DateTime DateCreation { get; set; } = DateTime.Now;
         

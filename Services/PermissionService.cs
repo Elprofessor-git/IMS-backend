@@ -63,8 +63,8 @@ namespace Backend_Gestion_Magasin_API.Services
                 "utilisateurs" => (role.PeutVoirUtilisateurs,   role.PeutGererUtilisateurs),
                 "roles"        => (role.PeutVoirRoles,          role.EstAdministrateur),
                 "chatbot"      => (true,                        false),
-                "dashboard"    => (true,                        false),
-                "rapports"     => (true,                        false),
+                "dashboard"    => (role.PeutVoirDashboard,      false),
+                "rapports"     => (role.PeutVoirRapports,       false),
                 _              => (false,                       false),
             };
 

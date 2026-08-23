@@ -29,6 +29,8 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutValiderStock { get; set; }
         public bool PeutConfirmerAchats { get; set; }
         public bool PeutValiderImportations { get; set; }
+        public bool PeutVoirDashboard { get; set; }
+        public bool PeutVoirRapports { get; set; }
         public bool EstActif { get; set; }
     }
 
@@ -63,6 +65,8 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutValiderStock { get; set; }
         public bool PeutConfirmerAchats { get; set; }
         public bool PeutValiderImportations { get; set; }
+        public bool PeutVoirDashboard { get; set; }
+        public bool PeutVoirRapports { get; set; }
     }
 
     public class UpdateStatutDto
