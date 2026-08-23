@@ -7,8 +7,6 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         [Required]
         public int ClientId { get; set; }
 
-        public int? MarqueId { get; set; }
-
         [StringLength(200)]
         public string? TitreCommande { get; set; }
 

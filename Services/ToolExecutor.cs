@@ -151,12 +151,10 @@ namespace Backend_Gestion_Magasin_API.Services
         private async Task<string> GetCommandes(JsonNode args)
         {
             var statutStr      = args["statut"]?.GetValue<string>();
-            var marqueNom      = args["marqueNom"]?.GetValue<string>();
             var clientNom      = args["clientNom"]?.GetValue<string>();
             var plateformeNom  = args["plateformeNom"]?.GetValue<string>();
             var dateDebutStr   = args["dateDebut"]?.GetValue<string>();
             var dateFinStr     = args["dateFin"]?.GetValue<string>();
-            var marqueId       = args["marqueId"]?.GetValue<int?>();
 
             var all = await _commandes.GetAllCommandesAsync();
             var filtered = all.AsEnumerable();
@@ -164,13 +162,6 @@ namespace Backend_Gestion_Magasin_API.Services
             if (!string.IsNullOrEmpty(statutStr) &&
                 Enum.TryParse<StatutCommande>(statutStr, ignoreCase: true, out var statut))
                 filtered = filtered.Where(c => c.Statut == statut);
-
-            if (marqueId.HasValue)
-                filtered = filtered.Where(c => c.MarqueId == marqueId.Value);
-
-            if (!string.IsNullOrWhiteSpace(marqueNom))
-                filtered = filtered.Where(c =>
-                    c.Marque != null && c.Marque.Nom.Contains(marqueNom, StringComparison.OrdinalIgnoreCase));
 
             if (!string.IsNullOrWhiteSpace(clientNom))
                 filtered = filtered.Where(c =>
@@ -181,10 +172,8 @@ namespace Backend_Gestion_Magasin_API.Services
 
             if (!string.IsNullOrWhiteSpace(plateformeNom))
                 filtered = filtered.Where(c =>
-                    (c.Client != null && c.Client.Plateforme != null &&
-                     c.Client.Plateforme.Nom.Contains(plateformeNom, StringComparison.OrdinalIgnoreCase)) ||
-                    (c.Marque != null && c.Marque.Plateforme != null &&
-                     c.Marque.Plateforme.Nom.Contains(plateformeNom, StringComparison.OrdinalIgnoreCase)));
+                    c.Client != null && c.Client.Plateforme != null &&
+                    c.Client.Plateforme.Nom.Contains(plateformeNom, StringComparison.OrdinalIgnoreCase));
 
             if (DateTimeOffset.TryParse(dateDebutStr, out var debut))
                 filtered = filtered.Where(c => c.DateCreation >= debut.UtcDateTime);
@@ -201,8 +190,7 @@ namespace Backend_Gestion_Magasin_API.Services
                     c.NumeroCommande,
                     c.TitreCommande,
                     Client   = c.Client?.Nom,
-                    Marque   = c.Marque?.Nom,
-                    Plateforme = c.Client?.Plateforme?.Nom ?? c.Marque?.Plateforme?.Nom,
+                    Plateforme = c.Client?.Plateforme?.Nom,
                     Statut   = c.Statut.ToString(),
                     c.DateCreation,
                     c.DateLivraisonSouhaitee,
@@ -226,7 +214,6 @@ namespace Backend_Gestion_Magasin_API.Services
             var query = _context.Achats
                 .Include(a => a.Fournisseur)
                 .Include(a => a.CommandeClient).ThenInclude(c => c.Client).ThenInclude(cl => cl.Plateforme)
-                .Include(a => a.CommandeClient).ThenInclude(c => c.Marque).ThenInclude(m => m.Plateforme)
                 .Include(a => a.LignesAchat).ThenInclude(l => l.Article)
                 .Include(a => a.LignesAchat).ThenInclude(l => l.Plateforme)
                 .AsQueryable();
@@ -248,10 +235,7 @@ namespace Backend_Gestion_Magasin_API.Services
                         l.Plateforme.Nom.Contains(plateformeNom)) ||
                     (a.CommandeClient != null &&
                      a.CommandeClient.Client != null && a.CommandeClient.Client.Plateforme != null &&
-                     a.CommandeClient.Client.Plateforme.Nom.Contains(plateformeNom)) ||
-                    (a.CommandeClient != null &&
-                     a.CommandeClient.Marque != null && a.CommandeClient.Marque.Plateforme != null &&
-                     a.CommandeClient.Marque.Plateforme.Nom.Contains(plateformeNom)));
+                     a.CommandeClient.Client.Plateforme.Nom.Contains(plateformeNom)));
 
             if (!string.IsNullOrWhiteSpace(articleNom))
                 query = query.Where(a =>
@@ -276,9 +260,7 @@ namespace Backend_Gestion_Magasin_API.Services
                     Commande    = a.CommandeClient != null ? a.CommandeClient.NumeroCommande : null,
                     Plateforme  = a.LignesAchat.Where(l => l.Plateforme != null).Select(l => l.Plateforme!.Nom).FirstOrDefault()
                                   ?? (a.CommandeClient != null && a.CommandeClient.Client != null && a.CommandeClient.Client.Plateforme != null
-                                      ? a.CommandeClient.Client.Plateforme.Nom : null)
-                                  ?? (a.CommandeClient != null && a.CommandeClient.Marque != null && a.CommandeClient.Marque.Plateforme != null
-                                      ? a.CommandeClient.Marque.Plateforme.Nom : null),
+                                      ? a.CommandeClient.Client.Plateforme.Nom : null),
                     Statut      = a.Statut.ToString(),
                     a.DateAchat,
                     a.DateLivraisonPrevue,
@@ -452,7 +434,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 {
                     nom = "Plateforme",
                     description = "Place de marché (ex : dandy's). EstActif.",
-                    relations = "A des Clients et des Marques.",
+                    relations = "A des Clients.",
                     motsCles = "plateforme market place dandy"
                 },
                 new
@@ -460,27 +442,20 @@ namespace Backend_Gestion_Magasin_API.Services
                     nom = "Client",
                     description = "Client/atelier, rattaché à UNE plateforme (PlateformeId).",
                     relations = "Client → Plateforme ; Client → Commandes.",
-                    motsCles = "client atelier marque client"
-                },
-                new
-                {
-                    nom = "Marque",
-                    description = "Marque rattachée à UNE plateforme (PlateformeId).",
-                    relations = "Marque → Plateforme ; Marque → Commandes.",
-                    motsCles = "marque brand"
+                    motsCles = "client atelier"
                 },
                 new
                 {
                     nom = "CommandeClient",
-                    description = "Commande d'un client (ClientId) éventuellement d'une marque (MarqueId). Statuts : EnAttente, Prete, EnProduction, Terminee, Annulee.",
-                    relations = "Commande → Client → Plateforme ; Commande → Marque → Plateforme.",
+                    description = "Commande d'un client (ClientId). Statuts : EnAttente, Prete, EnProduction, Terminee, Annulee.",
+                    relations = "Commande → Client → Plateforme.",
                     motsCles = "commande commandes client cde"
                 },
                 new
                 {
                     nom = "Achat",
                     description = "Achat fournisseur local. FournisseurId obligatoire, CommandeClientId optionnel. Statuts : Brouillon, Soumis, Confirme, Livre, Annule.",
-                    relations = "Achat → Fournisseur ; Achat → CommandeClient (→ Client → Plateforme / Marque → Plateforme) ; Achat → LignesAchat.",
+                    relations = "Achat → Fournisseur ; Achat → CommandeClient (→ Client → Plateforme) ; Achat → LignesAchat.",
                     motsCles = "achat achats fournisseur"
                 },
                 new
@@ -553,7 +528,7 @@ namespace Backend_Gestion_Magasin_API.Services
             {
                 new { question = "Article du catalogue / trouver un article par nom ou référence", outil = "get_articles(recherche=...) — puis utiliser l'id avec get_stock" },
                 new { question = "Stock d'un article (total, réservé, disponible)", outil = "get_stock(articleId=...)" },
-                new { question = "Commandes (statut, client, marque, plateforme, période)", outil = "get_commandes(clientNom/marqueNom/plateformeNom/dateDebut/dateFin/statut)" },
+                new { question = "Commandes (statut, client, plateforme, période)", outil = "get_commandes(clientNom/plateformeNom/dateDebut/dateFin/statut)" },
                 new { question = "Achats fournisseurs et leurs lignes/articles", outil = "get_achats(fournisseurNom/plateformeNom/articleNom/dateDebut/dateFin/statut)" },
                 new { question = "Importations et leurs lignes/articles", outil = "get_importations(fournisseurNom/plateformeNom/articleNom/dateDebut/dateFin/statut/modeExpedition)" },
                 new { question = "Historique des mouvements de stock d'un article ou période", outil = "get_mouvements(articleId/dateDebut/dateFin)" },

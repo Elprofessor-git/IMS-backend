@@ -23,9 +23,6 @@ namespace Backend_Gestion_Magasin_API.Models
         
         [ForeignKey("Client")]
         public int ClientId { get; set; }
-
-        [ForeignKey("Marque")]
-        public int? MarqueId { get; set; }
         
         [StringLength(200)]
         public string? TitreCommande { get; set; }
@@ -64,7 +61,6 @@ namespace Backend_Gestion_Magasin_API.Models
         
         // Relations
         public virtual Client Client { get; set; } = null!;
-        public virtual Marque? Marque { get; set; }
         public virtual ICollection<BesoinCommande> Besoins { get; set; } = new List<BesoinCommande>();
         public virtual ICollection<TacheProduction> Taches { get; set; } = new List<TacheProduction>();
         public virtual ICollection<Achat> Achats { get; set; } = new List<Achat>();

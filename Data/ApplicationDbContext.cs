@@ -33,7 +33,6 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<FournisseurClient> FournisseurClients { get; set; }
         public DbSet<DocumentJoint> DocumentsJoints { get; set; }
         public DbSet<DocumentImportation> DocumentsImportation { get; set; }
-        public DbSet<Marque> Marques { get; set; }
         public DbSet<ConfigTaille> ConfigTailles { get; set; }
         public DbSet<BomLigne> BomLignes { get; set; }
         public DbSet<ResultatCalcul> ResultatsCalcul { get; set; }
@@ -46,20 +45,6 @@ namespace Backend_Gestion_Magasin_API.Data
             base.OnModelCreating(modelBuilder);
 
             // Configuration des relations et contraintes
-
-            // Plateforme -> Marque (One-to-Many)
-            modelBuilder.Entity<Marque>()
-                .HasOne(m => m.Plateforme)
-                .WithMany(p => p.Marques)
-                .HasForeignKey(m => m.PlateformeId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Marque -> CommandeClient (One-to-Many, nullable)
-            modelBuilder.Entity<CommandeClient>()
-                .HasOne(c => c.Marque)
-                .WithMany(m => m.Commandes)
-                .HasForeignKey(c => c.MarqueId)
-                .OnDelete(DeleteBehavior.SetNull);
 
             // CommandeClient -> ConfigTaille (One-to-Many)
             modelBuilder.Entity<ConfigTaille>()

@@ -57,9 +57,9 @@ namespace Backend_Gestion_Magasin_API.Tools
                 function = new {
                     name = "get_commandes",
                     description =
-                        "Liste les commandes clients avec client, marque, plateforme, statut, montant total, " +
+                        "Liste les commandes clients avec client, plateforme, statut, montant total, " +
                         "date de livraison souhaitée et taux de couverture des ressources. " +
-                        "Filtrage optionnel par statut, marque (nom), client (nom) ou plateforme (nom). " +
+                        "Filtrage optionnel par statut, client (nom) ou plateforme (nom). " +
                         "Exemple : « commandes pour dandy's » → plateformeNom = \"dandy's\".",
                     parameters = new {
                         type = "object",
@@ -67,10 +67,6 @@ namespace Backend_Gestion_Magasin_API.Tools
                             statut = new {
                                 type = "string",
                                 description = "Statut de la commande : EnAttente, Prete, EnProduction, Terminee, Annulee (optionnel)."
-                            },
-                            marqueNom = new {
-                                type = "string",
-                                description = "Nom (ou partie) de la marque pour filtrer les commandes (optionnel). Exemple : \"zara\"."
                             },
                             clientNom = new {
                                 type = "string",
@@ -89,10 +85,6 @@ namespace Backend_Gestion_Magasin_API.Tools
                             dateFin = new {
                                 type = "string",
                                 description = "Date de fin au format YYYY-MM-DD (optionnel, incluse) — filtre sur la date de création."
-                            },
-                            marqueId = new {
-                                type = "integer",
-                                description = "ID numérique exact de la marque (optionnel). Préférez marqueNom si l'utilisateur donne un nom."
                             }
                         },
                         required = Array.Empty<string>()

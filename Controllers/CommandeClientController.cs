@@ -28,7 +28,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var query = _context.CommandesClients
                 .Include(c => c.Client)
                 .ThenInclude(cl => cl.Plateforme)
-                .Include(c => c.Marque)
                 .Include(c => c.Besoins)
                 .ThenInclude(b => b.Article)
                 .AsQueryable();
@@ -45,7 +44,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var commande = await _context.CommandesClients
                 .Include(c => c.Client)
                 .ThenInclude(cl => cl.Plateforme)
-                .Include(c => c.Marque)
                 .Include(c => c.Besoins)
                 .ThenInclude(b => b.Article)
                 .Include(c => c.Taches)
@@ -87,8 +85,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return query.Where(c =>
                 c.NumeroCommande.ToLower().Contains(terme) ||
                 (c.TitreCommande != null && c.TitreCommande.ToLower().Contains(terme)) ||
-                c.Client.Nom.ToLower().Contains(terme) ||
-                (c.Marque != null && c.Marque.Nom.ToLower().Contains(terme)));
+                c.Client.Nom.ToLower().Contains(terme));
         }
 
         [HttpGet("{id}/Tailles")]
@@ -138,7 +135,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var commande = new CommandeClient
             {
                 ClientId = dto.ClientId,
-                MarqueId = dto.MarqueId,
                 TitreCommande = dto.TitreCommande,
                 DescriptionCommande = dto.DescriptionCommande,
                 DateCommande = DateTime.Now,

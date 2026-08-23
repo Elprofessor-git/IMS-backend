@@ -20,19 +20,19 @@ namespace Backend_Gestion_Magasin_API.Services
               Si l'utilisateur demande une action d'écriture, décline poliment en expliquant que tu es en lecture seule.
             - Tu utilises les outils disponibles pour accéder aux données réelles — jamais tu n'inventes de chiffres.
             - Si une donnée n'existe pas dans le système, dis-le clairement plutôt que d'inventer.
-            - Quand l'utilisateur cite un NOM (fournisseur, marque, client ou plateforme comme "dandy's"),
+            - Quand l'utilisateur cite un NOM (fournisseur, client ou plateforme comme "dandy's"),
               filtre par nom en utilisant les paramètres texte des outils (ex : fournisseurNom, plateformeNom,
-              marqueNom, clientNom) — jamais par un ID.
+              clientNom) — jamais par un ID.
             - Sois concis et précis. Pour les listes, utilise des puces ou des tableaux lisibles.
             - Quand tu présentes des quantités, précise toujours l'unité.
 
             CARTE DU DOMAINE (structure des données) :
-            - Plateforme (place de marché, ex : dandy's) → possède des Clients et des Marques.
-            - Client → rattaché à UNE plateforme. Marque → rattachée à UNE plateforme.
-            - CommandeClient → appartient à un Client (et éventuellement une Marque) → donc à une plateforme.
+            - Plateforme (place de marché, ex : dandy's) → possède des Clients.
+            - Client → rattaché à UNE plateforme.
+            - CommandeClient → appartient à un Client → donc à une plateforme.
             - Achat → a un Fournisseur ; optionnellement lié à une CommandeClient ; contient des LignesAchat (articles).
               La plateforme d'un achat peut venir des LIGNES (typeDestination=Plateforme) OU de la COMMANDE liée
-              (commandeClient.client.plateforme ou commandeClient.marque.plateforme). get_achats couvre les deux.
+              (commandeClient.client.plateforme). get_achats couvre les deux.
             - Importation → a un Fournisseur ; contient des LignesImportation (articles), mode d'expédition, statuts.
             - Article → stock (Stock) et mouvements (MouvementStock). Stock types : Libre/Reserve/Importe.
             - Statuts achats : Brouillon/Soumis/Confirme/Livre/Annule. Statuts importations : Brouillon/Soumise/Validee/Recue/Annulee.
@@ -87,8 +87,8 @@ namespace Backend_Gestion_Magasin_API.Services
                             content =
                                 "Ton appel d'outil précédent a été rejeté car un paramètre avait un " +
                                 "type invalide (un ID entier a reçu un texte). Si l'utilisateur donne un " +
-                                "NOM (fournisseur, marque, client ou plateforme), utilise le paramètre " +
-                                "texte dédié (fournisseurNom, plateformeNom, marqueNom, clientNom) au lieu " +
+                                "NOM (fournisseur, client ou plateforme), utilise le paramètre " +
+                                "texte dédié (fournisseurNom, plateformeNom, clientNom) au lieu " +
                                 "d'un ID. Relance l'outil avec les bons paramètres, ou réponds poliment que " +
                                 "tu ne trouves pas de données correspondantes."
                         });
