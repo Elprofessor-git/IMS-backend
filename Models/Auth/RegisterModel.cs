@@ -19,8 +19,9 @@ namespace Backend_Gestion_Magasin_API.Models.Auth
         [StringLength(100, MinimumLength = 6)]
         public string Password { get; set; } = string.Empty;
 
-        [Required]
-        public string Role { get; set; } = "User";
+        /// <summary>
+        /// ID du rôle personnalisé (table Role). 0 ou null = pas de rôle assigné.
+        /// </summary>
+        public int? RoleId { get; set; }
     }
 }
-

@@ -1,22 +1,19 @@
-using Microsoft.AspNetCore.Identity;
 using Backend_Gestion_Magasin_API.Models;
-using Backend_Gestion_Magasin_API.Dtos;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Services
 {
     public class AuthService
     {
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly TokenService _tokenService;
 
         public AuthService(
             UserManager<ApplicationUser> userManager,
-            SignInManager<ApplicationUser> signInManager,
             TokenService tokenService)
         {
             _userManager = userManager;
-            _signInManager = signInManager;
             _tokenService = tokenService;
         }
 
@@ -30,11 +27,12 @@ namespace Backend_Gestion_Magasin_API.Services
 
         public async Task<string?> GenerateTokenAsync(string email)
         {
-            var user = await _userManager.FindByEmailAsync(email);
+            var user = await _userManager.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Email == email);
             if (user == null) return null;
 
-            var roles = await _userManager.GetRolesAsync(user);
-            return _tokenService.CreateToken(user, roles);
+            return _tokenService.CreateToken(user);
         }
 
         public async Task<ApplicationUser?> GetUserByEmailAsync(string email)
@@ -43,4 +41,3 @@ namespace Backend_Gestion_Magasin_API.Services
         }
     }
 }
-

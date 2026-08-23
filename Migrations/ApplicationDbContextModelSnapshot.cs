@@ -1406,6 +1406,33 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Property<bool>("PeutGererUtilisateurs")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("PeutGererPlateformes")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PeutVoirClients")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PeutVoirCommandes")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PeutVoirFournisseurs")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PeutVoirMouvements")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PeutVoirPlateformes")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PeutVoirRoles")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PeutVoirTaches")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PeutVoirUtilisateurs")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("PeutValiderImportations")
                         .HasColumnType("boolean");
 

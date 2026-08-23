@@ -10,30 +10,12 @@ namespace Backend_Gestion_Magasin_API.Data
         {
             var context = serviceProvider.GetRequiredService<ApplicationDbContext>();
             var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-            var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
             // Ensure database is created
             await context.Database.EnsureCreatedAsync();
 
-            // Create default roles
-            await CreateRoles(roleManager);
-
             // Create default admin
             await CreateDefaultAdmin(userManager);
-
-        }
-
-        private static async Task CreateRoles(RoleManager<IdentityRole> roleManager)
-        {
-            string[] roleNames = { "Admin", "Magasinier", "Acheteur", "ProductionManager", "Viewer" };
-
-            foreach (var roleName in roleNames)
-            {
-                if (!await roleManager.RoleExistsAsync(roleName))
-                {
-                    await roleManager.CreateAsync(new IdentityRole(roleName));
-                }
-            }
         }
 
         private static async Task CreateDefaultAdmin(UserManager<ApplicationUser> userManager)
@@ -51,16 +33,13 @@ namespace Backend_Gestion_Magasin_API.Data
                     Prenom = "Système",
                     Poste = "Administrateur Système",
                     EstActif = true,
-                    EmailConfirmed = true
+                    EmailConfirmed = true,
+                    // RoleId 1 = Administrateur (table Role)
+                    RoleId = 1
                 };
 
-                var result = await userManager.CreateAsync(adminUser, "Admin123!");
-                if (result.Succeeded)
-                {
-                    await userManager.AddToRoleAsync(adminUser, "Admin");
-                }
+                await userManager.CreateAsync(adminUser, "Admin123!");
             }
         }
     }
 }
-

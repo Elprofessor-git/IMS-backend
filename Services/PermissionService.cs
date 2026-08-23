@@ -50,22 +50,22 @@ namespace Backend_Gestion_Magasin_API.Services
         private static (bool canAccess, bool canWrite) MapModule(Role role, string module) =>
             module switch
             {
-                "articles"     => (role.PeutGererStock,        role.PeutValiderStock),
-                "stock"        => (role.PeutGererStock,        role.PeutValiderStock),
-                "mouvements"   => (role.PeutGererMouvements,   role.PeutGererMouvements),
-                "achats"       => (role.PeutGererAchats,       role.PeutConfirmerAchats),
-                "importations" => (role.PeutGererImportations, role.PeutValiderImportations),
-                "commandes"    => (role.PeutGererCommandes,    role.PeutGererCommandes),
-                "clients"      => (role.PeutGererClients,      role.PeutGererClients),
-                "fournisseurs" => (role.PeutGererFournisseurs, role.PeutGererFournisseurs),
-                "plateformes"  => (role.PeutGererClients,      role.PeutGererClients),
-                "taches"       => (role.PeutGererTaches,       role.PeutGererTaches),
-                "utilisateurs" => (role.PeutGererUtilisateurs, role.PeutGererUtilisateurs),
-                "roles"        => (role.EstAdministrateur,     role.EstAdministrateur),
-                "chatbot"      => (true,                       false),
-                "dashboard"    => (true,                       false),
-                "rapports"     => (true,                       false),
-                _              => (false,                      false),
+                "articles"     => (role.PeutGererStock,         role.PeutValiderStock),
+                "stock"        => (role.PeutGererStock,         role.PeutValiderStock),
+                "mouvements"   => (role.PeutVoirMouvements,     role.PeutGererMouvements),
+                "achats"       => (role.PeutGererAchats,        role.PeutConfirmerAchats),
+                "importations" => (role.PeutGererImportations,  role.PeutValiderImportations),
+                "commandes"    => (role.PeutVoirCommandes,      role.PeutGererCommandes),
+                "clients"      => (role.PeutVoirClients,        role.PeutGererClients),
+                "fournisseurs" => (role.PeutVoirFournisseurs,   role.PeutGererFournisseurs),
+                "plateformes"  => (role.PeutVoirPlateformes,    role.PeutGererPlateformes),
+                "taches"       => (role.PeutVoirTaches,         role.PeutGererTaches),
+                "utilisateurs" => (role.PeutVoirUtilisateurs,   role.PeutGererUtilisateurs),
+                "roles"        => (role.PeutVoirRoles,          role.EstAdministrateur),
+                "chatbot"      => (true,                        false),
+                "dashboard"    => (true,                        false),
+                "rapports"     => (true,                        false),
+                _              => (false,                       false),
             };
 
         private static string[] AllModules() =>

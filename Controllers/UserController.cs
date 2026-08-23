@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Dtos;
 
@@ -9,7 +10,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
 {
     [Route("api/Account/users")]
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
+    [RequireModulePermission("utilisateurs")]
     public class UserController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;
@@ -27,14 +29,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             foreach (var user in users)
             {
-                var roles = await _userManager.GetRolesAsync(user);
                 userDtos.Add(new ReadUserDto
                 {
                     Id = user.Id,
                     Nom = user.Nom,
                     Prenom = user.Prenom,
                     Email = user.Email ?? "",
-                    Role = roles.FirstOrDefault(),
                     RoleId = user.RoleId,
                     NomRole = user.Role?.NomRole,
                     EstActif = user.EstActif,
@@ -53,14 +53,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (user == null)
                 return NotFound();
 
-            var roles = await _userManager.GetRolesAsync(user);
             return Ok(new ReadUserDto
             {
                 Id = user.Id,
                 Nom = user.Nom,
                 Prenom = user.Prenom,
                 Email = user.Email ?? "",
-                Role = roles.FirstOrDefault(),
                 RoleId = user.RoleId,
                 NomRole = user.Role?.NomRole,
                 EstActif = user.EstActif,
@@ -69,6 +67,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpPut("{id}")]
+        [RequireModulePermission("utilisateurs", requireWrite: true)]
         public async Task<IActionResult> Update(string id, UpdateUserDto updateDto)
         {
             var user = await _userManager.FindByIdAsync(id);
@@ -108,6 +107,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [RequireModulePermission("utilisateurs", requireWrite: true)]
         public async Task<IActionResult> Delete(string id)
         {
             var user = await _userManager.FindByIdAsync(id);

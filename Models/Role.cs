@@ -14,7 +14,7 @@ namespace Backend_Gestion_Magasin_API.Models
         [StringLength(500)]
         public string? Description { get; set; }
         
-        // Permissions par module
+        // Permissions par module — écriture
         public bool PeutGererStock { get; set; } = false;
         public bool PeutGererCommandes { get; set; } = false;
         public bool PeutGererTaches { get; set; } = false;
@@ -24,7 +24,18 @@ namespace Backend_Gestion_Magasin_API.Models
         public bool PeutGererImportations { get; set; } = false;
         public bool PeutGererUtilisateurs { get; set; } = false;
         public bool PeutGererMouvements { get; set; } = false;
-        
+        public bool PeutGererPlateformes { get; set; } = false;
+
+        // Permissions par module — lecture seule
+        public bool PeutVoirMouvements { get; set; } = false;
+        public bool PeutVoirCommandes { get; set; } = false;
+        public bool PeutVoirClients { get; set; } = false;
+        public bool PeutVoirFournisseurs { get; set; } = false;
+        public bool PeutVoirPlateformes { get; set; } = false;
+        public bool PeutVoirTaches { get; set; } = false;
+        public bool PeutVoirUtilisateurs { get; set; } = false;
+        public bool PeutVoirRoles { get; set; } = false;
+
         // Permissions spéciales
         public bool PeutValiderStock { get; set; } = false;
         public bool PeutConfirmerAchats { get; set; } = false;

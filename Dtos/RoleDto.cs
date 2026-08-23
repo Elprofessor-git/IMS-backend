@@ -17,6 +17,15 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutGererImportations { get; set; }
         public bool PeutGererUtilisateurs { get; set; }
         public bool PeutGererMouvements { get; set; }
+        public bool PeutGererPlateformes { get; set; }
+        public bool PeutVoirMouvements { get; set; }
+        public bool PeutVoirCommandes { get; set; }
+        public bool PeutVoirClients { get; set; }
+        public bool PeutVoirFournisseurs { get; set; }
+        public bool PeutVoirPlateformes { get; set; }
+        public bool PeutVoirTaches { get; set; }
+        public bool PeutVoirUtilisateurs { get; set; }
+        public bool PeutVoirRoles { get; set; }
         public bool PeutValiderStock { get; set; }
         public bool PeutConfirmerAchats { get; set; }
         public bool PeutValiderImportations { get; set; }
@@ -42,6 +51,15 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutGererImportations { get; set; }
         public bool PeutGererUtilisateurs { get; set; }
         public bool PeutGererMouvements { get; set; }
+        public bool PeutGererPlateformes { get; set; }
+        public bool PeutVoirMouvements { get; set; }
+        public bool PeutVoirCommandes { get; set; }
+        public bool PeutVoirClients { get; set; }
+        public bool PeutVoirFournisseurs { get; set; }
+        public bool PeutVoirPlateformes { get; set; }
+        public bool PeutVoirTaches { get; set; }
+        public bool PeutVoirUtilisateurs { get; set; }
+        public bool PeutVoirRoles { get; set; }
         public bool PeutValiderStock { get; set; }
         public bool PeutConfirmerAchats { get; set; }
         public bool PeutValiderImportations { get; set; }

@@ -16,7 +16,7 @@ namespace Backend_Gestion_Magasin_API.Services
             _configuration = configuration;
         }
 
-        public string CreateToken(ApplicationUser user, IEnumerable<string> roles)
+        public string CreateToken(ApplicationUser user)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
             var secret = Environment.GetEnvironmentVariable("JWT_SECRET")
@@ -32,13 +32,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 new Claim("UserId", user.Id)
             };
 
-            // Ajouter les rôles standards Identity
-            foreach (var role in roles)
-            {
-                claims.Add(new Claim(ClaimTypes.Role, role));
-            }
-
-            // Ajouter le rôle personnalisé si disponible
+            // Utiliser uniquement le rôle personnalisé (plus de rôles Identity)
             if (!string.IsNullOrEmpty(user.Role?.NomRole))
             {
                 claims.Add(new Claim(ClaimTypes.Role, user.Role.NomRole));
@@ -63,5 +57,3 @@ namespace Backend_Gestion_Magasin_API.Services
         }
     }
 }
-
-

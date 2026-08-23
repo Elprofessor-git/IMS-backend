@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos;
@@ -9,7 +10,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
 {
     [Route("api/roles")]
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
+    [RequireModulePermission("roles")]
     public class RoleController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
@@ -38,6 +40,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // POST: api/roles
         [HttpPost]
+        [RequireModulePermission("roles", requireWrite: true)]
         public async Task<ActionResult<RoleDto>> CreateRole(CreateRoleDto dto)
         {
             var role = new Role
@@ -54,6 +57,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PeutGererImportations = dto.PeutGererImportations,
                 PeutGererUtilisateurs = dto.PeutGererUtilisateurs,
                 PeutGererMouvements = dto.PeutGererMouvements,
+                PeutGererPlateformes = dto.PeutGererPlateformes,
+                PeutVoirMouvements = dto.PeutVoirMouvements,
+                PeutVoirCommandes = dto.PeutVoirCommandes,
+                PeutVoirClients = dto.PeutVoirClients,
+                PeutVoirFournisseurs = dto.PeutVoirFournisseurs,
+                PeutVoirPlateformes = dto.PeutVoirPlateformes,
+                PeutVoirTaches = dto.PeutVoirTaches,
+                PeutVoirUtilisateurs = dto.PeutVoirUtilisateurs,
+                PeutVoirRoles = dto.PeutVoirRoles,
                 PeutValiderStock = dto.PeutValiderStock,
                 PeutConfirmerAchats = dto.PeutConfirmerAchats,
                 PeutValiderImportations = dto.PeutValiderImportations,
@@ -68,6 +80,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // PUT: api/roles/5
         [HttpPut("{id}")]
+        [RequireModulePermission("roles", requireWrite: true)]
         public async Task<IActionResult> UpdateRole(int id, CreateRoleDto dto)
         {
             var role = await _context.AppRoles.FindAsync(id);
@@ -85,6 +98,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
             role.PeutGererImportations = dto.PeutGererImportations;
             role.PeutGererUtilisateurs = dto.PeutGererUtilisateurs;
             role.PeutGererMouvements = dto.PeutGererMouvements;
+            role.PeutGererPlateformes = dto.PeutGererPlateformes;
+            role.PeutVoirMouvements = dto.PeutVoirMouvements;
+            role.PeutVoirCommandes = dto.PeutVoirCommandes;
+            role.PeutVoirClients = dto.PeutVoirClients;
+            role.PeutVoirFournisseurs = dto.PeutVoirFournisseurs;
+            role.PeutVoirPlateformes = dto.PeutVoirPlateformes;
+            role.PeutVoirTaches = dto.PeutVoirTaches;
+            role.PeutVoirUtilisateurs = dto.PeutVoirUtilisateurs;
+            role.PeutVoirRoles = dto.PeutVoirRoles;
             role.PeutValiderStock = dto.PeutValiderStock;
             role.PeutConfirmerAchats = dto.PeutConfirmerAchats;
             role.PeutValiderImportations = dto.PeutValiderImportations;
@@ -95,6 +117,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // DELETE: api/roles/5
         [HttpDelete("{id}")]
+        [RequireModulePermission("roles", requireWrite: true)]
         public async Task<IActionResult> DeleteRole(int id)
         {
             var role = await _context.AppRoles.FindAsync(id);
@@ -121,6 +144,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
             PeutGererImportations = r.PeutGererImportations,
             PeutGererUtilisateurs = r.PeutGererUtilisateurs,
             PeutGererMouvements = r.PeutGererMouvements,
+            PeutGererPlateformes = r.PeutGererPlateformes,
+            PeutVoirMouvements = r.PeutVoirMouvements,
+            PeutVoirCommandes = r.PeutVoirCommandes,
+            PeutVoirClients = r.PeutVoirClients,
+            PeutVoirFournisseurs = r.PeutVoirFournisseurs,
+            PeutVoirPlateformes = r.PeutVoirPlateformes,
+            PeutVoirTaches = r.PeutVoirTaches,
+            PeutVoirUtilisateurs = r.PeutVoirUtilisateurs,
+            PeutVoirRoles = r.PeutVoirRoles,
             PeutValiderStock = r.PeutValiderStock,
             PeutConfirmerAchats = r.PeutConfirmerAchats,
             PeutValiderImportations = r.PeutValiderImportations,
