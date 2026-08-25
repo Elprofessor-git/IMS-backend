@@ -133,7 +133,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 DatePeremption = dto.DatePeremption,
                 Notes = dto.Notes,
                 ClientId = dto.ClientId,
-                PlateformeId = dto.PlateformeId
+                PlateformeId = dto.PlateformeId,
+                GroupeCommandeId = dto.GroupeCommandeId
             };
 
             _context.Stocks.Add(stock);
@@ -168,6 +169,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             stock.Notes = dto.Notes;
             stock.ClientId = dto.ClientId;
             stock.PlateformeId = dto.PlateformeId;
+            stock.GroupeCommandeId = dto.GroupeCommandeId;
 
             try
             {

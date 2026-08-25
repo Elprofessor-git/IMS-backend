@@ -367,6 +367,57 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             return _context.MouvementsStock.Any(e => e.Id == id);
         }
+
+        /// <summary>
+        /// LOT 3 : Libération physique — rend un Stock scopé exclusif à une commande vers
+        /// son scope partagé d'origine (Client/Plateforme/Groupe). Le scope d'origine est
+        /// conservé sur la ligne scindée (LOT 2.3) et restauré ici.
+        /// </summary>
+        [HttpPost("LibererPhysique")]
+        [RequireModulePermission("stock", requireWrite: true)]
+        public async Task<IActionResult> LibererPhysique([FromBody] LibererStockPhysiqueDto dto)
+        {
+            var stock = await _context.Stocks.FindAsync(dto.StockId);
+            if (stock == null)
+                return NotFound("Stock introuvable.");
+
+            if (stock.CommandeClientId == null)
+                return BadRequest("Ce stock n'est pas exclusif à une commande.");
+
+            if (stock.Quantite < dto.Quantite)
+                return BadRequest("Quantité insuffisante.");
+
+            var stockId = stock.Id;
+            stock.Quantite -= dto.Quantite;
+
+            // LOT 3 : restaurer le scope d'origine (conservé sur la ligne scindée par LOT 2.3)
+            _context.Stocks.Add(new Stock
+            {
+                ArticleId = stock.ArticleId,
+                TypeStock = stock.TypeStock,
+                Quantite = dto.Quantite,
+                ClientId = stock.ClientId,
+                PlateformeId = stock.PlateformeId,
+                GroupeCommandeId = stock.GroupeCommandeId,
+                PrixUnitaire = stock.PrixUnitaire,
+                Devise = stock.Devise,
+                DateEntree = stock.DateEntree,
+                EstValide = stock.EstValide,
+                ValidePar = stock.ValidePar
+            });
+
+            _context.MouvementsStock.Add(new MouvementStock
+            {
+                StockId = stockId,
+                TypeMouvement = TypeMouvement.Transfert,
+                Quantite = dto.Quantite,
+                DateMouvement = DateTime.Now,
+                Notes = $"Libération physique exclusif commande #{stock.CommandeClientId} → scope partagé"
+            });
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Stock libéré avec succès." });
+        }
     }
 
     public class TransfertRequest
@@ -376,5 +427,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
         public decimal Quantite { get; set; }
         public string Motif { get; set; } = string.Empty;
         public string EffectuePar { get; set; } = string.Empty;
+    }
+
+    public class LibererStockPhysiqueDto
+    {
+        public int StockId { get; set; }
+        public decimal Quantite { get; set; }
+        public int? ClientId { get; set; }
+        public int? PlateformeId { get; set; }
+        public int? GroupeCommandeId { get; set; }
     }
 }

@@ -164,6 +164,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 CommandeClientId = dto.CommandeClientId,
                 ClientId = dto.ClientId,
                 PlateformeId = dto.PlateformeId,
+                GroupeCommandeId = dto.GroupeCommandeId,
                 Designation = dto.Designation,
                 Couleur = dto.Couleur,
                 CodeCouleur = dto.CodeCouleur,
@@ -178,6 +179,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 DateCreation = DateTime.Now
             };
 
+            if (ligneImportation.TypeDestination == TypeDestinationImportation.GroupeCommandes
+                && ligneImportation.GroupeCommandeId == null
+                && dto.CommandeClientIds != null)
+            {
+                var groupeId = await ResoudreOuCreerGroupe(dto.CommandeClientIds);
+                if (groupeId == null)
+                    return BadRequest("TypeDestination=GroupeCommandes requiert au moins 2 commandes valides.");
+                ligneImportation.GroupeCommandeId = groupeId;
+            }
+
             switch (ligneImportation.TypeDestination)
             {
                 case TypeDestinationImportation.Commande when !ligneImportation.CommandeClientId.HasValue:
@@ -186,10 +197,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     return BadRequest("TypeDestination=Marque requiert un ClientId.");
                 case TypeDestinationImportation.Plateforme when !ligneImportation.PlateformeId.HasValue:
                     return BadRequest("TypeDestination=Plateforme requiert un PlateformeId.");
+                case TypeDestinationImportation.GroupeCommandes when !ligneImportation.GroupeCommandeId.HasValue:
+                    return BadRequest("TypeDestination=GroupeCommandes requiert un GroupeCommandeId.");
                 case TypeDestinationImportation.StockLibre:
                     ligneImportation.CommandeClientId = null;
                     ligneImportation.ClientId = null;
                     ligneImportation.PlateformeId = null;
+                    ligneImportation.GroupeCommandeId = null;
                     break;
             }
 
@@ -248,6 +262,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     return BadRequest("TypeDestination=Marque requiert un ClientId.");
                 case TypeDestinationImportation.Plateforme when !plateformeId.HasValue:
                     return BadRequest("TypeDestination=Plateforme requiert un PlateformeId.");
+                case TypeDestinationImportation.GroupeCommandes when !dto.GroupeCommandeId.HasValue:
+                    return BadRequest("TypeDestination=GroupeCommandes requiert un GroupeCommandeId.");
                 case TypeDestinationImportation.StockLibre:
                     commandeClientId = null;
                     clientId = null;
@@ -260,6 +276,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneImportation.CommandeClientId = commandeClientId;
             ligneImportation.ClientId = clientId;
             ligneImportation.PlateformeId = plateformeId;
+            ligneImportation.GroupeCommandeId = dto.GroupeCommandeId;
             ligneImportation.Designation = dto.Designation;
             ligneImportation.Couleur = dto.Couleur;
             ligneImportation.CodeCouleur = dto.CodeCouleur;
@@ -271,6 +288,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneImportation.Devise = dto.Devise;
             ligneImportation.Unite = dto.Unite;
             ligneImportation.Notes = dto.Notes;
+
+            if (ligneImportation.TypeDestination == TypeDestinationImportation.GroupeCommandes
+                && ligneImportation.GroupeCommandeId == null
+                && dto.CommandeClientIds != null)
+            {
+                var groupeId = await ResoudreOuCreerGroupe(dto.CommandeClientIds);
+                if (groupeId == null)
+                    return BadRequest("TypeDestination=GroupeCommandes requiert au moins 2 commandes valides.");
+                ligneImportation.GroupeCommandeId = groupeId;
+            }
 
             await RecalculerMontantImportation(id);
 
@@ -413,6 +440,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     CommandeClientId = ligne.TypeDestination == TypeDestinationImportation.Commande ? ligne.CommandeClientId : null,
                     ClientId = ligne.TypeDestination == TypeDestinationImportation.Marque ? ligne.ClientId : null,
                     PlateformeId = ligne.TypeDestination == TypeDestinationImportation.Plateforme ? ligne.PlateformeId : null,
+                    GroupeCommandeId = ligne.TypeDestination == TypeDestinationImportation.GroupeCommandes ? ligne.GroupeCommandeId : null,
                     PrixUnitaire = ligne.PrixUnitaire,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,
@@ -493,14 +521,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Notes = ligne.Designation ?? ligne.Nature ?? ligne.Notes,
                 Quantite = dto.Quantite,
                 TypeStock = TypeStock.Importe,
-                CommandeClientId = ligne.TypeDestination == TypeDestinationImportation.Commande ? ligne.CommandeClientId : null,
-                ClientId = ligne.TypeDestination == TypeDestinationImportation.Marque ? ligne.ClientId : null,
-                PlateformeId = ligne.TypeDestination == TypeDestinationImportation.Plateforme ? ligne.PlateformeId : null,
-                PrixUnitaire = ligne.PrixUnitaire,
-                Devise = ligne.Devise,
-                DateEntree = DateTime.Now,
-                EstValide = true,
-                ValidePar = "Système - Réception Partielle Importation"
+                    CommandeClientId = ligne.TypeDestination == TypeDestinationImportation.Commande ? ligne.CommandeClientId : null,
+                    ClientId = ligne.TypeDestination == TypeDestinationImportation.Marque ? ligne.ClientId : null,
+                    PlateformeId = ligne.TypeDestination == TypeDestinationImportation.Plateforme ? ligne.PlateformeId : null,
+                    GroupeCommandeId = ligne.TypeDestination == TypeDestinationImportation.GroupeCommandes ? ligne.GroupeCommandeId : null,
+                    PrixUnitaire = ligne.PrixUnitaire,
+                    Devise = ligne.Devise,
+                    DateEntree = DateTime.Now,
+                    EstValide = true,
+                    ValidePar = "Système - Réception Partielle Importation"
             };
 
             _context.Stocks.Add(stock);
@@ -745,6 +774,53 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return ex.InnerException is PostgresException pg
                 && pg.SqlState == "23505"
                 && string.Equals(pg.ConstraintName, "IX_Importations_ReferenceImportation", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// LOT 1.6 : Résout ou crée un GroupeCommande à partir d'une liste de CommandeClientId.
+        /// </summary>
+        private async Task<int?> ResoudreOuCreerGroupe(List<int>? commandeClientIds)
+        {
+            if (commandeClientIds == null || commandeClientIds.Count < 2)
+                return null;
+
+            var idsDistincts = commandeClientIds.Distinct().OrderBy(x => x).ToList();
+
+            var existantes = await _context.CommandesClients
+                .Where(cc => idsDistincts.Contains(cc.Id))
+                .Select(cc => cc.Id)
+                .ToListAsync();
+
+            if (existantes.Count != idsDistincts.Count)
+                return null;
+
+            var groupesCandidats = await _context.GroupesCommandes
+                .Include(gc => gc.Membres)
+                .Where(gc => gc.Membres.Count == idsDistincts.Count)
+                .ToListAsync();
+
+            var groupe = groupesCandidats.FirstOrDefault(gc =>
+                gc.Membres.Select(m => m.CommandeClientId).OrderBy(x => x)
+                    .SequenceEqual(idsDistincts));
+
+            if (groupe != null)
+                return groupe.Id;
+
+            groupe = new GroupeCommande { DateCreation = DateTime.UtcNow };
+            _context.GroupesCommandes.Add(groupe);
+            await _context.SaveChangesAsync();
+
+            foreach (var cid in idsDistincts)
+            {
+                _context.GroupeCommandeCommandes.Add(new GroupeCommandeCommande
+                {
+                    GroupeCommandeId = groupe.Id,
+                    CommandeClientId = cid
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            return groupe.Id;
         }
     }
 }

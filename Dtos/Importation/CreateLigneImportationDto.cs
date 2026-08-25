@@ -16,6 +16,10 @@ namespace Backend_Gestion_Magasin_API.Dtos.Importation
 
         public int? PlateformeId { get; set; }
 
+        public int? GroupeCommandeId { get; set; }
+
+        public List<int>? CommandeClientIds { get; set; }
+
         [StringLength(200)]
         public string? Designation { get; set; }
 

@@ -39,6 +39,8 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<ModeleBom> ModeleBoms { get; set; }
         public DbSet<FournitureBom> FournituresBom { get; set; }
         public DbSet<HistoriquePrixArticle> HistoriquesPrixArticles { get; set; }
+        public DbSet<GroupeCommande> GroupesCommandes { get; set; }
+        public DbSet<GroupeCommandeCommande> GroupeCommandeCommandes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -531,6 +533,57 @@ namespace Backend_Gestion_Magasin_API.Data
                 .WithMany()
                 .HasForeignKey(d => d.ImportationId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // GroupeCommande -> GroupeCommandeCommande (One-to-Many)
+            modelBuilder.Entity<GroupeCommandeCommande>()
+                .HasOne(gcc => gcc.GroupeCommande)
+                .WithMany(gc => gc.Membres)
+                .HasForeignKey(gcc => gcc.GroupeCommandeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // CommandeClient -> GroupeCommandeCommande (One-to-Many)
+            modelBuilder.Entity<GroupeCommandeCommande>()
+                .HasOne(gcc => gcc.CommandeClient)
+                .WithMany()
+                .HasForeignKey(gcc => gcc.CommandeClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Index unique sur (GroupeCommandeId, CommandeClientId)
+            modelBuilder.Entity<GroupeCommandeCommande>()
+                .HasIndex(gcc => new { gcc.GroupeCommandeId, gcc.CommandeClientId })
+                .IsUnique();
+
+            // Stock -> GroupeCommande (scope optionnel)
+            modelBuilder.Entity<Stock>()
+                .HasOne(s => s.GroupeCommande)
+                .WithMany()
+                .HasForeignKey(s => s.GroupeCommandeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // LigneAchat -> GroupeCommande (scope optionnel)
+            modelBuilder.Entity<LigneAchat>()
+                .HasOne(la => la.GroupeCommande)
+                .WithMany()
+                .HasForeignKey(la => la.GroupeCommandeId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // LigneImportation -> GroupeCommande (scope optionnel)
+            modelBuilder.Entity<LigneImportation>()
+                .HasOne(li => li.GroupeCommande)
+                .WithMany()
+                .HasForeignKey(li => li.GroupeCommandeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Indexes sur les nouvelles colonnes GroupeCommandeId
+            modelBuilder.Entity<Stock>()
+                .HasIndex(s => s.GroupeCommandeId);
+
+            modelBuilder.Entity<LigneAchat>()
+                .HasIndex(la => la.GroupeCommandeId);
+
+            modelBuilder.Entity<LigneImportation>()
+                .HasIndex(li => li.GroupeCommandeId);
         }
     }
 }

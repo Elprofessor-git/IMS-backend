@@ -47,5 +47,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Stock
         public int? ClientId { get; set; }
 
         public int? PlateformeId { get; set; }
+
+        public int? GroupeCommandeId { get; set; }
     }
 }

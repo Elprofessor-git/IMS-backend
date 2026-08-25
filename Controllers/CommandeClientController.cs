@@ -208,17 +208,20 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .FirstOrDefaultAsync(c => c.Id == id);
 
             if (commande == null)
-            {
                 return NotFound();
-            }
+
+            var plateformeId = commande.Client?.PlateformeId;
+
+            var groupeCommandeIds = await _context.GroupeCommandeCommandes
+                .Where(gcc => gcc.CommandeClientId == commande.Id)
+                .Select(gcc => gcc.GroupeCommandeId)
+                .ToListAsync();
 
             decimal totalCouverture = 0;
             int besoinsTraites = 0;
 
             foreach (var besoin in commande.Besoins)
             {
-                var plateformeId = commande.Client?.PlateformeId;
-
                 var s1 = await _context.Stocks
                     .Where(s => s.ArticleId == besoin.ArticleId &&
                                s.TypeStock == TypeStock.Importe &&
@@ -230,6 +233,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     .Where(s => s.ArticleId == besoin.ArticleId &&
                                s.TypeStock == TypeStock.Importe &&
                                s.ClientId == commande.ClientId &&
+                               s.CommandeClientId == null &&
                                s.Quantite > 0)
                     .SumAsync(s => s.Quantite);
 
@@ -238,74 +242,89 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         .Where(s => s.ArticleId == besoin.ArticleId &&
                                    s.TypeStock == TypeStock.Importe &&
                                    s.PlateformeId == plateformeId &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
                                    s.Quantite > 0)
                         .SumAsync(s => s.Quantite)
                     : 0;
 
-                var s4 = await _context.Stocks
+                var s4 = groupeCommandeIds.Any()
+                    ? await _context.Stocks
+                        .Where(s => s.ArticleId == besoin.ArticleId &&
+                                   s.TypeStock == TypeStock.Importe &&
+                                   s.GroupeCommandeId.HasValue &&
+                                   groupeCommandeIds.Contains(s.GroupeCommandeId.Value) &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite)
+                    : 0;
+
+                var r1 = await _context.Stocks
                     .Where(s => s.ArticleId == besoin.ArticleId &&
-                               s.TypeStock == TypeStock.Importe &&
-                               s.CommandeClientId == null &&
-                               s.ClientId == null &&
-                               s.PlateformeId == null &&
+                               s.TypeStock == TypeStock.Reserve &&
+                               s.CommandeClientId == commande.Id &&
                                s.Quantite > 0)
                     .SumAsync(s => s.Quantite);
 
-                var stockImporte = s1 + s2 + s3 + s4;
-
-                besoin.QuantiteStockImporte = Math.Min(stockImporte, besoin.QuantiteTotale);
-
-                var a1 = await _context.LignesAchat
-                    .Include(la => la.Achat)
-                    .Where(la => la.ArticleId == besoin.ArticleId &&
-                                la.TypeDestination == TypeDestinationAchat.Commande &&
-                                la.CommandeClientId == commande.Id &&
-                                la.Achat.Statut == StatutAchat.Confirme)
-                    .SumAsync(la => la.Quantite - la.QuantiteRecue);
-
-                var a2 = await _context.LignesAchat
-                    .Include(la => la.Achat)
-                    .Where(la => la.ArticleId == besoin.ArticleId &&
-                                la.TypeDestination == TypeDestinationAchat.Marque &&
-                                la.ClientId == commande.ClientId &&
-                                la.Achat.Statut == StatutAchat.Confirme)
-                    .SumAsync(la => la.Quantite - la.QuantiteRecue);
-
-                var a3 = plateformeId.HasValue
-                    ? await _context.LignesAchat
-                        .Include(la => la.Achat)
-                        .Where(la => la.ArticleId == besoin.ArticleId &&
-                                    la.TypeDestination == TypeDestinationAchat.Plateforme &&
-                                    la.PlateformeId == plateformeId &&
-                                    la.Achat.Statut == StatutAchat.Confirme)
-                        .SumAsync(la => la.Quantite - la.QuantiteRecue)
-                    : 0;
-
-                var achatsEnCours = a1 + a2 + a3;
-
-                var stockDejaReserve = await _context.Stocks
+                var r2 = await _context.Stocks
                     .Where(s => s.ArticleId == besoin.ArticleId &&
-                               s.CommandeClientId == commande.Id &&
-                               s.TypeStock == TypeStock.Reserve)
+                               s.TypeStock == TypeStock.Reserve &&
+                               s.ClientId == commande.ClientId &&
+                               s.CommandeClientId == null &&
+                               s.Quantite > 0)
                     .SumAsync(s => s.Quantite);
 
-                besoin.QuantiteAchatsLocaux = achatsEnCours + stockDejaReserve;
+                var r3 = plateformeId.HasValue
+                    ? await _context.Stocks
+                        .Where(s => s.ArticleId == besoin.ArticleId &&
+                                   s.TypeStock == TypeStock.Reserve &&
+                                   s.PlateformeId == plateformeId &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite)
+                    : 0;
+
+                var r4 = groupeCommandeIds.Any()
+                    ? await _context.Stocks
+                        .Where(s => s.ArticleId == besoin.ArticleId &&
+                                   s.TypeStock == TypeStock.Reserve &&
+                                   s.GroupeCommandeId.HasValue &&
+                                   groupeCommandeIds.Contains(s.GroupeCommandeId.Value) &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite)
+                    : 0;
+
+                var stockImporte = s1 + s2 + s3 + s4;
+                besoin.QuantiteStockImporte = Math.Min(stockImporte, besoin.QuantiteTotale);
+                var stockAchatsLocaux = r1 + r2 + r3 + r4;
+                besoin.QuantiteAchatsLocaux = Math.Min(stockAchatsLocaux, besoin.QuantiteTotale - besoin.QuantiteStockImporte);
 
                 var quantiteRestante = besoin.QuantiteTotale - besoin.QuantiteStockImporte - besoin.QuantiteAchatsLocaux;
 
                 if (quantiteRestante > 0)
                 {
-                    var stockLibre = await _context.Stocks
+                    var s5 = await _context.Stocks
                         .Where(s => s.ArticleId == besoin.ArticleId &&
                                    s.TypeStock == TypeStock.Libre &&
                                    s.Quantite > s.QuantiteReservee)
                         .SumAsync(s => s.Quantite - s.QuantiteReservee);
 
-                    besoin.QuantiteStockLibre = Math.Min(stockLibre, quantiteRestante);
+                    besoin.QuantiteStockLibre = Math.Min(s5, quantiteRestante);
                 }
 
                 besoin.QuantiteCouverte = besoin.QuantiteStockImporte + besoin.QuantiteAchatsLocaux + besoin.QuantiteStockLibre;
                 besoin.EstCompletementCouvert = besoin.QuantiteCouverte >= besoin.QuantiteTotale;
+
+                if (besoin.EstCompletementCouvert && (s1 + r1) < besoin.QuantiteTotale)
+                {
+                    var aReclamer = besoin.QuantiteTotale - s1 - r1;
+                    await ScinderStock(besoin.ArticleId, aReclamer, s2, s3, s4, r2, r3, r4,
+                        commande.Id, commande.ClientId, plateformeId, groupeCommandeIds);
+                }
 
                 totalCouverture += (besoin.QuantiteCouverte / besoin.QuantiteTotale) * 100;
                 besoinsTraites++;
@@ -314,13 +333,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             commande.PourcentageRessourcesCouvertes = besoinsTraites > 0 ? totalCouverture / besoinsTraites : 0;
 
             if (commande.PourcentageRessourcesCouvertes >= 100)
-            {
                 commande.Statut = StatutCommande.Prete;
-            }
             else
-            {
                 commande.Statut = StatutCommande.EnAttente;
-            }
 
             commande.DateMiseAJour = DateTime.Now;
             await _context.SaveChangesAsync();
@@ -331,6 +346,183 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 pourcentageCouverture = commande.PourcentageRessourcesCouvertes,
                 statut = commande.Statut.ToString()
             });
+        }
+
+        /// <summary>
+        /// Ordre de consommation (déterministe) :
+        /// 1. Importe exclusif commande (s1) — déjà compté, pas ici
+        /// 2. Reserve exclusif commande (r1) — déjà compté, pas ici
+        /// 3. Importe partagé : Client (s2) → Plateforme (s3) → Groupe (s4)
+        /// 4. Reserve partagé : Client (r2) → Plateforme (r3) → Groupe (r4)
+        /// 5. Libre non réservé
+        /// </summary>
+        private async Task ScinderStock(int articleId, decimal aReclamer,
+            decimal s2, decimal s3, decimal s4, decimal r2, decimal r3, decimal r4,
+            int commandeClientId, int? clientClientId, int? plateformeId,
+            List<int> groupeCommandeIds)
+        {
+            var restant = aReclamer;
+
+            if (restant > 0 && s2 > 0)
+            {
+                var prendre = Math.Min(restant, s2);
+                await ScinderDepuisScope(articleId, TypeStock.Importe, prendre, commandeClientId,
+                    clientClientId, null, null);
+                restant -= prendre;
+            }
+
+            if (restant > 0 && s3 > 0 && plateformeId.HasValue)
+            {
+                var prendre = Math.Min(restant, s3);
+                await ScinderDepuisScope(articleId, TypeStock.Importe, prendre, commandeClientId,
+                    null, plateformeId, null);
+                restant -= prendre;
+            }
+
+            if (restant > 0 && s4 > 0 && groupeCommandeIds.Any())
+            {
+                foreach (var gid in groupeCommandeIds)
+                {
+                    if (restant <= 0) break;
+                    var disponible = await _context.Stocks
+                        .Where(s => s.ArticleId == articleId &&
+                                   s.TypeStock == TypeStock.Importe &&
+                                   s.GroupeCommandeId == gid &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite);
+                    if (disponible > 0)
+                    {
+                        var prendre = Math.Min(restant, disponible);
+                        await ScinderDepuisScope(articleId, TypeStock.Importe, prendre, commandeClientId,
+                            null, null, gid);
+                        restant -= prendre;
+                    }
+                }
+            }
+
+            if (restant > 0 && r2 > 0)
+            {
+                var prendre = Math.Min(restant, r2);
+                await ScinderDepuisScope(articleId, TypeStock.Reserve, prendre, commandeClientId,
+                    clientClientId, null, null);
+                restant -= prendre;
+            }
+
+            if (restant > 0 && r3 > 0 && plateformeId.HasValue)
+            {
+                var prendre = Math.Min(restant, r3);
+                await ScinderDepuisScope(articleId, TypeStock.Reserve, prendre, commandeClientId,
+                    null, plateformeId, null);
+                restant -= prendre;
+            }
+
+            if (restant > 0 && r4 > 0 && groupeCommandeIds.Any())
+            {
+                foreach (var gid in groupeCommandeIds)
+                {
+                    if (restant <= 0) break;
+                    var disponible = await _context.Stocks
+                        .Where(s => s.ArticleId == articleId &&
+                                   s.TypeStock == TypeStock.Reserve &&
+                                   s.GroupeCommandeId == gid &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite);
+                    if (disponible > 0)
+                    {
+                        var prendre = Math.Min(restant, disponible);
+                        await ScinderDepuisScope(articleId, TypeStock.Reserve, prendre, commandeClientId,
+                            null, null, gid);
+                        restant -= prendre;
+                    }
+                }
+            }
+
+            if (restant > 0)
+            {
+                var libre = await _context.Stocks
+                    .Where(s => s.ArticleId == articleId &&
+                               s.TypeStock == TypeStock.Libre &&
+                               s.Quantite > s.QuantiteReservee)
+                    .SumAsync(s => s.Quantite - s.QuantiteReservee);
+                if (libre > 0)
+                {
+                    var prendre = Math.Min(restant, libre);
+                    await ScinderDepuisScope(articleId, TypeStock.Libre, prendre, commandeClientId,
+                        null, null, null);
+                }
+            }
+        }
+
+        /// <summary>
+        /// LOT 2.3 : Scission physique — retire depuis un scope partagé et crée un Stock
+        /// exclusif (CommandeClientId renseigné). Préserve le scope partagé d'origine
+        /// (ClientId/PlateformeId/GroupeCommandeId) pour permettre la libération (LOT 3).
+        /// Supprime la ligne source si entièrement consommée. Crée un MouvementStock
+        /// de type Transfert pour chaque ligne scindée.
+        /// </summary>
+        private async Task ScinderDepuisScope(int articleId, TypeStock typeStock, decimal quantite,
+            int commandeClientId, int? clientId, int? plateformeId, int? groupeCommandeId)
+        {
+            var lignes = await _context.Stocks
+                .Where(s => s.ArticleId == articleId &&
+                           s.TypeStock == typeStock &&
+                           s.Quantite > 0 &&
+                           s.CommandeClientId == null &&
+                           (clientId.HasValue ? s.ClientId == clientId.Value : s.ClientId == null) &&
+                           (plateformeId.HasValue ? s.PlateformeId == plateformeId.Value : s.PlateformeId == null) &&
+                           (groupeCommandeId.HasValue ? s.GroupeCommandeId == groupeCommandeId.Value : s.GroupeCommandeId == null))
+                .ToListAsync();
+
+            var restant = quantite;
+            foreach (var ligne in lignes)
+            {
+                if (restant <= 0) break;
+                var prendre = Math.Min(restant, ligne.Quantite);
+                var sourceId = ligne.Id;
+
+                if (prendre == ligne.Quantite)
+                {
+                    // LOT 2.3 : supprimer la ligne source plutôt que laisser à 0
+                    _context.Stocks.Remove(ligne);
+                }
+                else
+                {
+                    ligne.Quantite -= prendre;
+                }
+
+                // LOT 2.3 : conserver le scope d'origine pour permettre la libération (LOT 3)
+                _context.Stocks.Add(new Stock
+                {
+                    ArticleId = articleId,
+                    TypeStock = typeStock,
+                    Quantite = prendre,
+                    CommandeClientId = commandeClientId,
+                    ClientId = ligne.ClientId,
+                    PlateformeId = ligne.PlateformeId,
+                    GroupeCommandeId = ligne.GroupeCommandeId,
+                    PrixUnitaire = ligne.PrixUnitaire,
+                    Devise = ligne.Devise,
+                    DateEntree = ligne.DateEntree,
+                    EstValide = ligne.EstValide,
+                    ValidePar = ligne.ValidePar
+                });
+
+                // LOT 2.3 : MouvementStock Transfert pour traçabilité
+                _context.MouvementsStock.Add(new MouvementStock
+                {
+                    StockId = sourceId,
+                    TypeMouvement = TypeMouvement.Transfert,
+                    Quantite = prendre,
+                    DateMouvement = DateTime.Now,
+                    Notes = $"Scission physique scope partagé → exclusif commande #{commandeClientId}"
+                });
+
+                restant -= prendre;
+            }
         }
 
         [HttpPost("{id}/GenererTaches")]

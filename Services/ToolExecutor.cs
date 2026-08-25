@@ -461,8 +461,8 @@ namespace Backend_Gestion_Magasin_API.Services
                 new
                 {
                     nom = "LigneAchat",
-                    description = "Article acheté. TypeDestination : Commande(0), Marque(1), Plateforme(2), StockLibre(3). Une ligne de destination Plateforme a un PlateformeId.",
-                    relations = "LigneAchat → Article ; LigneAchat → Plateforme (si destination Plateforme).",
+                    description = "Article acheté. TypeDestination : Commande(0), Marque(1), Plateforme(2), StockLibre(3), GroupeCommandes(4). Une ligne de destination Plateforme a un PlateformeId. Une ligne GroupeCommandes a un GroupeCommandeId.",
+                    relations = "LigneAchat → Article ; LigneAchat → Plateforme (si destination Plateforme) ; LigneAchat → GroupeCommande (si destination GroupeCommandes).",
                     motsCles = "ligne achat article achete"
                 },
                 new
@@ -475,8 +475,8 @@ namespace Backend_Gestion_Magasin_API.Services
                 new
                 {
                     nom = "LigneImportation",
-                    description = "Article importé. TypeDestination : Commande(0), Marque(1), Plateforme(2), StockLibre(3). PlateformeId pour une destination Plateforme. L'origine (Fournisseur ou Plateforme) est portée par l'Importation (en-tête), pas par la ligne.",
-                    relations = "LigneImportation → Article ; LigneImportation → Plateforme (destination).",
+                    description = "Article importé. TypeDestination : Commande(0), Marque(1), Plateforme(2), StockLibre(3), GroupeCommandes(4). PlateformeId pour une destination Plateforme. GroupeCommandeId pour une destination Groupe de commandes. L'origine (Fournisseur ou Plateforme) est portée par l'Importation (en-tête), pas par la ligne.",
+                    relations = "LigneImportation → Article ; LigneImportation → Plateforme (destination) ; LigneImportation → GroupeCommande (si destination GroupeCommandes).",
                     motsCles = "ligne importation article importe"
                 },
                 new
@@ -496,8 +496,8 @@ namespace Backend_Gestion_Magasin_API.Services
                 new
                 {
                     nom = "Stock",
-                    description = "Stock d'un article. TypeStock : Libre(0), Reserve(1), Importe(2). Quantite, QuantiteReservee, scopes optionnels (CommandeClientId, ClientId, PlateformeId).",
-                    relations = "Stock → Article.",
+                    description = "Stock d'un article. TypeStock : Libre(0), Reserve(1), Importe(2). Quantite, QuantiteReservee, scopes optionnels (CommandeClientId, ClientId, PlateformeId, GroupeCommandeId).",
+                    relations = "Stock → Article ; Stock → GroupeCommande (si scope GroupeCommandes).",
                     motsCles = "stock inventaire quantite"
                 },
                 new
@@ -520,6 +520,13 @@ namespace Backend_Gestion_Magasin_API.Services
                     description = "Besoin matière première d'une commande pour un article. QuantiteUnitaire, NombrePieces, QuantiteTotale.",
                     relations = "BesoinCommande → CommandeClient ; BesoinCommande → Article.",
                     motsCles = "besoin besoins matiere"
+                },
+                new
+                {
+                    nom = "GroupeCommande",
+                    description = "Groupe de commandes clients. Regroupe plusieurs commandes sous un même identifiant pour partager une destination d'achat/importation. Statuts couverts par ValiderRessources : physique only.",
+                    relations = "GroupeCommande → GroupeCommandeCommandes → CommandeClient ; GroupeCommande ← Stock (scope).",
+                    motsCles = "groupe commandes groupes"
                 }
             };
 

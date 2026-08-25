@@ -9,6 +9,7 @@ namespace Backend_Gestion_Magasin_API.Models
         Marque,
         Plateforme,
         StockLibre,
+        GroupeCommandes,
     }
 
     public enum StatutLigneImportation
@@ -80,6 +81,9 @@ namespace Backend_Gestion_Magasin_API.Models
         [ForeignKey("Plateforme")]
         public int? PlateformeId { get; set; }
 
+        [ForeignKey("GroupeCommande")]
+        public int? GroupeCommandeId { get; set; }
+
         public DateTime DateCreation { get; set; } = DateTime.Now;
 
         // Relations
@@ -88,6 +92,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public virtual CommandeClient? CommandeClient { get; set; }
         public virtual Client? Client { get; set; }
         public virtual Plateforme? Plateforme { get; set; }
+        public virtual GroupeCommande? GroupeCommande { get; set; }
     }
 }
 

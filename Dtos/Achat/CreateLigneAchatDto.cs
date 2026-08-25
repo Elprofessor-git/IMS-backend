@@ -22,6 +22,10 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
 
         public int? PlateformeId { get; set; }
 
+        public int? GroupeCommandeId { get; set; }
+
+        public List<int>? CommandeClientIds { get; set; }
+
         [StringLength(50)]
         public string? Couleur { get; set; }
 
