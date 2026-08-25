@@ -645,16 +645,55 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var resultats = new List<ResultatCalcul>();
             decimal marge = request.MargeAppliquee;
 
+            var groupeCommandeIds = await _context.GroupeCommandeCommandes
+                .Where(gcc => gcc.CommandeClientId == commande.Id)
+                .Select(gcc => gcc.GroupeCommandeId)
+                .ToListAsync();
+
             foreach (var ligne in bomLignes)
             {
                 var besoinBrut = ligne.QuantiteParPiece * totalPieces;
                 var besoinFinal = besoinBrut * (1 + marge / 100);
 
-                var qteStockReserve = await _context.Stocks
+                var r1 = await _context.Stocks
                     .Where(s => s.ArticleId == ligne.ArticleId &&
+                               s.TypeStock == TypeStock.Reserve &&
                                s.CommandeClientId == id &&
-                               s.TypeStock == TypeStock.Reserve)
+                               s.Quantite > 0)
                     .SumAsync(s => s.Quantite);
+
+                var r2 = await _context.Stocks
+                    .Where(s => s.ArticleId == ligne.ArticleId &&
+                               s.TypeStock == TypeStock.Reserve &&
+                               s.ClientId == commande.ClientId &&
+                               s.CommandeClientId == null &&
+                               s.Quantite > 0)
+                    .SumAsync(s => s.Quantite);
+
+                var r3 = bomPlateformeId.HasValue
+                    ? await _context.Stocks
+                        .Where(s => s.ArticleId == ligne.ArticleId &&
+                                   s.TypeStock == TypeStock.Reserve &&
+                                   s.PlateformeId == bomPlateformeId &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite)
+                    : 0;
+
+                var r4 = groupeCommandeIds.Any()
+                    ? await _context.Stocks
+                        .Where(s => s.ArticleId == ligne.ArticleId &&
+                                   s.TypeStock == TypeStock.Reserve &&
+                                   s.GroupeCommandeId.HasValue &&
+                                   groupeCommandeIds.Contains(s.GroupeCommandeId.Value) &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite)
+                    : 0;
+
+                var qteStockReserve = r1 + r2 + r3 + r4;
 
                 var b1 = await _context.LignesAchat
                     .Include(la => la.Achat)
