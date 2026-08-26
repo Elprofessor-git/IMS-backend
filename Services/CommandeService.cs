@@ -4,6 +4,31 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Services
 {
+    public class CommandeProjection
+    {
+        public int Id { get; set; }
+        public string NumeroCommande { get; set; } = string.Empty;
+        public string? TitreCommande { get; set; }
+        public StatutCommande Statut { get; set; }
+        public DateTime DateCreation { get; set; }
+        public DateTime? DateLivraisonSouhaitee { get; set; }
+        public decimal MontantTotal { get; set; }
+        public decimal PourcentageRessourcesCouvertes { get; set; }
+        public CommandeClientNom? Client { get; set; }
+    }
+
+    public class CommandeClientNom
+    {
+        public string Nom { get; set; } = string.Empty;
+        public string? NomEntreprise { get; set; }
+        public CommandePlateformeNom? Plateforme { get; set; }
+    }
+
+    public class CommandePlateformeNom
+    {
+        public string Nom { get; set; } = string.Empty;
+    }
+
     public class CommandeService
     {
         private readonly ApplicationDbContext _context;
@@ -13,13 +38,29 @@ namespace Backend_Gestion_Magasin_API.Services
             _context = context;
         }
 
-        public async Task<List<CommandeClient>> GetAllCommandesAsync()
+        public async Task<List<CommandeProjection>> GetAllCommandesAsync()
         {
             return await _context.CommandesClients
-                .Include(c => c.Client)
-                .ThenInclude(cl => cl.Plateforme)
-                .Include(c => c.Besoins)
-                .ThenInclude(b => b.Article)
+                .Select(c => new CommandeProjection
+                {
+                    Id = c.Id,
+                    NumeroCommande = c.NumeroCommande,
+                    TitreCommande = c.TitreCommande,
+                    Statut = c.Statut,
+                    DateCreation = c.DateCreation,
+                    DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
+                    MontantTotal = c.MontantTotal,
+                    PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
+                    Client = c.Client != null ? new CommandeClientNom
+                    {
+                        Nom = c.Client.Nom,
+                        NomEntreprise = c.Client.NomEntreprise,
+                        Plateforme = c.Client.Plateforme != null ? new CommandePlateformeNom
+                        {
+                            Nom = c.Client.Plateforme.Nom
+                        } : null
+                    } : null
+                })
                 .ToListAsync();
         }
 

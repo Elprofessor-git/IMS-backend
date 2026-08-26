@@ -23,56 +23,154 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpGet]
         [RequireModulePermission("commandes", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<CommandeClient>>> GetCommandes([FromQuery] string? recherche)
+        public async Task<ActionResult<IEnumerable<CommandeListDto>>> GetCommandes([FromQuery] string? recherche)
         {
-            var query = _context.CommandesClients
-                .Include(c => c.Client)
-                .ThenInclude(cl => cl.Plateforme)
-                .Include(c => c.Besoins)
-                .ThenInclude(b => b.Article)
-                .AsQueryable();
+            var query = _context.CommandesClients.AsQueryable();
 
             query = AppliquerRecherche(query, recherche);
 
-            return await query.ToListAsync();
+            return await query.Select(c => new CommandeListDto
+            {
+                Id = c.Id,
+                NumeroCommande = c.NumeroCommande,
+                TitreCommande = c.TitreCommande,
+                Statut = c.Statut,
+                PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
+                DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
+                ClientId = c.ClientId,
+                Client = c.Client != null ? new CommandeClientInfoDto
+                {
+                    Id = c.Client.Id,
+                    Nom = c.Client.Nom,
+                    Plateforme = c.Client.Plateforme != null ? new CommandePlateformeInfoDto
+                    {
+                        Nom = c.Client.Plateforme.Nom
+                    } : null
+                } : null
+            }).ToListAsync();
         }
 
         [HttpGet("{id}")]
         [RequireModulePermission("commandes", requireWrite: false)]
-        public async Task<ActionResult<CommandeClient>> GetCommandeClient(int id)
+        public async Task<ActionResult<CommandeDetailDto>> GetCommandeClient(int id)
         {
-            var commande = await _context.CommandesClients
-                .Include(c => c.Client)
-                .ThenInclude(cl => cl.Plateforme)
-                .Include(c => c.Besoins)
-                .ThenInclude(b => b.Article)
-                .Include(c => c.Taches)
-                .Include(c => c.Achats)
-                .Include(c => c.ConfigTailles)
-                .Include(c => c.BomLignes)
-                .ThenInclude(bl => bl.Article)
-                .FirstOrDefaultAsync(c => c.Id == id);
+            var dto = await _context.CommandesClients
+                .Where(c => c.Id == id)
+                .Select(c => new CommandeDetailDto
+                {
+                    Id = c.Id,
+                    NumeroCommande = c.NumeroCommande,
+                    TitreCommande = c.TitreCommande,
+                    DescriptionCommande = c.DescriptionCommande,
+                    Statut = c.Statut,
+                    DateCommande = c.DateCommande,
+                    DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
+                    ClientId = c.ClientId,
+                    MontantTotal = c.MontantTotal,
+                    Devise = c.Devise,
+                    PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
+                    NotesSpeciales = c.NotesSpeciales,
+                    SpecificationsClient = c.SpecificationsClient,
+                    DateCreation = c.DateCreation,
+                    DateMiseAJour = c.DateMiseAJour,
+                    CreePar = c.CreePar,
+                    ModifiePar = c.ModifiePar,
+                    Client = c.Client != null ? new CommandeDetailClientDto
+                    {
+                        Id = c.Client.Id,
+                        Nom = c.Client.Nom,
+                        Prenom = c.Client.Prenom,
+                        Plateforme = c.Client.Plateforme != null ? new CommandePlateformeInfoDto
+                        {
+                            Nom = c.Client.Plateforme.Nom
+                        } : null
+                    } : null,
+                    Besoins = c.Besoins.Select(b => new BesoinCommandeDto
+                    {
+                        Id = b.Id,
+                        CommandeClientId = b.CommandeClientId,
+                        ArticleId = b.ArticleId,
+                        TypeBesoin = b.TypeBesoin,
+                        Couleur = b.Couleur,
+                        Taille = b.Taille,
+                        Dimension = b.Dimension,
+                        QuantiteUnitaire = b.QuantiteUnitaire,
+                        NombrePieces = b.NombrePieces,
+                        QuantiteTotale = b.QuantiteTotale,
+                        QuantiteCouverte = b.QuantiteCouverte,
+                        QuantiteStockImporte = b.QuantiteStockImporte,
+                        QuantiteAchatsLocaux = b.QuantiteAchatsLocaux,
+                        QuantiteStockLibre = b.QuantiteStockLibre,
+                        EstCompletementCouvert = b.EstCompletementCouvert,
+                        Notes = b.Notes,
+                        DateCreation = b.DateCreation,
+                        Article = b.Article != null ? new BesoinArticleDto
+                        {
+                            Id = b.Article.Id,
+                            Designation = b.Article.Designation,
+                            Reference = b.Article.Reference
+                        } : null
+                    }).ToList(),
+                    ConfigTailles = c.ConfigTailles.Select(ct => new ConfigTailleItemDto
+                    {
+                        Id = ct.Id,
+                        CommandeId = ct.CommandeId,
+                        Taille = ct.Taille,
+                        Quantite = ct.Quantite
+                    }).ToList(),
+                    BomLignes = c.BomLignes.Select(bl => new BomLigneItemDto
+                    {
+                        Id = bl.Id,
+                        CommandeId = bl.CommandeId,
+                        ArticleId = bl.ArticleId,
+                        QuantiteParPiece = bl.QuantiteParPiece,
+                        Unite = bl.Unite,
+                        Article = bl.Article != null ? new BesoinArticleDto
+                        {
+                            Id = bl.Article.Id,
+                            Designation = bl.Article.Designation,
+                            Reference = bl.Article.Reference
+                        } : null
+                    }).ToList()
+                })
+                .FirstOrDefaultAsync();
 
-            if (commande == null)
+            if (dto == null)
             {
                 return NotFound();
             }
 
-            return commande;
+            return dto;
         }
 
         [HttpGet("Statut/{statut}")]
         [RequireModulePermission("commandes", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<CommandeClient>>> GetCommandesByStatut(StatutCommande statut, [FromQuery] string? recherche)
+        public async Task<ActionResult<IEnumerable<CommandeListDto>>> GetCommandesByStatut(StatutCommande statut, [FromQuery] string? recherche)
         {
             var query = _context.CommandesClients
-                .Include(c => c.Client)
-                .ThenInclude(cl => cl.Plateforme)
                 .Where(c => c.Statut == statut);
 
             query = AppliquerRecherche(query, recherche);
 
-            return await query.ToListAsync();
+            return await query.Select(c => new CommandeListDto
+            {
+                Id = c.Id,
+                NumeroCommande = c.NumeroCommande,
+                TitreCommande = c.TitreCommande,
+                Statut = c.Statut,
+                PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
+                DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
+                ClientId = c.ClientId,
+                Client = c.Client != null ? new CommandeClientInfoDto
+                {
+                    Id = c.Client.Id,
+                    Nom = c.Client.Nom,
+                    Plateforme = c.Client.Plateforme != null ? new CommandePlateformeInfoDto
+                    {
+                        Nom = c.Client.Plateforme.Nom
+                    } : null
+                } : null
+            }).ToListAsync();
         }
 
         // Recherche texte combinable (façon Excel) : numéro, titre, client ou marque.

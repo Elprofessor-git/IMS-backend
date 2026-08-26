@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Filters;
+using Backend_Gestion_Magasin_API.Dtos.Client;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
@@ -31,19 +32,36 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpGet("{id}")]
         [RequireModulePermission("clients", requireWrite: false)]
-        public async Task<ActionResult<Client>> GetClient(int id)
+        public async Task<ActionResult<ClientDetailDto>> GetClient(int id)
         {
-            var client = await _context.Clients
-                .Include(c => c.Plateforme)
-                .Include(c => c.Commandes)
-                .FirstOrDefaultAsync(c => c.Id == id);
+            var dto = await _context.Clients
+                .Where(c => c.Id == id)
+                .Select(c => new ClientDetailDto
+                {
+                    Id = c.Id,
+                    Nom = c.Nom,
+                    Prenom = c.Prenom,
+                    NomEntreprise = c.NomEntreprise,
+                    Email = c.Email,
+                    Telephone = c.Telephone,
+                    Adresse = c.Adresse,
+                    Ville = c.Ville,
+                    CodePostal = c.CodePostal,
+                    Pays = c.Pays,
+                    PreferencesTissus = c.PreferencesTissus,
+                    NotesHistorique = c.NotesHistorique,
+                    PlateformeId = c.PlateformeId,
+                    EstActif = c.EstActif,
+                    DateCreation = c.DateCreation
+                })
+                .FirstOrDefaultAsync();
 
-            if (client == null)
+            if (dto == null)
             {
                 return NotFound();
             }
 
-            return client;
+            return dto;
         }
 
         [HttpGet("ByPlateforme/{plateformeId}")]

@@ -26,37 +26,120 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpGet]
         [RequireModulePermission("achats", requireWrite: false)]
-        public async Task<ActionResult<IEnumerable<Achat>>> GetAchats()
+        public async Task<ActionResult<IEnumerable<AchatListDto>>> GetAchats()
         {
             return await _context.Achats
-                .Include(a => a.Fournisseur)
-                .Include(a => a.CommandeClient)
-                .ThenInclude(c => c.Client)
-                .ThenInclude(cl => cl.Plateforme)
-                .Include(a => a.LignesAchat)
-                .ThenInclude(la => la.Article)
+                .Select(a => new AchatListDto
+                {
+                    Id = a.Id,
+                    NumeroAchat = a.NumeroAchat,
+                    DateAchat = a.DateAchat,
+                    Statut = a.Statut,
+                    MontantTotal = a.MontantTotal,
+                    Devise = a.Devise,
+                    Fournisseur = a.Fournisseur != null ? new AchatFournisseurDto
+                    {
+                        Id = a.Fournisseur.Id,
+                        NomEntreprise = a.Fournisseur.NomEntreprise
+                    } : null,
+                    CommandeClient = a.CommandeClient != null ? new AchatCommandeClientDto
+                    {
+                        Id = a.CommandeClient.Id,
+                        NumeroCommande = a.CommandeClient.NumeroCommande,
+                        TitreCommande = a.CommandeClient.TitreCommande,
+                        Client = a.CommandeClient.Client != null ? new AchatClientDto
+                        {
+                            Id = a.CommandeClient.Client.Id,
+                            Nom = a.CommandeClient.Client.Nom,
+                            Plateforme = a.CommandeClient.Client.Plateforme != null ? new AchatPlateformeDto
+                            {
+                                Nom = a.CommandeClient.Client.Plateforme.Nom
+                            } : null
+                        } : null
+                    } : null
+                })
                 .ToListAsync();
         }
 
         [HttpGet("{id}")]
         [RequireModulePermission("achats", requireWrite: false)]
-        public async Task<ActionResult<Achat>> GetAchat(int id)
+        public async Task<ActionResult<AchatDetailDto>> GetAchat(int id)
         {
-            var achat = await _context.Achats
-                .Include(a => a.Fournisseur)
-                .Include(a => a.CommandeClient)
-                .ThenInclude(c => c.Client)
-                .ThenInclude(cl => cl.Plateforme)
-                .Include(a => a.LignesAchat)
-                .ThenInclude(la => la.Article)
-                .FirstOrDefaultAsync(a => a.Id == id);
+            var dto = await _context.Achats
+                .Where(a => a.Id == id)
+                .Select(a => new AchatDetailDto
+                {
+                    Id = a.Id,
+                    NumeroAchat = a.NumeroAchat,
+                    DateAchat = a.DateAchat,
+                    DateLivraisonPrevue = a.DateLivraisonPrevue,
+                    DateLivraisonReelle = a.DateLivraisonReelle,
+                    Statut = a.Statut,
+                    MontantTotal = a.MontantTotal,
+                    Devise = a.Devise,
+                    ConditionsPaiement = a.ConditionsPaiement,
+                    NotesAchat = a.NotesAchat,
+                    CreePar = a.CreePar,
+                    FournisseurId = a.FournisseurId,
+                    CommandeClientId = a.CommandeClientId,
+                    Fournisseur = a.Fournisseur != null ? new AchatFournisseurDto
+                    {
+                        Id = a.Fournisseur.Id,
+                        NomEntreprise = a.Fournisseur.NomEntreprise
+                    } : null,
+                    CommandeClient = a.CommandeClient != null ? new AchatCommandeClientDto
+                    {
+                        Id = a.CommandeClient.Id,
+                        NumeroCommande = a.CommandeClient.NumeroCommande,
+                        TitreCommande = a.CommandeClient.TitreCommande,
+                        Client = a.CommandeClient.Client != null ? new AchatClientDto
+                        {
+                            Id = a.CommandeClient.Client.Id,
+                            Nom = a.CommandeClient.Client.Nom,
+                            Plateforme = a.CommandeClient.Client.Plateforme != null ? new AchatPlateformeDto
+                            {
+                                Nom = a.CommandeClient.Client.Plateforme.Nom
+                            } : null
+                        } : null
+                    } : null,
+                    LignesAchat = a.LignesAchat.Select(l => new LigneAchatDto
+                    {
+                        Id = l.Id,
+                        ArticleId = l.ArticleId,
+                        Quantite = l.Quantite,
+                        QuantiteRecue = l.QuantiteRecue,
+                        StatutLigne = l.StatutLigne,
+                        PrixUnitaire = l.PrixUnitaire,
+                        MontantLigne = l.MontantLigne,
+                        Devise = l.Devise,
+                        Unite = l.Unite,
+                        Couleur = l.Couleur,
+                        CodeCouleur = l.CodeCouleur,
+                        Taille = l.Taille,
+                        Dimension = l.Dimension,
+                        DescriptionSpecifique = l.DescriptionSpecifique,
+                        TypeDestination = l.TypeDestination,
+                        CommandeClientId = l.CommandeClientId,
+                        ClientId = l.ClientId,
+                        PlateformeId = l.PlateformeId,
+                        GroupeCommandeId = l.GroupeCommandeId,
+                        EstAffecteStock = false,
+                        Article = l.Article != null ? new LigneAchatArticleDto
+                        {
+                            Id = l.Article.Id,
+                            Designation = l.Article.Designation,
+                            Reference = l.Article.Reference
+                        } : null
+                    }).ToList()
+                })
+                .FirstOrDefaultAsync();
 
-            if (achat == null)
+            if (dto == null)
             {
                 return NotFound();
             }
 
-            return achat;
+            return dto;
         }
 
         [HttpGet("ByCommande/{commandeId}")]

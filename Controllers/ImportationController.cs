@@ -38,25 +38,74 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         [HttpGet("{id}")]
         [RequireModulePermission("importations", requireWrite: false)]
-        public async Task<ActionResult<Importation>> GetImportation(int id)
+        public async Task<ActionResult<ImportationDetailDto>> GetImportation(int id)
         {
-            var importation = await _context.Importations
-                .Include(i => i.Fournisseur)
-                .Include(i => i.Plateforme)
-                .Include(i => i.LignesImportation)
-                .ThenInclude(li => li.Article)
-                .Include(i => i.LignesImportation)
-                .ThenInclude(li => li.CommandeClient)
-                .ThenInclude(c => c.Client)
-                .ThenInclude(cl => cl.Plateforme)
-                .FirstOrDefaultAsync(i => i.Id == id);
+            var dto = await _context.Importations
+                .Where(i => i.Id == id)
+                .Select(i => new ImportationDetailDto
+                {
+                    Id = i.Id,
+                    ReferenceImportation = i.ReferenceImportation,
+                    FournisseurId = i.FournisseurId,
+                    PlateformeId = i.PlateformeId,
+                    Statut = i.Statut,
+                    DateImportation = i.DateImportation,
+                    DateReceptionPrevue = i.DateReceptionPrevue,
+                    DateReceptionReelle = i.DateReceptionReelle,
+                    ModeExpedition = i.ModeExpedition,
+                    MontantTotal = i.MontantTotal,
+                    Devise = i.Devise,
+                    NotesImportation = i.NotesImportation,
+                    CreePar = i.CreePar,
+                    ModifiePar = i.ModifiePar,
+                    Fournisseur = i.Fournisseur != null ? new ImportationFournisseurDto
+                    {
+                        Id = i.Fournisseur.Id,
+                        NomEntreprise = i.Fournisseur.NomEntreprise
+                    } : null,
+                    Plateforme = i.Plateforme != null ? new ImportationPlateformeDto
+                    {
+                        Id = i.Plateforme.Id,
+                        Nom = i.Plateforme.Nom
+                    } : null,
+                    LignesImportation = i.LignesImportation.Select(l => new LigneImportationDto
+                    {
+                        Id = l.Id,
+                        ArticleId = l.ArticleId,
+                        CommandeClientId = l.CommandeClientId,
+                        ClientId = l.ClientId,
+                        PlateformeId = l.PlateformeId,
+                        GroupeCommandeId = l.GroupeCommandeId,
+                        TypeDestination = l.TypeDestination,
+                        Designation = l.Designation,
+                        Couleur = l.Couleur,
+                        CodeCouleur = l.CodeCouleur,
+                        Dimension = l.Dimension,
+                        Nature = l.Nature,
+                        Quantite = l.Quantite,
+                        QuantiteRecue = l.QuantiteRecue,
+                        StatutLigne = l.StatutLigne,
+                        PrixUnitaire = l.PrixUnitaire,
+                        MontantLigne = l.MontantLigne,
+                        Devise = l.Devise,
+                        Unite = l.Unite,
+                        EstAffecteStock = l.EstAffecteStock,
+                        Article = l.Article != null ? new ImportationLigneArticleDto
+                        {
+                            Id = l.Article.Id,
+                            Designation = l.Article.Designation,
+                            Reference = l.Article.Reference
+                        } : null
+                    }).ToList()
+                })
+                .FirstOrDefaultAsync();
 
-            if (importation == null)
+            if (dto == null)
             {
                 return NotFound();
             }
 
-            return importation;
+            return dto;
         }
 
         [HttpGet("Statut/{statut}")]
