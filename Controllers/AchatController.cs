@@ -34,9 +34,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Id = a.Id,
                     NumeroAchat = a.NumeroAchat,
                     DateAchat = a.DateAchat,
+                    DateLivraisonPrevue = a.DateLivraisonPrevue,
                     Statut = a.Statut,
                     MontantTotal = a.MontantTotal,
                     Devise = a.Devise,
+                    FournisseurId = a.FournisseurId,
+                    CommandeClientId = a.CommandeClientId,
+                    CreePar = a.CreePar,
                     Fournisseur = a.Fournisseur != null ? new AchatFournisseurDto
                     {
                         Id = a.Fournisseur.Id,
@@ -53,10 +57,41 @@ namespace Backend_Gestion_Magasin_API.Controllers
                             Nom = a.CommandeClient.Client.Nom,
                             Plateforme = a.CommandeClient.Client.Plateforme != null ? new AchatPlateformeDto
                             {
+                                Id = a.CommandeClient.Client.Plateforme.Id,
                                 Nom = a.CommandeClient.Client.Plateforme.Nom
                             } : null
                         } : null
-                    } : null
+                    } : null,
+                    LignesAchat = a.LignesAchat.Select(l => new LigneAchatDto
+                    {
+                        Id = l.Id,
+                        ArticleId = l.ArticleId,
+                        Quantite = l.Quantite,
+                        QuantiteRecue = l.QuantiteRecue,
+                        StatutLigne = l.StatutLigne,
+                        PrixUnitaire = l.PrixUnitaire,
+                        MontantLigne = l.MontantLigne,
+                        Devise = l.Devise,
+                        Unite = l.Unite,
+                        Couleur = l.Couleur,
+                        CodeCouleur = l.CodeCouleur,
+                        Taille = l.Taille,
+                        Dimension = l.Dimension,
+                        DescriptionSpecifique = l.DescriptionSpecifique,
+                        Notes = l.Notes,
+                        TypeDestination = l.TypeDestination,
+                        CommandeClientId = l.CommandeClientId,
+                        ClientId = l.ClientId,
+                        PlateformeId = l.PlateformeId,
+                        GroupeCommandeId = l.GroupeCommandeId,
+                        EstAffecteStock = false,
+                        Article = l.Article != null ? new LigneAchatArticleDto
+                        {
+                            Id = l.Article.Id,
+                            Designation = l.Article.Designation,
+                            Reference = l.Article.Reference
+                        } : null
+                    }).ToList()
                 })
                 .ToListAsync();
         }
@@ -98,6 +133,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                             Nom = a.CommandeClient.Client.Nom,
                             Plateforme = a.CommandeClient.Client.Plateforme != null ? new AchatPlateformeDto
                             {
+                                Id = a.CommandeClient.Client.Plateforme.Id,
                                 Nom = a.CommandeClient.Client.Plateforme.Nom
                             } : null
                         } : null
@@ -118,6 +154,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         Taille = l.Taille,
                         Dimension = l.Dimension,
                         DescriptionSpecifique = l.DescriptionSpecifique,
+                        Notes = l.Notes,
                         TypeDestination = l.TypeDestination,
                         CommandeClientId = l.CommandeClientId,
                         ClientId = l.ClientId,
