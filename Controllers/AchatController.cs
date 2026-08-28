@@ -355,10 +355,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest("Seules les lignes en attente ou partiellement reçues peuvent être reçues partiellement");
             }
 
-            var quantiteRestante = ligne.Quantite - ligne.QuantiteRecue;
-            if (dto.Quantite <= 0 || dto.Quantite > quantiteRestante)
+            if (dto.Quantite <= 0)
             {
-                return BadRequest($"La quantité doit être comprise entre 0.01 et le reliquat restant ({quantiteRestante})");
+                return BadRequest("La quantité reçue doit être supérieure à 0");
             }
 
             // Créer le stock pour cette réception partielle
@@ -410,6 +409,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             {
                 ligne.StatutLigne = StatutLigneAchat.PartielleEnCours;
             }
+
+            // Montant reflétant la quantité réellement reçue (sur-réception incluse)
+            ligne.MontantLigne = ligne.QuantiteRecue * ligne.PrixUnitaire;
+
+            await RecalculerMontantAchat(id);
 
             await _context.SaveChangesAsync();
 
