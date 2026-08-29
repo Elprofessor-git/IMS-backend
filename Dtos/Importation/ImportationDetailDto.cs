@@ -43,6 +43,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Importation
         public int? ClientId { get; set; }
         public int? PlateformeId { get; set; }
         public int? GroupeCommandeId { get; set; }
+        public List<int> GroupeCommandeMembres { get; set; } = new();
         public TypeDestinationImportation TypeDestination { get; set; }
         public string? Designation { get; set; }
         public string? Couleur { get; set; }

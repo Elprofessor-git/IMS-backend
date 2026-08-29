@@ -44,6 +44,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
         public int? ClientId { get; set; }
         public int? PlateformeId { get; set; }
         public int? GroupeCommandeId { get; set; }
+        public List<int> GroupeCommandeMembres { get; set; } = new();
         public bool EstAffecteStock { get; set; }
         public LigneAchatArticleDto? Article { get; set; }
     }

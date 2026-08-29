@@ -28,7 +28,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("achats", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<AchatListDto>>> GetAchats()
         {
-            return await _context.Achats
+            var achats = await _context.Achats
                 .Select(a => new AchatListDto
                 {
                     Id = a.Id,
@@ -84,6 +84,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         ClientId = l.ClientId,
                         PlateformeId = l.PlateformeId,
                         GroupeCommandeId = l.GroupeCommandeId,
+                        GroupeCommandeMembres = new List<int>(),
                         EstAffecteStock = false,
                         Article = l.Article != null ? new LigneAchatArticleDto
                         {
@@ -94,6 +95,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     }).ToList()
                 })
                 .ToListAsync();
+
+            await RemplirGroupeCommandeMembres(achats.SelectMany(a => a.LignesAchat));
+
+            return achats;
         }
 
         [HttpGet("{id}")]
@@ -160,6 +165,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         ClientId = l.ClientId,
                         PlateformeId = l.PlateformeId,
                         GroupeCommandeId = l.GroupeCommandeId,
+                        GroupeCommandeMembres = new List<int>(),
                         EstAffecteStock = false,
                         Article = l.Article != null ? new LigneAchatArticleDto
                         {
@@ -175,6 +181,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             {
                 return NotFound();
             }
+
+            await RemplirGroupeCommandeMembres(dto.LignesAchat);
 
             return dto;
         }
@@ -920,6 +928,37 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             await _context.SaveChangesAsync();
             return groupe.Id;
+        }
+
+        // Référence légère : les lignes n'exposent que les IDs des commandes membres du
+        // groupe (jamais de graphe imbriqué). Deuxième aller sur GroupeCommandeCommandes,
+        // fusionnée en mémoire (uniquement des entiers) — aucune sous-requête corrélée.
+        private async Task RemplirGroupeCommandeMembres(IEnumerable<LigneAchatDto> lignes)
+        {
+            var groupesACharger = lignes
+                .Where(l => l.GroupeCommandeId.HasValue)
+                .Select(l => l.GroupeCommandeId!.Value)
+                .Distinct()
+                .ToList();
+            if (groupesACharger.Count == 0)
+                return;
+
+            var membresParGroupe = await _context.GroupeCommandeCommandes
+                .Where(gcc => groupesACharger.Contains(gcc.GroupeCommandeId))
+                .GroupBy(gcc => gcc.GroupeCommandeId)
+                .Select(g => new
+                {
+                    GroupeCommandeId = g.Key,
+                    MembresLigne = g.Select(x => x.CommandeClientId).ToList()
+                })
+                .ToDictionaryAsync(x => x.GroupeCommandeId, x => x.MembresLigne);
+
+            foreach (var ligne in lignes)
+            {
+                if (!ligne.GroupeCommandeId.HasValue) continue;
+                if (membresParGroupe.TryGetValue(ligne.GroupeCommandeId.Value, out var membres))
+                    ligne.GroupeCommandeMembres = membres;
+            }
         }
     }
 }
