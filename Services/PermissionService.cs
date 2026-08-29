@@ -65,6 +65,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 "chatbot"      => (true,                        false),
                 "dashboard"    => (role.PeutVoirDashboard,      false),
                 "rapports"     => (role.PeutVoirRapports,       false),
+                "parametres"   => (role.EstAdministrateur,      role.EstAdministrateur),
                 _              => (false,                       false),
             };
 
@@ -72,7 +73,7 @@ namespace Backend_Gestion_Magasin_API.Services
         [
             "articles", "stock", "mouvements", "achats", "importations",
             "commandes", "clients", "fournisseurs", "plateformes", "taches",
-            "utilisateurs", "roles", "chatbot", "dashboard", "rapports"
+            "utilisateurs", "roles", "chatbot", "dashboard", "rapports", "parametres"
         ];
     }
 }

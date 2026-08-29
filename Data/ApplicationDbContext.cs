@@ -41,6 +41,8 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<HistoriquePrixArticle> HistoriquesPrixArticles { get; set; }
         public DbSet<GroupeCommande> GroupesCommandes { get; set; }
         public DbSet<GroupeCommandeCommande> GroupeCommandeCommandes { get; set; }
+        public DbSet<Devise> Devises { get; set; }
+        public DbSet<TauxChange> TauxChanges { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -584,6 +586,23 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<LigneImportation>()
                 .HasIndex(li => li.GroupeCommandeId);
+
+            // TauxChange -> Devise (One-to-Many, Restrict) — void supprimer une devise
+            // référencée par un taux ; un taux orphelin serait source d'erreur de conversion.
+            modelBuilder.Entity<TauxChange>()
+                .HasOne(t => t.Devise)
+                .WithMany()
+                .HasForeignKey(t => t.DeviseCode)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Index (DeviseCode, DateEffective) pour retrouver rapidement le taux applicable
+            // le plus récent pour une devise donnée.
+            modelBuilder.Entity<TauxChange>()
+                .HasIndex(t => new { t.DeviseCode, t.DateEffective });
+
+            modelBuilder.Entity<TauxChange>()
+                .Property(t => t.Taux)
+                .HasPrecision(18, 6);
         }
     }
 }
