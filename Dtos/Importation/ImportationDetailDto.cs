@@ -14,6 +14,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Importation
         public DateTime? DateReceptionReelle { get; set; }
         public ModeExpedition ModeExpedition { get; set; }
         public decimal MontantTotal { get; set; }
+        public decimal MontantTotalTND { get; set; }
         public string? Devise { get; set; }
         public string? NotesImportation { get; set; }
         public string? CreePar { get; set; }
@@ -55,6 +56,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Importation
         public StatutLigneImportation StatutLigne { get; set; }
         public decimal PrixUnitaire { get; set; }
         public decimal MontantLigne { get; set; }
+        public decimal MontantLigneTND { get; set; }
         public string? Devise { get; set; }
         public string? Unite { get; set; }
         public bool EstAffecteStock { get; set; }

@@ -10,6 +10,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
         public DateTime? DateLivraisonPrevue { get; set; }
         public StatutAchat Statut { get; set; }
         public decimal MontantTotal { get; set; }
+        public decimal MontantTotalTND { get; set; }
         public string? Devise { get; set; }
         public int FournisseurId { get; set; }
         public int? CommandeClientId { get; set; }

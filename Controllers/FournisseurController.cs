@@ -95,10 +95,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     NombreImportations = await _context.Importations.CountAsync(i => i.FournisseurId == id),
                     MontantTotalAchats = await _context.Achats
                         .Where(a => a.FournisseurId == id)
-                        .SumAsync(a => a.MontantTotal),
+                        .SumAsync(a => a.MontantTotalTND),
                     MontantTotalImportations = await _context.Importations
                         .Where(i => i.FournisseurId == id)
-                        .SumAsync(i => i.MontantTotal),
+                        .SumAsync(i => i.MontantTotalTND),
                     DernierAchat = await _context.Achats
                         .Where(a => a.FournisseurId == id)
                         .OrderByDescending(a => a.DateAchat)

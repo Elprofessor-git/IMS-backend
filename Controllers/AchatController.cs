@@ -37,6 +37,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     DateLivraisonPrevue = a.DateLivraisonPrevue,
                     Statut = a.Statut,
                     MontantTotal = a.MontantTotal,
+                    MontantTotalTND = a.MontantTotalTND,
                     Devise = a.Devise,
                     FournisseurId = a.FournisseurId,
                     CommandeClientId = a.CommandeClientId,
@@ -71,6 +72,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         StatutLigne = l.StatutLigne,
                         PrixUnitaire = l.PrixUnitaire,
                         MontantLigne = l.MontantLigne,
+                        MontantLigneTND = l.MontantLigneTND,
                         Devise = l.Devise,
                         Unite = l.Unite,
                         Couleur = l.Couleur,
@@ -116,6 +118,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     DateLivraisonReelle = a.DateLivraisonReelle,
                     Statut = a.Statut,
                     MontantTotal = a.MontantTotal,
+                    MontantTotalTND = a.MontantTotalTND,
                     Devise = a.Devise,
                     ConditionsPaiement = a.ConditionsPaiement,
                     NotesAchat = a.NotesAchat,
@@ -152,6 +155,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         StatutLigne = l.StatutLigne,
                         PrixUnitaire = l.PrixUnitaire,
                         MontantLigne = l.MontantLigne,
+                        MontantLigneTND = l.MontantLigneTND,
                         Devise = l.Devise,
                         Unite = l.Unite,
                         Couleur = l.Couleur,
@@ -262,6 +266,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, dto.Devise, achat.DateAchat);
+
             var ligneAchat = new LigneAchat
             {
                 AchatId = id,
@@ -269,6 +275,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Quantite = dto.Quantite,
                 PrixUnitaire = dto.PrixUnitaire,
                 MontantLigne = dto.Quantite * dto.PrixUnitaire,
+                MontantLigneTND = dto.Quantite * dto.PrixUnitaire * tauxTND,
                 TypeDestination = dto.TypeDestination,
                 CommandeClientId = dto.CommandeClientId,
                 ClientId = dto.ClientId,
@@ -368,6 +375,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest("La quantité reçue doit être supérieure à 0");
             }
 
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, ligne.Devise, DateTime.Now);
+
             // Créer le stock pour cette réception partielle
             var stock = new Stock
             {
@@ -383,6 +392,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     PlateformeId = ligne.TypeDestination == TypeDestinationAchat.Plateforme ? ligne.PlateformeId : null,
                     GroupeCommandeId = ligne.TypeDestination == TypeDestinationAchat.GroupeCommandes ? ligne.GroupeCommandeId : null,
                     PrixUnitaire = ligne.PrixUnitaire,
+                    PrixUnitaireTND = ligne.PrixUnitaire * tauxTND,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,
                     EstValide = true,
@@ -420,6 +430,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             // Montant reflétant la quantité réellement reçue (sur-réception incluse)
             ligne.MontantLigne = ligne.QuantiteRecue * ligne.PrixUnitaire;
+            ligne.MontantLigneTND = ligne.QuantiteRecue * ligne.PrixUnitaire * tauxTND;
 
             await RecalculerMontantAchat(id);
 
@@ -484,6 +495,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, dto.Devise, achat.DateAchat);
+
             var commandeClientId = dto.CommandeClientId;
             var clientId = dto.ClientId;
             var plateformeId = dto.PlateformeId;
@@ -518,6 +531,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneAchat.Quantite = dto.Quantite;
             ligneAchat.PrixUnitaire = dto.PrixUnitaire;
             ligneAchat.MontantLigne = dto.Quantite * dto.PrixUnitaire;
+            ligneAchat.MontantLigneTND = dto.Quantite * dto.PrixUnitaire * tauxTND;
             ligneAchat.Devise = dto.Devise;
             ligneAchat.Unite = dto.Unite;
             ligneAchat.DescriptionSpecifique = dto.DescriptionSpecifique;
@@ -718,6 +732,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     continue; // Déjà entièrement reçue, pas besoin de créer de stock
                 }
 
+                var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, ligne.Devise, DateTime.Now);
+
                 var stock = new Stock
                 {
                     ArticleId = ligne.ArticleId,
@@ -732,6 +748,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     PlateformeId = ligne.TypeDestination == TypeDestinationAchat.Plateforme ? ligne.PlateformeId : null,
                     GroupeCommandeId = ligne.TypeDestination == TypeDestinationAchat.GroupeCommandes ? ligne.GroupeCommandeId : null,
                     PrixUnitaire = ligne.PrixUnitaire,
+                    PrixUnitaireTND = ligne.PrixUnitaire * tauxTND,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,
                     EstValide = true,
@@ -845,6 +862,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (achat != null)
             {
                 achat.MontantTotal = achat.LignesAchat.Sum(la => la.MontantLigne);
+                achat.MontantTotalTND = achat.LignesAchat.Sum(la => la.MontantLigneTND);
             }
         }
 

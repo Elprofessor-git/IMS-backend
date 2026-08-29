@@ -58,6 +58,8 @@ namespace Backend_Gestion_Magasin_API.Models
         public decimal PrixUnitaire { get; set; } = 0;
         
         public decimal MontantLigne { get; set; } = 0; // Calcul automatique
+
+        public decimal MontantLigneTND { get; set; } = 0; // Converti figé à l'écriture (devise de référence)
         
         [StringLength(10)]
         public string? Devise { get; set; } = "EUR";

@@ -46,6 +46,8 @@ namespace Backend_Gestion_Magasin_API.Models
         public int? CommandeClientId { get; set; }
         
         public decimal PrixUnitaire { get; set; } = 0;
+
+        public decimal PrixUnitaireTND { get; set; } = 0; // Converti figé à l'écriture (devise de référence)
         
         [StringLength(10)]
         public string? Devise { get; set; } = "EUR";

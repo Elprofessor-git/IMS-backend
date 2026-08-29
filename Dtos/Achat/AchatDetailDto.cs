@@ -11,6 +11,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
         public DateTime? DateLivraisonReelle { get; set; }
         public StatutAchat Statut { get; set; }
         public decimal MontantTotal { get; set; }
+        public decimal MontantTotalTND { get; set; }
         public string? Devise { get; set; }
         public string? ConditionsPaiement { get; set; }
         public string? NotesAchat { get; set; }
@@ -31,6 +32,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
         public StatutLigneAchat StatutLigne { get; set; }
         public decimal PrixUnitaire { get; set; }
         public decimal MontantLigne { get; set; }
+        public decimal MontantLigneTND { get; set; }
         public string? Devise { get; set; }
         public string? Unite { get; set; }
         public string? Couleur { get; set; }

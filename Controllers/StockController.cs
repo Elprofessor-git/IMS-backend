@@ -4,6 +4,7 @@ using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Stock;
+using Backend_Gestion_Magasin_API.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -115,6 +116,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("stock", requireWrite: true)]
         public async Task<ActionResult<Stock>> PostStock(CreateStockDto dto)
         {
+            var devise = dto.Devise ?? "EUR";
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, devise, DateTime.Now);
+
             var stock = new Stock
             {
                 ArticleId = dto.ArticleId,
@@ -128,7 +132,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 TypeStock = dto.TypeStock,
                 CommandeClientId = dto.CommandeClientId,
                 PrixUnitaire = dto.PrixUnitaire,
-                Devise = dto.Devise ?? "EUR",
+                PrixUnitaireTND = dto.PrixUnitaire * tauxTND,
+                Devise = devise,
                 DateEntree = DateTime.Now,
                 DatePeremption = dto.DatePeremption,
                 Notes = dto.Notes,
@@ -153,6 +158,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
+            var devise = dto.Devise ?? "EUR";
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, devise, DateTime.Now);
+
             stock.ArticleId = dto.ArticleId;
             stock.Couleur = dto.Couleur;
             stock.CodeCouleur = dto.CodeCouleur;
@@ -164,7 +172,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             stock.TypeStock = dto.TypeStock;
             stock.CommandeClientId = dto.CommandeClientId;
             stock.PrixUnitaire = dto.PrixUnitaire;
-            stock.Devise = dto.Devise ?? "EUR";
+            stock.PrixUnitaireTND = dto.PrixUnitaire * tauxTND;
+            stock.Devise = devise;
             stock.DatePeremption = dto.DatePeremption;
             stock.Notes = dto.Notes;
             stock.ClientId = dto.ClientId;

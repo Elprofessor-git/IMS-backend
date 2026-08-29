@@ -49,6 +49,8 @@ namespace Backend_Gestion_Magasin_API.Models
         public ModeExpedition ModeExpedition { get; set; } = ModeExpedition.Maritime;
         
         public decimal MontantTotal { get; set; } = 0;
+
+        public decimal MontantTotalTND { get; set; } = 0; // Converti figé à l'écriture (devise de référence)
         
         [StringLength(10)]
         public string? Devise { get; set; } = "EUR";

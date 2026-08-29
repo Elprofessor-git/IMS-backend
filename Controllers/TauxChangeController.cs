@@ -4,6 +4,7 @@ using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.TauxChange;
+using Backend_Gestion_Magasin_API.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -96,6 +97,67 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .FirstAsync();
 
             return Ok(result);
+        }
+
+        // TEMPORAIRE (Phase 4 — chantier multi-devises) : backfill des montants convertis
+        // en TND pour l'historique existant. À retirer après validation par Sof.
+        // Réutilise TauxChangeService (règle : taux le plus proche en date à la date du
+        // document ; TND => 1 ; aucune devise sans taux => 1 = limitation connue).
+        [HttpPost("backfill")]
+        [RequireModulePermission("parametres", requireWrite: true)]
+        public async Task<ActionResult> BackfillMontantsTND()
+        {
+            var nbAchats = 0;
+            var nbLignesAchat = 0;
+            var nbImportations = 0;
+            var nbLignesImportation = 0;
+            var nbStocks = 0;
+
+            var achats = await _context.Achats.Include(a => a.LignesAchat).ToListAsync();
+            foreach (var achat in achats)
+            {
+                foreach (var ligne in achat.LignesAchat)
+                {
+                    var taux = await TauxChangeService.ObtenirTauxAsync(_context, ligne.Devise, achat.DateAchat);
+                    ligne.MontantLigneTND = ligne.MontantLigne * taux;
+                    nbLignesAchat++;
+                }
+                achat.MontantTotalTND = achat.LignesAchat.Sum(la => la.MontantLigneTND);
+                nbAchats++;
+            }
+
+            var importations = await _context.Importations.Include(i => i.LignesImportation).ToListAsync();
+            foreach (var importation in importations)
+            {
+                foreach (var ligne in importation.LignesImportation)
+                {
+                    var taux = await TauxChangeService.ObtenirTauxAsync(_context, ligne.Devise, importation.DateImportation);
+                    ligne.MontantLigneTND = ligne.MontantLigne * taux;
+                    nbLignesImportation++;
+                }
+                importation.MontantTotalTND = importation.LignesImportation.Sum(li => li.MontantLigneTND);
+                nbImportations++;
+            }
+
+            var stocks = await _context.Stocks.ToListAsync();
+            foreach (var stock in stocks)
+            {
+                var taux = await TauxChangeService.ObtenirTauxAsync(_context, stock.Devise, stock.DateEntree);
+                stock.PrixUnitaireTND = stock.PrixUnitaire * taux;
+                nbStocks++;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Backfill montants TND effectué.",
+                nbAchats,
+                nbLignesAchat,
+                nbImportations,
+                nbLignesImportation,
+                nbStocks
+            });
         }
     }
 }

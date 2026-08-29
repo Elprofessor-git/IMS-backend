@@ -54,6 +54,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     DateReceptionReelle = i.DateReceptionReelle,
                     ModeExpedition = i.ModeExpedition,
                     MontantTotal = i.MontantTotal,
+                    MontantTotalTND = i.MontantTotalTND,
                     Devise = i.Devise,
                     NotesImportation = i.NotesImportation,
                     CreePar = i.CreePar,
@@ -88,6 +89,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         StatutLigne = l.StatutLigne,
                         PrixUnitaire = l.PrixUnitaire,
                         MontantLigne = l.MontantLigne,
+                        MontantLigneTND = l.MontantLigneTND,
                         Devise = l.Devise,
                         Unite = l.Unite,
                         EstAffecteStock = l.EstAffecteStock,
@@ -208,6 +210,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, dto.Devise, importation.DateImportation);
+
             var ligneImportation = new LigneImportation
             {
                 ImportationId = id,
@@ -225,6 +229,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Quantite = dto.Quantite,
                 PrixUnitaire = dto.PrixUnitaire,
                 MontantLigne = dto.Quantite * dto.PrixUnitaire,
+                MontantLigneTND = dto.Quantite * dto.PrixUnitaire * tauxTND,
                 Devise = dto.Devise,
                 Unite = dto.Unite,
                 Notes = dto.Notes,
@@ -302,6 +307,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, dto.Devise, importation.DateImportation);
+
             var commandeClientId = dto.CommandeClientId;
             var clientId = dto.ClientId;
             var plateformeId = dto.PlateformeId;
@@ -337,6 +344,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneImportation.Quantite = dto.Quantite;
             ligneImportation.PrixUnitaire = dto.PrixUnitaire;
             ligneImportation.MontantLigne = dto.Quantite * dto.PrixUnitaire;
+            ligneImportation.MontantLigneTND = dto.Quantite * dto.PrixUnitaire * tauxTND;
             ligneImportation.Devise = dto.Devise;
             ligneImportation.Unite = dto.Unite;
             ligneImportation.Notes = dto.Notes;
@@ -480,6 +488,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     continue; // Déjà entièrement reçue via réceptions partielles
                 }
 
+                var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, ligne.Devise, DateTime.Now);
+
                 var stock = new Stock
                 {
                     ArticleId = ligne.ArticleId,
@@ -494,6 +504,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     PlateformeId = ligne.TypeDestination == TypeDestinationImportation.Plateforme ? ligne.PlateformeId : null,
                     GroupeCommandeId = ligne.TypeDestination == TypeDestinationImportation.GroupeCommandes ? ligne.GroupeCommandeId : null,
                     PrixUnitaire = ligne.PrixUnitaire,
+                    PrixUnitaireTND = ligne.PrixUnitaire * tauxTND,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,
                     EstValide = true,
@@ -563,6 +574,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest("La quantité reçue doit être supérieure à 0");
             }
 
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, ligne.Devise, DateTime.Now);
+
             var stock = new Stock
             {
                 ArticleId = ligne.ArticleId,
@@ -577,6 +590,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     PlateformeId = ligne.TypeDestination == TypeDestinationImportation.Plateforme ? ligne.PlateformeId : null,
                     GroupeCommandeId = ligne.TypeDestination == TypeDestinationImportation.GroupeCommandes ? ligne.GroupeCommandeId : null,
                     PrixUnitaire = ligne.PrixUnitaire,
+                    PrixUnitaireTND = ligne.PrixUnitaire * tauxTND,
                     Devise = ligne.Devise,
                     DateEntree = DateTime.Now,
                     EstValide = true,
@@ -614,6 +628,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             // Montant reflétant la quantité réellement reçue (sur-réception incluse)
             ligne.MontantLigne = ligne.QuantiteRecue * ligne.PrixUnitaire;
+            ligne.MontantLigneTND = ligne.QuantiteRecue * ligne.PrixUnitaire * tauxTND;
 
             await RecalculerMontantImportation(id);
 
@@ -801,6 +816,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (importation != null)
             {
                 importation.MontantTotal = importation.LignesImportation.Sum(li => li.MontantLigne);
+                importation.MontantTotalTND = importation.LignesImportation.Sum(li => li.MontantLigneTND);
             }
         }
 

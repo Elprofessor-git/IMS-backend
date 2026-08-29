@@ -305,6 +305,10 @@ namespace Backend_Gestion_Magasin_API.Data
                 .Property(s => s.PrixUnitaire)
                 .HasPrecision(18, 4);
 
+            modelBuilder.Entity<Stock>()
+                .Property(s => s.PrixUnitaireTND)
+                .HasPrecision(18, 4);
+
             modelBuilder.Entity<BesoinCommande>()
                 .Property(bc => bc.QuantiteUnitaire)
                 .HasPrecision(18, 4);
@@ -341,8 +345,16 @@ namespace Backend_Gestion_Magasin_API.Data
                 .Property(la => la.MontantLigne)
                 .HasPrecision(18, 4);
 
+            modelBuilder.Entity<LigneAchat>()
+                .Property(la => la.MontantLigneTND)
+                .HasPrecision(18, 4);
+
             modelBuilder.Entity<Achat>()
                 .Property(a => a.MontantTotal)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<Achat>()
+                .Property(a => a.MontantTotalTND)
                 .HasPrecision(18, 4);
 
             modelBuilder.Entity<LigneImportation>()
@@ -357,8 +369,16 @@ namespace Backend_Gestion_Magasin_API.Data
                 .Property(li => li.MontantLigne)
                 .HasPrecision(18, 4);
 
+            modelBuilder.Entity<LigneImportation>()
+                .Property(li => li.MontantLigneTND)
+                .HasPrecision(18, 4);
+
             modelBuilder.Entity<Importation>()
                 .Property(i => i.MontantTotal)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<Importation>()
+                .Property(i => i.MontantTotalTND)
                 .HasPrecision(18, 4);
 
             modelBuilder.Entity<MouvementStock>()
