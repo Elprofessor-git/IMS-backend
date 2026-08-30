@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Backend_Gestion_Magasin_API.Models;
 
 namespace Backend_Gestion_Magasin_API.Dtos.Achat
 {
@@ -20,6 +21,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
 
         [StringLength(500)]
         public string? ConditionsPaiement { get; set; }
+
+        public TypePaiement? TypePaiement { get; set; }
 
         [StringLength(1000)]
         public string? NotesAchat { get; set; }

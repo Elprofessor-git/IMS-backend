@@ -465,6 +465,10 @@ namespace Backend_Gestion_Magasin_API.Data
                 .Property(a => a.Statut)
                 .HasConversion<string>();
 
+            modelBuilder.Entity<Achat>()
+                .Property(a => a.TypePaiement)
+                .HasConversion<string>();
+
             modelBuilder.Entity<Importation>()
                 .Property(i => i.Statut)
                 .HasConversion<string>();

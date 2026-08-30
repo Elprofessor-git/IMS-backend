@@ -32,12 +32,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // POST api/Achat/{achatId}/Documents
         [HttpPost("Achat/{achatId}/Documents")]
-        public async Task<IActionResult> UploadAchat(int achatId, IFormFile file, [FromForm] TypeDocument type)
+        public async Task<IActionResult> UploadAchat(int achatId, IFormFile file, [FromForm] TypeDocument type, [FromForm] string? nature)
         {
             if (!await _context.Achats.AnyAsync(a => a.Id == achatId))
                 return NotFound(new { message = $"Achat {achatId} introuvable." });
 
-            return await Upload(file, type, achatId, null);
+            return await Upload(file, type, nature, achatId, null);
         }
 
         // GET api/Achat/{achatId}/Documents
@@ -59,6 +59,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     d.TailleOctets,
                     d.DateAjout,
                     d.AjoutePar,
+                    d.Nature,
                 })
                 .ToListAsync();
 
@@ -95,12 +96,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // POST api/Importation/{importationId}/Documents
         [HttpPost("Importation/{importationId}/Documents")]
-        public async Task<IActionResult> UploadImportation(int importationId, IFormFile file, [FromForm] TypeDocument type)
+        public async Task<IActionResult> UploadImportation(int importationId, IFormFile file, [FromForm] TypeDocument type, [FromForm] string? nature)
         {
             if (!await _context.Importations.AnyAsync(i => i.Id == importationId))
                 return NotFound(new { message = $"Importation {importationId} introuvable." });
 
-            return await Upload(file, type, null, importationId);
+            return await Upload(file, type, nature, null, importationId);
         }
 
         // GET api/Importation/{importationId}/Documents
@@ -122,6 +123,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     d.TailleOctets,
                     d.DateAjout,
                     d.AjoutePar,
+                    d.Nature,
                 })
                 .ToListAsync();
 
@@ -159,6 +161,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private async Task<IActionResult> Upload(
             IFormFile file,
             TypeDocument type,
+            string? nature,
             int? achatId,
             int? importationId)
         {
@@ -179,6 +182,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
                               "Types acceptés : application/pdf, image/jpeg, image/png.",
                 });
 
+            // Nature libre requise uniquement pour le type "Autre" ; ignorée autrement.
+            if (type == TypeDocument.Autre && string.IsNullOrWhiteSpace(nature))
+                return BadRequest(new
+                {
+                    message = "La nature est requise pour un document de type Autre.",
+                });
+
             using var ms = new MemoryStream((int)file.Length);
             await file.CopyToAsync(ms);
 
@@ -193,6 +203,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Contenu        = ms.ToArray(),
                 DateAjout      = DateTime.UtcNow,
                 AjoutePar      = User.Identity?.Name,
+                Nature         = type == TypeDocument.Autre ? nature?.Trim() : null,
             };
 
             _context.DocumentsJoints.Add(doc);
@@ -208,6 +219,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 doc.TailleOctets,
                 doc.DateAjout,
                 doc.AjoutePar,
+                doc.Nature,
             });
         }
     }

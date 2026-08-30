@@ -14,6 +14,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
         public decimal MontantTotalTND { get; set; }
         public string? Devise { get; set; }
         public string? ConditionsPaiement { get; set; }
+        public TypePaiement? TypePaiement { get; set; }
         public string? NotesAchat { get; set; }
         public string? CreePar { get; set; }
         public int FournisseurId { get; set; }

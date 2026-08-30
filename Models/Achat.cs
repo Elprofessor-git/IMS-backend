@@ -45,6 +45,9 @@ namespace Backend_Gestion_Magasin_API.Models
         [StringLength(500)]
         public string? ConditionsPaiement { get; set; }
         
+        // Mode de règlement (espèces/chèque/virement/autre) — nullable : un achat existant n'a pas cette info
+        public TypePaiement? TypePaiement { get; set; }
+        
         [StringLength(1000)]
         public string? NotesAchat { get; set; }
         

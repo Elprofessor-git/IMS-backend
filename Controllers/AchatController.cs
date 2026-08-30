@@ -40,6 +40,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     MontantTotal = a.MontantTotal,
                     MontantTotalTND = a.MontantTotalTND,
                     Devise = a.Devise,
+                    TypePaiement = a.TypePaiement,
                     FournisseurId = a.FournisseurId,
                     CommandeClientId = a.CommandeClientId,
                     CreePar = a.CreePar,
@@ -122,6 +123,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     MontantTotalTND = a.MontantTotalTND,
                     Devise = a.Devise,
                     ConditionsPaiement = a.ConditionsPaiement,
+                    TypePaiement = a.TypePaiement,
                     NotesAchat = a.NotesAchat,
                     CreePar = a.CreePar,
                     FournisseurId = a.FournisseurId,
@@ -232,6 +234,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 DateLivraisonPrevue = dto.DateLivraisonPrevue,
                 Devise = dto.Devise,
                 ConditionsPaiement = dto.ConditionsPaiement,
+                TypePaiement = dto.TypePaiement,
                 NotesAchat = dto.NotesAchat,
                 CreePar = dto.CreePar,
                 DateCreation = DateTime.Now,
@@ -999,6 +1002,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             achat.DateLivraisonPrevue = dto.DateLivraisonPrevue;
             achat.Devise = dto.Devise;
             achat.ConditionsPaiement = dto.ConditionsPaiement;
+            achat.TypePaiement = dto.TypePaiement;
             achat.NotesAchat = dto.NotesAchat;
             achat.DateMiseAJour = DateTime.Now;
 

@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Backend_Gestion_Magasin_API.Models
 {
-    public enum TypeDocument { Facture, BonLivraison, Autre }
+    public enum TypeDocument { Facture, BonLivraison, ListeColisage, Autre }
 
     public class DocumentJoint
     {
@@ -35,6 +35,10 @@ namespace Backend_Gestion_Magasin_API.Models
 
         [StringLength(100)]
         public string? AjoutePar { get; set; }
+
+        // Nature libre — utilisée uniquement quand Type == Autre (saisie libre du libellé)
+        [StringLength(200)]
+        public string? Nature { get; set; }
 
         // Relations — nullable : le modèle est lié à l'un OU l'autre
         public virtual Achat? Achat { get; set; }
