@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
@@ -493,6 +494,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 var stock = new Stock
                 {
                     ArticleId = ligne.ArticleId,
+                    LigneImportationId = ligne.Id,
                     Couleur = ligne.Couleur,
                     CodeCouleur = ligne.CodeCouleur,
                     Dimension = ligne.Dimension,
@@ -579,6 +581,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var stock = new Stock
             {
                 ArticleId = ligne.ArticleId,
+                LigneImportationId = ligne.Id,
                 Couleur = ligne.Couleur,
                 CodeCouleur = ligne.CodeCouleur,
                 Dimension = ligne.Dimension,
@@ -674,6 +677,190 @@ namespace Backend_Gestion_Magasin_API.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Importation clôturée avec succès" });
+        }
+
+        [HttpPost("{id}/LignesImportation/{ligneId}/CorrigerReception")]
+        [RequireModulePermission("importations", requireWrite: true)]
+        public async Task<IActionResult> CorrigerReception(int id, int ligneId, CorrigerReceptionDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            var utilisateurConnecte = await _context.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            if (utilisateurConnecte?.Role?.EstAdministrateur != true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Réservé à l'administrateur" });
+            }
+
+            var importation = await _context.Importations
+                .Include(i => i.LignesImportation)
+                .FirstOrDefaultAsync(i => i.Id == id);
+            if (importation == null)
+            {
+                return NotFound();
+            }
+
+            var ligne = importation.LignesImportation.FirstOrDefault(l => l.Id == ligneId);
+            if (ligne == null)
+            {
+                return NotFound();
+            }
+
+            if (importation.Statut != StatutImportation.Validee && importation.Statut != StatutImportation.Recue)
+            {
+                return BadRequest("Seules les importations validées ou reçues peuvent être corrigées");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Justification))
+            {
+                return BadRequest("La justification est obligatoire");
+            }
+
+            var ecart = dto.NouvelleQuantiteRecue - ligne.QuantiteRecue;
+
+            var stockLigne = await _context.Stocks
+                .Where(s => s.LigneImportationId == ligne.Id)
+                .OrderByDescending(s => s.Id)
+                .ToListAsync();
+
+            if (ecart < 0)
+            {
+                var disponible = stockLigne.Sum(s => s.Quantite);
+                if (disponible < -ecart)
+                {
+                    return BadRequest(
+                        $"Impossible de corriger : {-ecart:N0} unités ont déjà été déplacées/consommées, " +
+                        $"seules {disponible:N0} sont encore disponibles.");
+                }
+            }
+
+            var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, ligne.Devise, DateTime.Now);
+
+            if (ecart < 0)
+            {
+                var reste = -ecart;
+                foreach (var st in stockLigne)
+                {
+                    if (reste <= 0)
+                    {
+                        break;
+                    }
+
+                    var pris = Math.Min(st.Quantite, reste);
+                    var avant = st.Quantite;
+                    st.Quantite -= pris;
+                    reste -= pris;
+
+                    _context.MouvementsStock.Add(new MouvementStock
+                    {
+                        StockId = st.Id,
+                        TypeMouvement = TypeMouvement.Sortie,
+                        OrigineMouvement = OrigineMouvement.CorrectionReception,
+                        Quantite = pris,
+                        QuantiteAvant = avant,
+                        QuantiteApres = st.Quantite,
+                        Motif = dto.Justification,
+                        DocumentReference = importation.ReferenceImportation,
+                        DateMouvement = DateTime.Now,
+                        EffectuePar = utilisateurConnecte.UserName ?? utilisateurConnecte.Nom
+                    });
+                }
+            }
+            else if (ecart > 0)
+            {
+                if (stockLigne.Count > 0)
+                {
+                    var st = stockLigne[0];
+                    var avant = st.Quantite;
+                    st.Quantite += ecart;
+
+                    _context.MouvementsStock.Add(new MouvementStock
+                    {
+                        StockId = st.Id,
+                        TypeMouvement = TypeMouvement.Entree,
+                        OrigineMouvement = OrigineMouvement.CorrectionReception,
+                        Quantite = ecart,
+                        QuantiteAvant = avant,
+                        QuantiteApres = st.Quantite,
+                        Motif = dto.Justification,
+                        DocumentReference = importation.ReferenceImportation,
+                        DateMouvement = DateTime.Now,
+                        EffectuePar = utilisateurConnecte.UserName ?? utilisateurConnecte.Nom
+                    });
+                }
+                else
+                {
+                    var nouveauStock = new Stock
+                    {
+                        ArticleId = ligne.ArticleId,
+                        LigneImportationId = ligne.Id,
+                        Couleur = ligne.Couleur,
+                        CodeCouleur = ligne.CodeCouleur,
+                        Dimension = ligne.Dimension,
+                        Notes = ligne.Designation ?? ligne.Nature ?? ligne.Notes,
+                        Quantite = ecart,
+                        TypeStock = TypeStock.Importe,
+                        CommandeClientId = ligne.TypeDestination == TypeDestinationImportation.Commande ? ligne.CommandeClientId : null,
+                        ClientId = ligne.TypeDestination == TypeDestinationImportation.Marque ? ligne.ClientId : null,
+                        PlateformeId = ligne.TypeDestination == TypeDestinationImportation.Plateforme ? ligne.PlateformeId : null,
+                        GroupeCommandeId = ligne.TypeDestination == TypeDestinationImportation.GroupeCommandes ? ligne.GroupeCommandeId : null,
+                        PrixUnitaire = ligne.PrixUnitaire,
+                        PrixUnitaireTND = ligne.PrixUnitaire * tauxTND,
+                        Devise = ligne.Devise,
+                        DateEntree = DateTime.Now,
+                        EstValide = true,
+                        ValidePar = "Système - Correction Réception Importation"
+                    };
+                    _context.Stocks.Add(nouveauStock);
+
+                    _context.MouvementsStock.Add(new MouvementStock
+                    {
+                        Stock = nouveauStock,
+                        TypeMouvement = TypeMouvement.Entree,
+                        OrigineMouvement = OrigineMouvement.CorrectionReception,
+                        Quantite = ecart,
+                        QuantiteAvant = 0,
+                        QuantiteApres = ecart,
+                        Motif = dto.Justification,
+                        DocumentReference = importation.ReferenceImportation,
+                        DateMouvement = DateTime.Now,
+                        EffectuePar = utilisateurConnecte.UserName ?? utilisateurConnecte.Nom
+                    });
+                }
+            }
+
+            ligne.QuantiteRecue = dto.NouvelleQuantiteRecue;
+            ligne.StatutLigne = DeterminerStatutLigneImportation(ligne.Quantite, ligne.QuantiteRecue);
+            ligne.MontantLigne = ligne.QuantiteRecue * ligne.PrixUnitaire;
+            ligne.MontantLigneTND = ligne.QuantiteRecue * ligne.PrixUnitaire * tauxTND;
+
+            if (importation.Statut == StatutImportation.Recue &&
+                importation.LignesImportation.Any(l => l.StatutLigne != StatutLigneImportation.Complete && l.StatutLigne != StatutLigneImportation.ClotureeForcee))
+            {
+                importation.Statut = StatutImportation.Validee;
+            }
+
+            importation.DateMiseAJour = DateTime.Now;
+
+            await RecalculerMontantImportation(id);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Correction de réception enregistrée avec succès", ligneId = ligne.Id, ecart });
+        }
+
+        private static StatutLigneImportation DeterminerStatutLigneImportation(decimal quantite, decimal quantiteRecue)
+        {
+            if (quantiteRecue <= 0)
+            {
+                return StatutLigneImportation.EnAttente;
+            }
+
+            return quantiteRecue >= quantite ? StatutLigneImportation.Complete : StatutLigneImportation.PartielleEnCours;
         }
 
         [HttpPost("{id}/AffecterCommandes")]

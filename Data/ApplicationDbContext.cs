@@ -161,6 +161,22 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasForeignKey(s => s.PlateformeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // LigneAchat -> Stock (traçabilité réception — Fonctionnalité 18, optionnel)
+            modelBuilder.Entity<Stock>()
+                .HasOne(s => s.LigneAchat)
+                .WithMany()
+                .HasForeignKey(s => s.LigneAchatId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // LigneImportation -> Stock (traçabilité réception — Fonctionnalité 18, optionnel)
+            modelBuilder.Entity<Stock>()
+                .HasOne(s => s.LigneImportation)
+                .WithMany()
+                .HasForeignKey(s => s.LigneImportationId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // Stock -> MouvementStock (One-to-Many)
             modelBuilder.Entity<MouvementStock>()
                 .HasOne(ms => ms.Stock)
@@ -400,6 +416,13 @@ namespace Backend_Gestion_Magasin_API.Data
             // Index pour améliorer les performances
             modelBuilder.Entity<Stock>()
                 .HasIndex(s => new { s.ArticleId, s.TypeStock });
+
+            // Traçabilité réception (Fonctionnalité 18) — accès au stock par ligne d'origine
+            modelBuilder.Entity<Stock>()
+                .HasIndex(s => s.LigneAchatId);
+
+            modelBuilder.Entity<Stock>()
+                .HasIndex(s => s.LigneImportationId);
 
             modelBuilder.Entity<CommandeClient>()
                 .HasIndex(cc => cc.NumeroCommande)

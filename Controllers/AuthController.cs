@@ -95,6 +95,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 prenom = user.Prenom ?? "",
                 role = user.Role?.NomRole,
                 roleId = user.RoleId,
+                estAdministrateur = user.Role?.EstAdministrateur == true,
                 estActif = user.EstActif
             });
         }

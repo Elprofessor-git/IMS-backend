@@ -77,12 +77,23 @@ namespace Backend_Gestion_Magasin_API.Models
         [ForeignKey("GroupeCommande")]
         public int? GroupeCommandeId { get; set; }
 
+        // Traçabilité de la réception d'origine (Correction de réception — Fonctionnalité 18).
+        // Nullable : le stock existant, le stock scindé (ScinderStock) ou le stock manuel
+        // (PostStock) n'ont pas de ligne d'origine.
+        [ForeignKey("LigneAchat")]
+        public int? LigneAchatId { get; set; }
+
+        [ForeignKey("LigneImportation")]
+        public int? LigneImportationId { get; set; }
+
         // Relations
         public virtual Article Article { get; set; } = null!;
         public virtual CommandeClient? CommandeClient { get; set; }
         public virtual Client? Client { get; set; }
         public virtual Plateforme? Plateforme { get; set; }
         public virtual GroupeCommande? GroupeCommande { get; set; }
+        public virtual LigneAchat? LigneAchat { get; set; }
+        public virtual LigneImportation? LigneImportation { get; set; }
         public virtual ICollection<MouvementStock> Mouvements { get; set; } = new List<MouvementStock>();
     }
 }

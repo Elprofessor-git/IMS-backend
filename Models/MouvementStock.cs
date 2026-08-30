@@ -22,6 +22,7 @@ namespace Backend_Gestion_Magasin_API.Models
         Transfert,
         Commande,
         Retour,
+        CorrectionReception,
         Autre
     }
     
