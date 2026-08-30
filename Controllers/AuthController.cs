@@ -2,6 +2,7 @@ using Backend_Gestion_Magasin_API.Dtos;
 using Backend_Gestion_Magasin_API.Dtos.Auth;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
+using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Models.Auth;
 using Backend_Gestion_Magasin_API.Services;
 using Microsoft.AspNetCore.Identity;
@@ -19,15 +20,18 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly TokenService _tokenService;
         private readonly ILogger<AuthController> _logger;
+        private readonly ApplicationDbContext _context;
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
             TokenService tokenService,
-            ILogger<AuthController> logger)
+            ILogger<AuthController> logger,
+            ApplicationDbContext context)
         {
             _userManager = userManager;
             _tokenService = tokenService;
             _logger = logger;
+            _context = context;
         }
 
         [HttpPost("register")]
@@ -41,6 +45,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var existingUser = await _userManager.FindByEmailAsync(model.Email);
             if (existingUser != null)
                 return BadRequest("Un utilisateur avec cet email existe déjà.");
+
+            var roleExiste = model.RoleId > 0 &&
+                await _context.AppRoles.AnyAsync(r => r.Id == model.RoleId);
+            if (model.RoleId > 0 && !roleExiste)
+                return BadRequest("Le rôle sélectionné n'existe plus. Veuillez rafraîchir la page et réessayer.");
 
             var user = new ApplicationUser
             {

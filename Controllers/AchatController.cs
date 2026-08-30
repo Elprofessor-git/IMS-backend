@@ -764,6 +764,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             _context.LignesAchat.Remove(ligneAchat);
 
+            await _context.SaveChangesAsync();
+
             await RecalculerMontantAchat(id);
 
             await _context.SaveChangesAsync();

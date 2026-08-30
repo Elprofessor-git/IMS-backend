@@ -396,6 +396,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             _context.LignesImportation.Remove(ligneImportation);
 
+            await _context.SaveChangesAsync();
+
             await RecalculerMontantImportation(id);
 
             await _context.SaveChangesAsync();
