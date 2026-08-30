@@ -57,6 +57,68 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
+        // Bug 28 — Consultation (lecture seule) des réservations de stock existantes
+        // pour un article, avant une création manuelle de stock. Endpoint informatif :
+        // ne modifie PAS PostStock / ReserverStock.
+        [HttpGet("ReservationsExistantes")]
+        [RequireModulePermission("stock", requireWrite: false)]
+        public async Task<ActionResult<IEnumerable<ReservationStockDto>>> GetReservationsExistantes(
+            [FromQuery] int articleId,
+            [FromQuery] int? commandeClientId,
+            [FromQuery] int? clientId,
+            [FromQuery] int? plateformeId,
+            [FromQuery] int? groupeCommandeId)
+        {
+            if (articleId <= 0)
+            {
+                return BadRequest("articleId est requis et doit être supérieur à 0.");
+            }
+
+            var query = _context.Stocks.AsNoTracking()
+                .Include(s => s.Article)
+                .Include(s => s.CommandeClient)
+                .Include(s => s.Client)
+                .Include(s => s.Plateforme)
+                .Include(s => s.GroupeCommande)
+                .Where(s => s.ArticleId == articleId);
+
+            if (commandeClientId.HasValue) query = query.Where(s => s.CommandeClientId == commandeClientId);
+            if (clientId.HasValue) query = query.Where(s => s.ClientId == clientId);
+            if (plateformeId.HasValue) query = query.Where(s => s.PlateformeId == plateformeId);
+            if (groupeCommandeId.HasValue) query = query.Where(s => s.GroupeCommandeId == groupeCommandeId);
+
+            // Matérialisation puis projection en mémoire : (int)s.TypeStock évite le cast
+            // SQL "TypeStock"::int (le enum est stocké en texte) qui échouerait.
+            var stocks = await query.OrderBy(s => s.Id).ToListAsync();
+
+            var result = stocks.Select(s => new ReservationStockDto
+            {
+                Id = s.Id,
+                ArticleId = s.ArticleId,
+                ArticleDesignation = s.Article?.Designation,
+                Quantite = s.Quantite,
+                QuantiteReservee = s.QuantiteReservee,
+                TypeStock = (int)s.TypeStock,
+                EmplacementPhysique = s.EmplacementPhysique,
+                CommandeClientId = s.CommandeClientId,
+                CommandeLibelle = s.CommandeClient != null
+                    ? s.CommandeClient.NumeroCommande +
+                      (string.IsNullOrEmpty(s.CommandeClient.TitreCommande) ? "" : " — " + s.CommandeClient.TitreCommande)
+                    : null,
+                ClientId = s.ClientId,
+                ClientLibelle = s.Client != null
+                    ? s.Client.Nom + (string.IsNullOrEmpty(s.Client.Prenom) ? "" : " " + s.Client.Prenom)
+                    : null,
+                PlateformeId = s.PlateformeId,
+                PlateformeLibelle = s.Plateforme != null ? s.Plateforme.Nom : null,
+                GroupeCommandeId = s.GroupeCommandeId,
+                GroupeLibelle = s.GroupeCommandeId.HasValue ? ("Groupe #" + s.GroupeCommandeId) : null,
+            })
+            .ToList();
+
+            return Ok(result);
+        }
+
         [HttpGet("Libre")]
         [RequireModulePermission("stock", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<Stock>>> GetStocksLibres()
