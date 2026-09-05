@@ -26,5 +26,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
 
         [StringLength(100)]
         public string? CreePar { get; set; }
+
+        /// <summary>Prix de façonnage par pièce (nullable = non défini).</summary>
+        [Range(0, double.MaxValue)]
+        public decimal? PrixFacon { get; set; }
     }
 }

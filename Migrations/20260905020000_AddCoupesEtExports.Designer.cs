@@ -3,6 +3,7 @@ using System;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Backend_Gestion_Magasin_API.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260905020000_AddCoupesEtExports")]
+    partial class AddCoupesEtExports
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -520,9 +522,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
 
-                    b.Property<decimal?>("PrixFacon")
-                        .HasColumnType("numeric");
-
                     b.Property<string>("SpecificationsClient")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -693,120 +692,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.HasIndex("CommandeClientId");
 
                     b.ToTable("DocumentsJoints");
-                });
-
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Facture", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("CreePar")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("DateCreation")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("DateFacture")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Devise")
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<string>("Iban")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("ModeLivraison")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("ModePaiement")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<int?>("NombreColis")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("NumeroFacture")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<decimal?>("PoidsBrutKg")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("PoidsNetKg")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("Rib")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Statut")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("VolumeM3")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.HasIndex("NumeroFacture")
-                        .IsUnique();
-
-                    b.ToTable("Factures");
-                });
-
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.FactureCommandeLigne", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CommandeId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("FactureId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Modele")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<decimal>("MontantLigne")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("PrixUnitaireFacon")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<int>("Quantite")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CommandeId");
-
-                    b.HasIndex("FactureId");
-
-                    b.ToTable("FactureCommandesLignes");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.GroupeCommande", b =>
@@ -2289,36 +2174,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("Importation");
                 });
 
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Facture", b =>
-                {
-                    b.HasOne("Backend_Gestion_Magasin_API.Models.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-                });
-
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.FactureCommandeLigne", b =>
-                {
-                    b.HasOne("Backend_Gestion_Magasin_API.Models.CommandeClient", "Commande")
-                        .WithMany("FacturesLignes")
-                        .HasForeignKey("CommandeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Backend_Gestion_Magasin_API.Models.Facture", "Facture")
-                        .WithMany("Lignes")
-                        .HasForeignKey("FactureId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Commande");
-
-                    b.Navigation("Facture");
-                });
-
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.GroupeCommandeCommande", b =>
                 {
                     b.HasOne("Backend_Gestion_Magasin_API.Models.CommandeClient", "CommandeClient")
@@ -2693,18 +2548,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("Commandes");
                 });
 
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Facture", b =>
-                {
-                    b.Navigation("Lignes");
-                });
-
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.FactureCommandeLigne", b =>
-                {
-                    b.Navigation("Commande");
-
-                    b.Navigation("Facture");
-                });
-
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.CommandeClient", b =>
                 {
                     b.Navigation("Achats");
@@ -2714,8 +2557,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("BomLignes");
 
                     b.Navigation("ConfigTailles");
-
-                    b.Navigation("FacturesLignes");
 
                     b.Navigation("LotCoupes");
 

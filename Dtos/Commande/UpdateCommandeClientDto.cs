@@ -13,5 +13,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
 
         [StringLength(2000)]
         public string? NotesSpeciales { get; set; }
+
+        /// <summary>Prix de façonnage par pièce (nullable = non défini).</summary>
+        [Range(0, double.MaxValue)]
+        public decimal? PrixFacon { get; set; }
     }
 }

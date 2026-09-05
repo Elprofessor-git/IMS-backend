@@ -15,6 +15,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public decimal MontantTotal { get; set; }
         public string? Devise { get; set; }
         public decimal PourcentageRessourcesCouvertes { get; set; }
+        public decimal? PrixFacon { get; set; }
         public string? NotesSpeciales { get; set; }
         public string? SpecificationsClient { get; set; }
         public DateTime DateCreation { get; set; }
@@ -62,6 +63,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int Id { get; set; }
         public string Designation { get; set; } = string.Empty;
         public string? Reference { get; set; }
+        public decimal? Laize { get; set; }
     }
 
     public class ConfigTailleItemDto
@@ -79,6 +81,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int ArticleId { get; set; }
         public decimal QuantiteParPiece { get; set; }
         public string? Unite { get; set; }
+        public bool EstConsommableTissu { get; set; }
         public BesoinArticleDto? Article { get; set; }
     }
 }

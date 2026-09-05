@@ -9,6 +9,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public string? TitreCommande { get; set; }
         public StatutCommande Statut { get; set; }
         public decimal PourcentageRessourcesCouvertes { get; set; }
+        public decimal? PrixFacon { get; set; }
         public DateTime? DateLivraisonSouhaitee { get; set; }
         public int ClientId { get; set; }
         public CommandeClientInfoDto? Client { get; set; }

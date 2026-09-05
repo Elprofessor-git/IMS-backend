@@ -29,6 +29,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Article
         [StringLength(1000)]
         public string? Caracteristiques { get; set; }
 
+        /// <summary>Largeur du rouleau de tissu en mètres (nullable, non-tissus = null).</summary>
+        public decimal? Laize { get; set; }
+
         public int SeuilAlerte { get; set; } = 0;
 
         public int SeuilCritique { get; set; } = 0;

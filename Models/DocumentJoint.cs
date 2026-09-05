@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Backend_Gestion_Magasin_API.Models
 {
-    public enum TypeDocument { Facture, BonLivraison, ListeColisage, Autre }
+    public enum TypeDocument { Facture, BonLivraison, ListeColisage, Autre, BonCommandeProduction }
 
     public class DocumentJoint
     {
@@ -15,6 +15,9 @@ namespace Backend_Gestion_Magasin_API.Models
 
         [ForeignKey("Importation")]
         public int? ImportationId { get; set; }
+
+        [ForeignKey("CommandeClient")]
+        public int? CommandeClientId { get; set; }
 
         public TypeDocument Type { get; set; } = TypeDocument.Autre;
 
@@ -43,5 +46,6 @@ namespace Backend_Gestion_Magasin_API.Models
         // Relations — nullable : le modèle est lié à l'un OU l'autre
         public virtual Achat? Achat { get; set; }
         public virtual Importation? Importation { get; set; }
+        public virtual CommandeClient? CommandeClient { get; set; }
     }
 }

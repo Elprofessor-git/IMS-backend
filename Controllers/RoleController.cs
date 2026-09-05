@@ -71,6 +71,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PeutValiderImportations = dto.PeutValiderImportations,
                 PeutVoirDashboard = dto.PeutVoirDashboard,
                 PeutVoirRapports = dto.PeutVoirRapports,
+                PeutVoirFactures = dto.PeutVoirFactures,
+                PeutGererFactures = dto.PeutGererFactures,
                 DateCreation = DateTime.Now,
                 EstActif = true
             };
@@ -114,6 +116,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             role.PeutValiderImportations = dto.PeutValiderImportations;
             role.PeutVoirDashboard = dto.PeutVoirDashboard;
             role.PeutVoirRapports = dto.PeutVoirRapports;
+            role.PeutVoirFactures = dto.PeutVoirFactures;
+            role.PeutGererFactures = dto.PeutGererFactures;
 
             await _context.SaveChangesAsync();
             return NoContent();
@@ -162,6 +166,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             PeutValiderImportations = r.PeutValiderImportations,
             PeutVoirDashboard = r.PeutVoirDashboard,
             PeutVoirRapports = r.PeutVoirRapports,
+            PeutVoirFactures = r.PeutVoirFactures,
+            PeutGererFactures = r.PeutGererFactures,
         };
     }
 }

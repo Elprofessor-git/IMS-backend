@@ -36,6 +36,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 TitreCommande = c.TitreCommande,
                 Statut = c.Statut,
                 PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
+                PrixFacon = c.PrixFacon,
                 DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
                 ClientId = c.ClientId,
                 Client = c.Client != null ? new CommandeClientInfoDto
@@ -69,6 +70,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     MontantTotal = c.MontantTotal,
                     Devise = c.Devise,
                     PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
+                    PrixFacon = c.PrixFacon,
                     NotesSpeciales = c.NotesSpeciales,
                     SpecificationsClient = c.SpecificationsClient,
                     DateCreation = c.DateCreation,
@@ -125,11 +127,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         ArticleId = bl.ArticleId,
                         QuantiteParPiece = bl.QuantiteParPiece,
                         Unite = bl.Unite,
+                        EstConsommableTissu = bl.EstConsommableTissu,
                         Article = bl.Article != null ? new BesoinArticleDto
                         {
                             Id = bl.Article.Id,
                             Designation = bl.Article.Designation,
-                            Reference = bl.Article.Reference
+                            Reference = bl.Article.Reference,
+                            Laize = bl.Article.Laize
                         } : null
                     }).ToList()
                 })
@@ -159,6 +163,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 TitreCommande = c.TitreCommande,
                 Statut = c.Statut,
                 PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
+                PrixFacon = c.PrixFacon,
                 DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
                 ClientId = c.ClientId,
                 Client = c.Client != null ? new CommandeClientInfoDto
@@ -241,6 +246,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 NotesSpeciales = dto.NotesSpeciales,
                 SpecificationsClient = dto.SpecificationsClient,
                 CreePar = dto.CreePar,
+                PrixFacon = dto.PrixFacon,
                 DateCreation = DateTime.Now,
                 NumeroCommande = GenerateNumeroCommande()
             };
@@ -703,7 +709,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     CommandeId = id,
                     ArticleId = dto.ArticleId,
                     QuantiteParPiece = dto.QuantiteParPiece,
-                    Unite = dto.Unite
+                    Unite = dto.Unite,
+                    EstConsommableTissu = dto.EstConsommableTissu
                 });
             }
 
@@ -806,6 +813,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     .Where(la => la.ArticleId == ligne.ArticleId &&
                                 la.TypeDestination == TypeDestinationAchat.Marque &&
                                 la.ClientId == commande.ClientId &&
+                                la.CommandeClientId == null &&
                                 la.Achat.Statut == StatutAchat.Confirme)
                     .SumAsync(la => Math.Max(0, la.Quantite - la.QuantiteRecue));
 
@@ -815,6 +823,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         .Where(la => la.ArticleId == ligne.ArticleId &&
                                     la.TypeDestination == TypeDestinationAchat.Plateforme &&
                                     la.PlateformeId == bomPlateformeId &&
+                                    la.CommandeClientId == null &&
                                     la.Achat.Statut == StatutAchat.Confirme)
                         .SumAsync(la => Math.Max(0, la.Quantite - la.QuantiteRecue))
                     : 0;
@@ -832,6 +841,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     .Where(s => s.ArticleId == ligne.ArticleId &&
                                s.TypeStock == TypeStock.Importe &&
                                s.ClientId == commande.ClientId &&
+                               s.CommandeClientId == null &&
                                s.Quantite > 0)
                     .SumAsync(s => s.Quantite);
 
@@ -840,6 +850,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         .Where(s => s.ArticleId == ligne.ArticleId &&
                                    s.TypeStock == TypeStock.Importe &&
                                    s.PlateformeId == bomPlateformeId &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
                                    s.Quantite > 0)
                         .SumAsync(s => s.Quantite)
                     : 0;
@@ -850,10 +862,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
                                s.CommandeClientId == null &&
                                s.ClientId == null &&
                                s.PlateformeId == null &&
+                               s.GroupeCommandeId == null &&
                                s.Quantite > 0)
                     .SumAsync(s => s.Quantite);
 
-                var qteImport = si1 + si2 + si3 + si4;
+                var si5 = groupeCommandeIds.Any()
+                    ? await _context.Stocks
+                        .Where(s => s.ArticleId == ligne.ArticleId &&
+                                   s.TypeStock == TypeStock.Importe &&
+                                   s.GroupeCommandeId.HasValue &&
+                                   groupeCommandeIds.Contains(s.GroupeCommandeId.Value) &&
+                                   s.ClientId == null &&
+                                   s.CommandeClientId == null &&
+                                   s.Quantite > 0)
+                        .SumAsync(s => s.Quantite)
+                    : 0;
+
+                var qteImport = si1 + si2 + si3 + si4 + si5;
 
                 var qteDisponible = qteStockReserve + qteAchat + qteImport;
                 var manque = Math.Max(0, besoinFinal - qteDisponible);
@@ -981,6 +1006,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             commande.TitreCommande = dto.TitreCommande;
             commande.DateLivraisonSouhaitee = dto.DateLivraisonSouhaitee;
             commande.NotesSpeciales = dto.NotesSpeciales;
+            commande.PrixFacon = dto.PrixFacon;
             commande.DateMiseAJour = DateTime.Now;
 
             try
@@ -1054,6 +1080,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
     }
 
     public record ConfigTailleDto(string Taille, int Quantite);
-    public record BomLigneDto(int ArticleId, decimal QuantiteParPiece, string? Unite);
+    public record BomLigneDto(int ArticleId, decimal QuantiteParPiece, string? Unite, bool EstConsommableTissu = false);
     public record CalculerRequest(decimal MargeAppliquee);
 }

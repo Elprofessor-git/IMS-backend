@@ -42,6 +42,9 @@ namespace Backend_Gestion_Magasin_API.Models
         public string? Devise { get; set; } = "EUR";
         
         public decimal PourcentageRessourcesCouvertes { get; set; } = 0;
+
+        /// <summary>Prix de façonnage par pièce (facturation atelier).</summary>
+        public decimal? PrixFacon { get; set; }
         
         [StringLength(1000)]
         public string? NotesSpeciales { get; set; }
@@ -67,6 +70,9 @@ namespace Backend_Gestion_Magasin_API.Models
         public virtual ICollection<ConfigTaille> ConfigTailles { get; set; } = new List<ConfigTaille>();
         public virtual ICollection<BomLigne> BomLignes { get; set; } = new List<BomLigne>();
         public virtual ICollection<ResultatCalcul> ResultatsCalcul { get; set; } = new List<ResultatCalcul>();
+        public virtual ICollection<LotCoupe> LotCoupes { get; set; } = new List<LotCoupe>();
+        public virtual ICollection<LotExport> LotExports { get; set; } = new List<LotExport>();
+        public virtual ICollection<FactureCommandeLigne> FacturesLignes { get; set; } = new List<FactureCommandeLigne>();
     }
 }
 

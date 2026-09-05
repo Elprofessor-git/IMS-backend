@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
+using Backend_Gestion_Magasin_API.Filters;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -156,6 +157,74 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return NoContent();
         }
 
+        // ── CommandeClient ─────────────────────────────────────────────────
+
+        // POST api/CommandeClient/{commandeId}/Documents
+        [HttpPost("CommandeClient/{commandeId}/Documents")]
+        [RequireModulePermission("commandes", requireWrite: true)]
+        public async Task<IActionResult> UploadCommande(int commandeId, IFormFile file, [FromForm] TypeDocument type, [FromForm] string? nature)
+        {
+            if (!await _context.CommandesClients.AnyAsync(c => c.Id == commandeId))
+                return NotFound(new { message = $"Commande {commandeId} introuvable." });
+
+            return await Upload(file, type, nature, null, null, commandeId);
+        }
+
+        // GET api/CommandeClient/{commandeId}/Documents
+        [HttpGet("CommandeClient/{commandeId}/Documents")]
+        [RequireModulePermission("commandes")]
+        public async Task<IActionResult> ListCommande(int commandeId)
+        {
+            if (!await _context.CommandesClients.AnyAsync(c => c.Id == commandeId))
+                return NotFound();
+
+            var docs = await _context.DocumentsJoints
+                .Where(d => d.CommandeClientId == commandeId)
+                .OrderByDescending(d => d.DateAjout)
+                .Select(d => new
+                {
+                    d.Id,
+                    d.Type,
+                    d.NomFichier,
+                    d.ContentType,
+                    d.TailleOctets,
+                    d.DateAjout,
+                    d.AjoutePar,
+                    d.Nature,
+                })
+                .ToListAsync();
+
+            return Ok(docs);
+        }
+
+        // GET api/CommandeClient/{commandeId}/Documents/{docId}/Download
+        [HttpGet("CommandeClient/{commandeId}/Documents/{docId}/Download")]
+        [RequireModulePermission("commandes")]
+        public async Task<IActionResult> DownloadCommande(int commandeId, int docId)
+        {
+            var doc = await _context.DocumentsJoints
+                .FirstOrDefaultAsync(d => d.Id == docId && d.CommandeClientId == commandeId);
+
+            if (doc == null) return NotFound();
+
+            return File(doc.Contenu, doc.ContentType, doc.NomFichier);
+        }
+
+        // DELETE api/CommandeClient/{commandeId}/Documents/{docId}
+        [HttpDelete("CommandeClient/{commandeId}/Documents/{docId}")]
+        [RequireModulePermission("commandes", requireWrite: true)]
+        public async Task<IActionResult> DeleteCommande(int commandeId, int docId)
+        {
+            var doc = await _context.DocumentsJoints
+                .FirstOrDefaultAsync(d => d.Id == docId && d.CommandeClientId == commandeId);
+
+            if (doc == null) return NotFound();
+
+            _context.DocumentsJoints.Remove(doc);
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
         // ── Logique commune ────────────────────────────────────────────────
 
         private async Task<IActionResult> Upload(
@@ -163,7 +232,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             TypeDocument type,
             string? nature,
             int? achatId,
-            int? importationId)
+            int? importationId,
+            int? commandeClientId = null)
         {
             if (file == null || file.Length == 0)
                 return BadRequest(new { message = "Aucun fichier fourni." });
@@ -196,6 +266,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             {
                 AchatId        = achatId,
                 ImportationId  = importationId,
+                CommandeClientId = commandeClientId,
                 Type           = type,
                 NomFichier     = file.FileName,
                 ContentType    = file.ContentType,

@@ -41,6 +41,10 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<HistoriquePrixArticle> HistoriquesPrixArticles { get; set; }
         public DbSet<GroupeCommande> GroupesCommandes { get; set; }
         public DbSet<GroupeCommandeCommande> GroupeCommandeCommandes { get; set; }
+        public DbSet<LotCoupe> LotCoupes { get; set; }
+        public DbSet<LotExport> LotExports { get; set; }
+        public DbSet<Facture> Factures { get; set; }
+        public DbSet<FactureCommandeLigne> FactureCommandesLignes { get; set; }
         public DbSet<Devise> Devises { get; set; }
         public DbSet<TauxChange> TauxChanges { get; set; }
 
@@ -69,6 +73,44 @@ namespace Backend_Gestion_Magasin_API.Data
                 .WithMany()
                 .HasForeignKey(b => b.ArticleId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // CommandeClient -> FactureCommandeLigne (One-to-Many)
+            modelBuilder.Entity<FactureCommandeLigne>()
+                .HasOne(fcl => fcl.Facture)
+                .WithMany(f => f.Lignes)
+                .HasForeignKey(fcl => fcl.FactureId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<FactureCommandeLigne>()
+                .HasOne(fcl => fcl.Commande)
+                .WithMany(c => c.FacturesLignes)
+                .HasForeignKey(fcl => fcl.CommandeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Facture -> Client (One-to-Many)
+            modelBuilder.Entity<Facture>()
+                .HasOne(f => f.Client)
+                .WithMany()
+                .HasForeignKey(f => f.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Facture>()
+                .HasIndex(f => f.NumeroFacture)
+                .IsUnique();
+
+            // CommandeClient -> LotCoupe (One-to-Many)
+            modelBuilder.Entity<LotCoupe>()
+                .HasOne(lc => lc.Commande)
+                .WithMany(c => c.LotCoupes)
+                .HasForeignKey(lc => lc.CommandeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // CommandeClient -> LotExport (One-to-Many)
+            modelBuilder.Entity<LotExport>()
+                .HasOne(le => le.Commande)
+                .WithMany(c => c.LotExports)
+                .HasForeignKey(le => le.CommandeId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // CommandeClient -> ResultatCalcul (One-to-Many)
             modelBuilder.Entity<ResultatCalcul>()
@@ -569,6 +611,11 @@ namespace Backend_Gestion_Magasin_API.Data
                 .Property(d => d.Type)
                 .HasConversion<string>();
 
+            // Facture — enum stocké en string
+            modelBuilder.Entity<Facture>()
+                .Property(f => f.Statut)
+                .HasConversion<string>();
+
             // DocumentJoint -> Achat (nullable, cascade sur suppression achat)
             modelBuilder.Entity<DocumentJoint>()
                 .HasOne(d => d.Achat)
@@ -582,6 +629,16 @@ namespace Backend_Gestion_Magasin_API.Data
                 .WithMany()
                 .HasForeignKey(d => d.ImportationId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // DocumentJoint -> CommandeClient (nullable, cascade sur suppression commande)
+            modelBuilder.Entity<DocumentJoint>()
+                .HasOne(d => d.CommandeClient)
+                .WithMany()
+                .HasForeignKey(d => d.CommandeClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<DocumentJoint>()
+                .HasIndex(d => d.CommandeClientId);
 
             // GroupeCommande -> GroupeCommandeCommande (One-to-Many)
             modelBuilder.Entity<GroupeCommandeCommande>()

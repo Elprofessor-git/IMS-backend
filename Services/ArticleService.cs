@@ -31,6 +31,7 @@ using System.Threading.Tasks;namespace Backend_Gestion_Magasin_API.Services
                 Marque = articleDto.Marque,
                 Reference = GenerateReference(),
                 Caracteristiques = articleDto.Caracteristiques,
+                Laize = articleDto.Laize,
                 SeuilAlerte = articleDto.SeuilAlerte,
                 SeuilCritique = articleDto.SeuilCritique,
                 PrixUnitaireMoyen = articleDto.PrixUnitaireMoyen,
@@ -161,6 +162,7 @@ using System.Threading.Tasks;namespace Backend_Gestion_Magasin_API.Services
             article.Marque = articleDto.Marque;
             article.Reference = articleDto.Reference;
             article.Caracteristiques = articleDto.Caracteristiques;
+            article.Laize = articleDto.Laize;
             article.SeuilAlerte = articleDto.SeuilAlerte;
             article.SeuilCritique = articleDto.SeuilCritique;
 

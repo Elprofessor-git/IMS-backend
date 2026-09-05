@@ -54,6 +54,13 @@ namespace Backend_Gestion_Magasin_API.Models
         [StringLength(2048)]
         public string? ImageUrl { get; set; }
         
+        /// <summary>
+        /// Largeur du rouleau de tissu en mètres (uniquement pertinent pour les
+        /// articles tissus, utilisée dans le module Rapport de coupe).
+        /// Nullable : les non-tissus (boutons, fils…) n'ont pas de laize.
+        /// </summary>
+        public decimal? Laize { get; set; }
+        
         // Relations
         public virtual ICollection<Stock> Stocks { get; set; } = new List<Stock>();
         public virtual ICollection<LigneAchat> LignesAchat { get; set; } = new List<LigneAchat>();

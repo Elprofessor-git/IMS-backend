@@ -45,6 +45,10 @@ namespace Backend_Gestion_Magasin_API.Models
         // Dashboard & Rapports (lecture seule)
         public bool PeutVoirDashboard { get; set; } = true;
         public bool PeutVoirRapports { get; set; } = true;
+
+        // Facturation
+        public bool PeutVoirFactures { get; set; } = false;
+        public bool PeutGererFactures { get; set; } = false;
         
         public DateTime DateCreation { get; set; } = DateTime.Now;
         
