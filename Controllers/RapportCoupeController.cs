@@ -17,11 +17,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly ExcelExportService _excel;
+        private readonly PdfExportService _pdf;
 
-        public RapportCoupeController(ApplicationDbContext context, ExcelExportService excel)
+        public RapportCoupeController(ApplicationDbContext context, ExcelExportService excel, PdfExportService pdf)
         {
             _context = context;
             _excel = excel;
+            _pdf = pdf;
         }
 
         // ───────────────────────────── Rapport complet ─────────────────────────────
@@ -51,6 +53,22 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 $"RapportCoupe_{dto.NumeroCommande}.xlsx");
+        }
+
+        // Export PDF (QuestPDF) — même préparation de données que l'export Excel.
+        [HttpGet("{commandeId}/ExportPdf")]
+        [RequireModulePermission("commandes", requireWrite: false)]
+        public async Task<IActionResult> ExportRapportCoupePdf(int commandeId)
+        {
+            var dto = await BuildRapportCoupeAsync(commandeId);
+            if (dto == null)
+                return NotFound(new { message = "Commande introuvable." });
+
+            var bytes = _pdf.ExportRapportCoupe(dto);
+            return File(
+                bytes,
+                "application/pdf",
+                $"RapportCoupe_{dto.NumeroCommande}.pdf");
         }
 
         private async Task<RapportCoupeDto?> BuildRapportCoupeAsync(int commandeId)

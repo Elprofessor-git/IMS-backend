@@ -17,11 +17,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly ExcelExportService _excel;
+        private readonly PdfExportService _pdf;
 
-        public FactureController(ApplicationDbContext context, ExcelExportService excel)
+        public FactureController(ApplicationDbContext context, ExcelExportService excel, PdfExportService pdf)
         {
             _context = context;
             _excel = excel;
+            _pdf = pdf;
         }
 
         [HttpGet]
@@ -38,7 +40,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     ClientId = f.ClientId,
                     ClientNom = f.Client.Nom,
                     Devise = f.Devise,
-                    MontantTotal = f.Lignes.Sum(l => l.MontantLigne),
+                    MontantTotal = f.MontantTotal, // valeur figée en base
                     Statut = f.Statut,
                 })
                 .ToListAsync();
@@ -71,6 +73,22 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 $"Facture_{dto.NumeroFacture}.xlsx");
         }
 
+        // Export PDF (QuestPDF) — même préparation de données que l'export Excel.
+        [HttpGet("{id}/ExportPdf")]
+        [RequireModulePermission("factures", requireWrite: false)]
+        public async Task<IActionResult> ExportFacturePdf(int id)
+        {
+            var dto = await GetFactureDetailAsync(id);
+            if (dto == null)
+                return NotFound(new { message = "Facture introuvable." });
+
+            var bytes = _pdf.ExportFacture(dto);
+            return File(
+                bytes,
+                "application/pdf",
+                $"Facture_{dto.NumeroFacture}.pdf");
+        }
+
         private async Task<FactureDetailDto?> GetFactureDetailAsync(int id)
         {
             return await _context.Factures
@@ -96,7 +114,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Statut = f.Statut,
                     DateCreation = f.DateCreation,
                     CreePar = f.CreePar,
-                    MontantTotal = f.Lignes.Sum(l => l.MontantLigne),
+                    MontantTotal = f.MontantTotal, // valeur figée en base
                     Lignes = f.Lignes.Select(l => new FactureCommandeLigneDto
                     {
                         Id = l.Id,
@@ -166,6 +184,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 });
             }
 
+            // Montant figé en base à l'écriture (jamais recalculé à la lecture).
+            facture.MontantTotal = facture.Lignes.Sum(l => l.MontantLigne);
+
             _context.Factures.Add(facture);
 
             const int maxTentatives = 5;
@@ -234,6 +255,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 });
             }
 
+            // Recalcul du montant total, écrit en base (jamais recalculé à la lecture).
+            facture.MontantTotal = facture.Lignes.Sum(l => l.MontantLigne);
+
             await _context.SaveChangesAsync();
             return NoContent();
         }
@@ -242,11 +266,21 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("factures", requireWrite: true)]
         public async Task<IActionResult> EmettreFacture(int id)
         {
-            var facture = await _context.Factures.FindAsync(id);
+            // Include(Lignes) : nécessité pour figer définitivement le montant total à l'émission
+            // (garde « legacy » si la valeur stockée est absente/à 0, ex. factures créées avant la migration).
+            var facture = await _context.Factures
+                .Include(f => f.Lignes)
+                .FirstOrDefaultAsync(f => f.Id == id);
             if (facture == null)
                 return NotFound(new { message = "Facture introuvable." });
             if (facture.Statut == StatutFacture.Annulee)
                 return BadRequest(new { message = "Impossible d'émettre une facture annulée." });
+
+            // Figeage : une fois émise, plus aucune modification possible (garde au PUT).
+            // On verrouille le montant stocké ; s'il manque (legacy), on le calcule une
+            // dernière fois à partir des lignes, puis on le fige.
+            if (facture.MontantTotal == 0m)
+                facture.MontantTotal = facture.Lignes.Sum(l => l.MontantLigne);
 
             facture.Statut = StatutFacture.Emise;
             await _context.SaveChangesAsync();

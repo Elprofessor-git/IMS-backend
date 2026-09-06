@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Models
 {
@@ -50,6 +51,11 @@ namespace Backend_Gestion_Magasin_API.Models
 
         [StringLength(1000)]
         public string? Notes { get; set; }
+
+        // Montant total figé en base à l'écriture (convention LigneAchat/LigneImportation) :
+        // calculé UNE FOIS à la création/modification des lignes, somme de MontantLigne.
+        [Precision(18, 4)]
+        public decimal MontantTotal { get; set; } = 0;
 
         public StatutFacture Statut { get; set; } = StatutFacture.Brouillon;
 

@@ -20,6 +20,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 "application/pdf",
                 "image/jpeg",
                 "image/png",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
             };
 
         private const long TailleMaxOctets = 5L * 1024 * 1024; // 5 Mo
@@ -249,7 +250,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest(new
                 {
                     message = $"Type de fichier non autorisé : \"{file.ContentType}\". " +
-                              "Types acceptés : application/pdf, image/jpeg, image/png.",
+                              "Types acceptés : application/pdf, image/jpeg, image/png, .xlsx.",
                 });
 
             // Nature libre requise uniquement pour le type "Autre" ; ignorée autrement.
