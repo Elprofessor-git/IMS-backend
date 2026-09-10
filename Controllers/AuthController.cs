@@ -65,7 +65,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (!result.Succeeded)
                 return BadRequest(result.Errors);
 
-            return Ok("Utilisateur enregistré avec succès.");
+            return Ok(new { message = "Utilisateur enregistré avec succès." });
         }
 
         [HttpPost("login")]
