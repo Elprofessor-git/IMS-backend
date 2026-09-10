@@ -73,6 +73,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public virtual ICollection<LotCoupe> LotCoupes { get; set; } = new List<LotCoupe>();
         public virtual ICollection<LotExport> LotExports { get; set; } = new List<LotExport>();
         public virtual ICollection<FactureCommandeLigne> FacturesLignes { get; set; } = new List<FactureCommandeLigne>();
+        public virtual ICollection<FournitureCommandeLigne> FournituresLignes { get; set; } = new List<FournitureCommandeLigne>();
     }
 }
 

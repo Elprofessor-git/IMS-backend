@@ -11,6 +11,15 @@ namespace Backend_Gestion_Magasin_API.Models
         [ForeignKey("Commande")]
         public int CommandeId { get; set; }
 
+        /// <summary>
+        /// Matelas dont est issue cette coupe (enveloppe de coupe — module Fournitures).
+        /// Nullable et additif : les coupes existantes restent valides sans matelas.
+        /// La suppression d'un matelas met la référence à NULL (SetNull) — l'historique
+        /// des coupes n'est jamais supprimé avec le matelas.
+        /// </summary>
+        [ForeignKey("Matelas")]
+        public int? MatelasId { get; set; }
+
         [Required]
         [StringLength(50)]
         public string Taille { get; set; } = string.Empty;
@@ -28,5 +37,6 @@ namespace Backend_Gestion_Magasin_API.Models
         public string? Notes { get; set; }
 
         public virtual CommandeClient Commande { get; set; } = null!;
+        public virtual Matelas? Matelas { get; set; }
     }
 }

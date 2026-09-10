@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Backend_Gestion_Magasin_API.Models
 {
@@ -60,8 +61,26 @@ namespace Backend_Gestion_Magasin_API.Models
         /// Nullable : les non-tissus (boutons, fils…) n'ont pas de laize.
         /// </summary>
         public decimal? Laize { get; set; }
-        
+
+        /// <summary>
+        /// Article parent (variante parent/enfant — module Fournitures).
+        /// Null pour un article « racine » ; renseigné pour une variante
+        /// (ex. même tissu décliné par taille/coloris).
+        /// </summary>
+        [ForeignKey("ArticleParent")]
+        public int? ArticleParentId { get; set; }
+
+        /// <summary>
+        /// Taille de la variante (uniquement pertinent quand ArticleParentId
+        /// est renseigné). Additive et nullable : aucun impact sur les
+        /// articles existants.
+        /// </summary>
+        [StringLength(50)]
+        public string? Taille { get; set; }
+
         // Relations
+        public virtual Article? ArticleParent { get; set; }
+        public virtual ICollection<Article> Variantes { get; set; } = new List<Article>();
         public virtual ICollection<Stock> Stocks { get; set; } = new List<Stock>();
         public virtual ICollection<LigneAchat> LignesAchat { get; set; } = new List<LigneAchat>();
         public virtual ICollection<LigneImportation> LignesImportation { get; set; } = new List<LigneImportation>();

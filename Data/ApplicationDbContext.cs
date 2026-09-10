@@ -43,6 +43,11 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<GroupeCommandeCommande> GroupeCommandeCommandes { get; set; }
         public DbSet<LotCoupe> LotCoupes { get; set; }
         public DbSet<LotExport> LotExports { get; set; }
+        public DbSet<Matelas> Matelas { get; set; }
+        public DbSet<ChaineProduction> ChainesProduction { get; set; }
+        public DbSet<FournitureCommandeLigne> FournitureCommandesLignes { get; set; }
+        public DbSet<ReceptionFourniture> ReceptionsFourniture { get; set; }
+        public DbSet<EnvoiFourniture> EnvoisFourniture { get; set; }
         public DbSet<Facture> Factures { get; set; }
         public DbSet<FactureCommandeLigne> FactureCommandesLignes { get; set; }
         public DbSet<Devise> Devises { get; set; }
@@ -707,6 +712,117 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<TauxChange>()
                 .Property(t => t.Taux)
                 .HasPrecision(18, 6);
+
+            // ═══════════════════════════════════════════════════════════════════
+            // Module « Fournitures liées aux pièces coupées » + Sous-traitance
+            // multi-chaînes (partie corrective).
+            // ═══════════════════════════════════════════════════════════════════
+
+            // Article parent/enfant (variante légère : self-FK + taille optionnelle)
+            modelBuilder.Entity<Article>()
+                .HasOne(a => a.ArticleParent)
+                .WithMany(a => a.Variantes)
+                .HasForeignKey(a => a.ArticleParentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Index dédié (nommage explicite ArticleParentId + Taille)
+            modelBuilder.Entity<Article>()
+                .HasIndex(a => new { a.ArticleParentId, a.Taille })
+                .HasDatabaseName("IX_Articles_ParentEnfant");
+
+            // Matelas — numéro unique
+            modelBuilder.Entity<Matelas>()
+                .HasIndex(m => m.NumeroMatelas)
+                .IsUnique();
+
+            // LotCoupe -> Matelas (nullable, SetNull pour conserver l'historique)
+            modelBuilder.Entity<LotCoupe>()
+                .HasOne(lc => lc.Matelas)
+                .WithMany(m => m.LotCoupes)
+                .HasForeignKey(lc => lc.MatelasId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<LotCoupe>()
+                .HasIndex(lc => new { lc.CommandeId, lc.MatelasId });
+
+            // ChaineProduction — nom unique, type stocké en string
+            modelBuilder.Entity<ChaineProduction>()
+                .HasIndex(cp => cp.Nom)
+                .IsUnique();
+
+            modelBuilder.Entity<ChaineProduction>()
+                .Property(cp => cp.TypeChaine)
+                .HasConversion<string>();
+
+            // LotExport -> ChaineProduction (nullable, SetNull ; filtre/affichage uniquement)
+            modelBuilder.Entity<LotExport>()
+                .HasOne(le => le.ChaineProduction)
+                .WithMany(cp => cp.LotExports)
+                .HasForeignKey(le => le.ChaineProductionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<LotExport>()
+                .HasIndex(le => new { le.CommandeId, le.ChaineProductionId });
+
+            // FournitureCommandeLigne (Commande -> Lignes ; Article -> Lignes)
+            modelBuilder.Entity<FournitureCommandeLigne>()
+                .HasOne(f => f.Commande)
+                .WithMany(c => c.FournituresLignes)
+                .HasForeignKey(f => f.CommandeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<FournitureCommandeLigne>()
+                .HasOne(f => f.Article)
+                .WithMany()
+                .HasForeignKey(f => f.ArticleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<FournitureCommandeLigne>()
+                .Property(f => f.QuantiteFourniture)
+                .HasPrecision(18, 4);
+
+            // Enum stocké en string (règle projet, Bug 13 précédent)
+            modelBuilder.Entity<FournitureCommandeLigne>()
+                .Property(f => f.Portee)
+                .HasConversion<string>();
+
+            // Lecture rapide des lignes d'une commande (même article + taille)
+            modelBuilder.Entity<FournitureCommandeLigne>()
+                .HasIndex(f => new { f.CommandeId, f.ArticleId, f.Taille });
+
+            // ReceptionFourniture (cumulatif, sans plafond)
+            modelBuilder.Entity<ReceptionFourniture>()
+                .HasOne(r => r.CommandeLigne)
+                .WithMany(l => l.Receptions)
+                .HasForeignKey(r => r.CommandeFournitureLigneId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ReceptionFourniture>()
+                .Property(r => r.QuantiteRecue)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<ReceptionFourniture>()
+                .HasIndex(r => r.CommandeFournitureLigneId);
+
+            // EnvoiFourniture (plafond global multi-chaînes + ForcerDepassement)
+            modelBuilder.Entity<EnvoiFourniture>()
+                .HasOne(e => e.CommandeLigne)
+                .WithMany(l => l.Envois)
+                .HasForeignKey(e => e.CommandeFournitureLigneId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<EnvoiFourniture>()
+                .HasOne(e => e.ChaineProduction)
+                .WithMany(cp => cp.EnvoisFourniture)
+                .HasForeignKey(e => e.ChaineProductionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<EnvoiFourniture>()
+                .Property(e => e.QuantiteEnvoyee)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<EnvoiFourniture>()
+                .HasIndex(e => new { e.CommandeFournitureLigneId, e.ChaineProductionId });
         }
     }
 }
