@@ -173,6 +173,13 @@ namespace Backend_Gestion_Magasin_API.Migrations
                 type: "integer",
                 nullable: true);
 
+            migrationBuilder.AddColumn<string>(
+                name: "Taille",
+                table: "Articles",
+                type: "character varying(50)",
+                maxLength: 50,
+                nullable: true);
+
             migrationBuilder.CreateIndex(
                 name: "IX_Articles_ParentEnfant",
                 table: "Articles",
@@ -333,6 +340,10 @@ namespace Backend_Gestion_Magasin_API.Migrations
             migrationBuilder.DropColumn(
                 name: "MatelasId",
                 table: "LotCoupes");
+
+            migrationBuilder.DropColumn(
+                name: "Taille",
+                table: "Articles");
 
             migrationBuilder.DropColumn(
                 name: "ArticleParentId",

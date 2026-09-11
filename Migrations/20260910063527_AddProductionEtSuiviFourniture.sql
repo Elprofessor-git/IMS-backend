@@ -66,6 +66,7 @@ CREATE INDEX "IX_EnvoisFourniture_CommandeFournitureLigneId_ChaineProductionId" 
 CREATE INDEX "IX_ReceptionsFourniture_CommandeFournitureLigneId" ON "ReceptionsFourniture" ("CommandeFournitureLigneId");
 
 ALTER TABLE "Articles" ADD COLUMN "ArticleParentId" integer NULL;
+ALTER TABLE "Articles" ADD COLUMN "Taille" character varying(50) NULL;
 CREATE INDEX "IX_Articles_ParentEnfant" ON "Articles" ("ArticleParentId", "Taille");
 ALTER TABLE "Articles" ADD CONSTRAINT "FK_Articles_Articles_ArticleParentId" FOREIGN KEY ("ArticleParentId") REFERENCES "Articles" ("Id") ON DELETE RESTRICT;
 
