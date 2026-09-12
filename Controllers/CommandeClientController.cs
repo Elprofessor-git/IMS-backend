@@ -324,8 +324,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             decimal totalCouverture = 0;
             int besoinsTraites = 0;
 
+            var marge = commande.MargeSecuriteDefaut;
+
             foreach (var besoin in commande.Besoins)
             {
+                var besoinFinal = besoin.QuantiteTotale * (1 + marge / 100);
                 var s1 = await _context.Stocks
                     .Where(s => s.ArticleId == besoin.ArticleId &&
                                s.TypeStock == TypeStock.Importe &&
@@ -407,7 +410,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 var stockAchatsLocaux = r1 + r2 + r3 + r4;
                 besoin.QuantiteAchatsLocaux = Math.Min(stockAchatsLocaux, besoin.QuantiteTotale - besoin.QuantiteStockImporte);
 
-                var quantiteRestante = besoin.QuantiteTotale - besoin.QuantiteStockImporte - besoin.QuantiteAchatsLocaux;
+                var quantiteRestante = besoinFinal - besoin.QuantiteStockImporte - besoin.QuantiteAchatsLocaux;
 
                 if (quantiteRestante > 0)
                 {
@@ -421,16 +424,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 }
 
                 besoin.QuantiteCouverte = besoin.QuantiteStockImporte + besoin.QuantiteAchatsLocaux + besoin.QuantiteStockLibre;
-                besoin.EstCompletementCouvert = besoin.QuantiteCouverte >= besoin.QuantiteTotale;
+                besoin.EstCompletementCouvert = besoin.QuantiteCouverte >= besoinFinal;
 
-                if (besoin.EstCompletementCouvert && (s1 + r1) < besoin.QuantiteTotale)
+                if (besoin.EstCompletementCouvert && (s1 + r1) < besoinFinal)
                 {
-                    var aReclamer = besoin.QuantiteTotale - s1 - r1;
+                    var aReclamer = besoinFinal - s1 - r1;
                     await ScinderStock(besoin.ArticleId, aReclamer, s2, s3, s4, r2, r3, r4,
                         commande.Id, commande.ClientId, plateformeId, groupeCommandeIds);
                 }
 
-                totalCouverture += (besoin.QuantiteCouverte / besoin.QuantiteTotale) * 100;
+                totalCouverture += (besoin.QuantiteCouverte / besoinFinal) * 100;
                 besoinsTraites++;
             }
 
@@ -901,6 +904,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
 
             _context.ResultatsCalcul.AddRange(resultats);
+            commande.MargeSecuriteDefaut = request.MargeAppliquee;
             await _context.SaveChangesAsync();
 
             return Ok(new

@@ -178,6 +178,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("stock", requireWrite: true)]
         public async Task<ActionResult<Stock>> PostStock(CreateStockDto dto)
         {
+            if (ValiderScopesExclusifs(dto) is { } erreur)
+            {
+                return BadRequest(erreur);
+            }
+
             var devise = dto.Devise ?? "EUR";
             var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, devise, DateTime.Now);
 
@@ -214,6 +219,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("stock", requireWrite: true)]
         public async Task<IActionResult> PutStock(int id, CreateStockDto dto)
         {
+            if (ValiderScopesExclusifs(dto) is { } erreur)
+            {
+                return BadRequest(erreur);
+            }
+
             var stock = await _context.Stocks.FindAsync(id);
             if (stock == null)
             {
@@ -320,6 +330,19 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private bool StockExists(int id)
         {
             return _context.Stocks.Any(e => e.Id == id);
+        }
+
+        private static string? ValiderScopesExclusifs(CreateStockDto dto)
+        {
+            var scopesRenseignes = new int?[] { dto.ClientId, dto.PlateformeId, dto.GroupeCommandeId, dto.CommandeClientId }
+                .Count(s => s.HasValue);
+
+            if (scopesRenseignes > 1)
+            {
+                return "Un stock ne peut appartenir qu'à un seul scope : Client, Plateforme, Groupe de commandes ou commande client, pas plusieurs à la fois.";
+            }
+
+            return null;
         }
     }
 }

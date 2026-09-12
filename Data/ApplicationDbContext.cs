@@ -392,6 +392,10 @@ namespace Backend_Gestion_Magasin_API.Data
                 .Property(cc => cc.PourcentageRessourcesCouvertes)
                 .HasPrecision(5, 2);
 
+            modelBuilder.Entity<CommandeClient>()
+                .Property(cc => cc.MargeSecuriteDefaut)
+                .HasPrecision(5, 2);
+
             modelBuilder.Entity<TacheProduction>()
                 .Property(tp => tp.PourcentageAvancement)
                 .HasPrecision(5, 2);

@@ -43,6 +43,8 @@ namespace Backend_Gestion_Magasin_API.Models
         
         public decimal PourcentageRessourcesCouvertes { get; set; } = 0;
 
+        public decimal MargeSecuriteDefaut { get; set; } = 0;
+
         /// <summary>Prix de façonnage par pièce (facturation atelier).</summary>
         public decimal? PrixFacon { get; set; }
         
