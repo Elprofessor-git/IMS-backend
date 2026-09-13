@@ -888,11 +888,18 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             foreach (var ligne in importation.LignesImportation.Where(li => li.CommandeClientId.HasValue))
             {
-                var stocks = await _context.Stocks
+                // Priorité déterministe : le besoin de la ligne de commande est d'abord
+                // couvert par les stocks DÉJÀ exclusifs à cette commande (sinon une
+                // commande pomperait le stock partagé d'un groupe avant sa propre
+                // réception — bug LOT 2.3). Ensuite seulement, les stocks partagés/
+                // sans scope (avec scission partielle, voir ci-dessous).
+                var stocks = (await _context.Stocks
                     .Where(s => s.ArticleId == ligne.ArticleId &&
                                s.TypeStock == TypeStock.Importe &&
                                s.Quantite > 0)
-                    .ToListAsync();
+                    .ToListAsync())
+                    .OrderBy(s => s.CommandeClientId == ligne.CommandeClientId ? 0 : 1)
+                    .ToList();
 
                 var quantiteAAffecter = ligne.Quantite;
 
@@ -903,19 +910,72 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     var quantiteDisponible = stock.Quantite - stock.QuantiteReservee;
                     var quantiteAReserver = Math.Min(quantiteAAffecter, quantiteDisponible);
 
-                    if (quantiteAReserver > 0)
-                    {
-                        stock.QuantiteReservee += quantiteAReserver;
-                        stock.CommandeClientId = ligne.CommandeClientId;
-                        quantiteAAffecter -= quantiteAReserver;
+                    if (quantiteAReserver <= 0) continue;
 
-                        affectations.Add(new
+                    // Stock déjà exclusivement affecté à une autre commande : ne pas
+                    // cannibaliser ni écraser (LOT 2.3 / Loi 3).
+                    if (stock.CommandeClientId.HasValue && stock.CommandeClientId != ligne.CommandeClientId)
+                        continue;
+
+                    // Scission partielle (pattern ScinderDepuisScope) : quantité réservée <
+                    // quantité physique d'un stock partagé → ligne exclusive pour la commande,
+                    // décrémentation de la source, scope conservé (Client/Plateforme/Groupe)
+                    // sur le reliquat, MouvementStock Transfert pour traçabilité.
+                    if (stock.CommandeClientId == null && quantiteAReserver < stock.Quantite)
+                    {
+                        _context.Stocks.Add(new Stock
                         {
-                            CommandeId = ligne.CommandeClientId,
-                            ArticleId = ligne.ArticleId,
-                            QuantiteAffectee = quantiteAReserver
+                            ArticleId = stock.ArticleId,
+                            TypeStock = stock.TypeStock,
+                            Quantite = quantiteAReserver,
+                            QuantiteReservee = quantiteAReserver,
+                            CommandeClientId = ligne.CommandeClientId,
+                            ClientId = stock.ClientId,
+                            PlateformeId = stock.PlateformeId,
+                            GroupeCommandeId = stock.GroupeCommandeId,
+                            PrixUnitaire = stock.PrixUnitaire,
+                            PrixUnitaireTND = stock.PrixUnitaireTND,
+                            Devise = stock.Devise,
+                            DateEntree = stock.DateEntree,
+                            EstValide = stock.EstValide,
+                            ValidePar = stock.ValidePar
+                        });
+
+                        var avant = stock.Quantite;
+                        stock.Quantite -= quantiteAReserver;
+
+                        _context.MouvementsStock.Add(new MouvementStock
+                        {
+                            StockId = stock.Id,
+                            TypeMouvement = TypeMouvement.Transfert,
+                            OrigineMouvement = OrigineMouvement.Transfert,
+                            Quantite = quantiteAReserver,
+                            QuantiteAvant = avant,
+                            QuantiteApres = stock.Quantite,
+                            Motif = $"Scission affectation commande #{ligne.CommandeClientId} (import {importation.ReferenceImportation})",
+                            Notes = $"{quantiteAReserver} exclusif commande #{ligne.CommandeClientId}, reliquat {stock.Quantite} conservé sur scope d'origine",
+                            DocumentReference = importation.ReferenceImportation,
+                            DateMouvement = DateTime.Now,
+                            EffectuePar = "Système"
                         });
                     }
+                    else
+                    {
+                        // Prise totale ou ligne déjà affectée à cette commande :
+                        // comportement historique conservé.
+                        stock.QuantiteReservee += quantiteAReserver;
+                        if (!stock.CommandeClientId.HasValue)
+                            stock.CommandeClientId = ligne.CommandeClientId;
+                    }
+
+                    quantiteAAffecter -= quantiteAReserver;
+
+                    affectations.Add(new
+                    {
+                        CommandeId = ligne.CommandeClientId,
+                        ArticleId = ligne.ArticleId,
+                        QuantiteAffectee = quantiteAReserver
+                    });
                 }
             }
 
