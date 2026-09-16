@@ -52,6 +52,8 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<FactureCommandeLigne> FactureCommandesLignes { get; set; }
         public DbSet<Devise> Devises { get; set; }
         public DbSet<TauxChange> TauxChanges { get; set; }
+        public DbSet<Machine> Machines { get; set; }
+        public DbSet<InterventionMachine> InterventionsMachines { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -384,6 +386,18 @@ namespace Backend_Gestion_Magasin_API.Data
                 .Property(bc => bc.QuantiteCouverte)
                 .HasPrecision(18, 4);
 
+            modelBuilder.Entity<BesoinCommande>()
+                .Property(bc => bc.QuantiteAchatsLocaux)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<BesoinCommande>()
+                .Property(bc => bc.QuantiteStockImporte)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<BesoinCommande>()
+                .Property(bc => bc.QuantiteStockLibre)
+                .HasPrecision(18, 4);
+
             modelBuilder.Entity<CommandeClient>()
                 .Property(cc => cc.MontantTotal)
                 .HasPrecision(18, 4);
@@ -402,6 +416,10 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<LigneAchat>()
                 .Property(la => la.Quantite)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<LigneAchat>()
+                .Property(la => la.QuantiteRecue)
                 .HasPrecision(18, 4);
 
             modelBuilder.Entity<LigneAchat>()
@@ -426,6 +444,10 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<LigneImportation>()
                 .Property(li => li.Quantite)
+                .HasPrecision(18, 4);
+
+            modelBuilder.Entity<LigneImportation>()
+                .Property(li => li.QuantiteRecue)
                 .HasPrecision(18, 4);
 
             modelBuilder.Entity<LigneImportation>()
@@ -827,6 +849,43 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<EnvoiFourniture>()
                 .HasIndex(e => new { e.CommandeFournitureLigneId, e.ChaineProductionId });
+
+            // ═══════════════════════════════════════════════════════════════════
+            // Parc machines à coudre — module indépendant (inventaire + maintenance).
+            // ═══════════════════════════════════════════════════════════════════
+
+            // CodeMachine unique
+            modelBuilder.Entity<Machine>()
+                .HasIndex(m => m.CodeMachine)
+                .IsUnique();
+
+            // Enums stockés en string (règle projet)
+            modelBuilder.Entity<Machine>()
+                .Property(m => m.TypeMachine)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<Machine>()
+                .Property(m => m.Statut)
+                .HasConversion<string>();
+
+            // InterventionMachine -> Machine (Cascade : la journalisation des
+            // interventions vit avec la machine)
+            modelBuilder.Entity<InterventionMachine>()
+                .HasOne(i => i.Machine)
+                .WithMany(m => m.Interventions)
+                .HasForeignKey(i => i.MachineId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<InterventionMachine>()
+                .HasIndex(i => i.MachineId);
+
+            modelBuilder.Entity<InterventionMachine>()
+                .Property(i => i.TypeIntervention)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<InterventionMachine>()
+                .Property(i => i.CoutIntervention)
+                .HasPrecision(18, 4);
         }
     }
 }

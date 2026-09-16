@@ -49,6 +49,10 @@ namespace Backend_Gestion_Magasin_API.Models
         // Facturation
         public bool PeutVoirFactures { get; set; } = false;
         public bool PeutGererFactures { get; set; } = false;
+
+        // Parc machines à coudre (inventaire + maintenance)
+        public bool PeutVoirMachines { get; set; } = false;
+        public bool PeutGererMachines { get; set; } = false;
         
         public DateTime DateCreation { get; set; } = DateTime.Now;
         

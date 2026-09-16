@@ -73,6 +73,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PeutVoirRapports = dto.PeutVoirRapports,
                 PeutVoirFactures = dto.PeutVoirFactures,
                 PeutGererFactures = dto.PeutGererFactures,
+                PeutVoirMachines = dto.PeutVoirMachines,
+                PeutGererMachines = dto.PeutGererMachines,
                 DateCreation = DateTime.Now,
                 EstActif = true
             };
@@ -118,6 +120,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             role.PeutVoirRapports = dto.PeutVoirRapports;
             role.PeutVoirFactures = dto.PeutVoirFactures;
             role.PeutGererFactures = dto.PeutGererFactures;
+            role.PeutVoirMachines = dto.PeutVoirMachines;
+            role.PeutGererMachines = dto.PeutGererMachines;
 
             await _context.SaveChangesAsync();
             return NoContent();
@@ -168,6 +172,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             PeutVoirRapports = r.PeutVoirRapports,
             PeutVoirFactures = r.PeutVoirFactures,
             PeutGererFactures = r.PeutGererFactures,
+            PeutVoirMachines = r.PeutVoirMachines,
+            PeutGererMachines = r.PeutGererMachines,
         };
     }
 }
