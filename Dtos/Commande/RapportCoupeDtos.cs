@@ -8,6 +8,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int QuantiteExportee { get; set; }
         public bool ForcerDepassement { get; set; } = false;
         public string? Notes { get; set; }
+        /// <summary>OF dont relève la coupe (module OF — Phase 1, optionnel).</summary>
+        public int? OrdreFabricationId { get; set; }
     }
 
     public class LotCoupeDto
@@ -20,6 +22,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public string? EffectuePar { get; set; }
         public bool ForcerDepassement { get; set; }
         public string? Notes { get; set; }
+        /// <summary>OF dont relève la coupe (module OF — Phase 1, optionnel).</summary>
+        public int? OrdreFabricationId { get; set; }
+        public string? OrdreFabricationNumero { get; set; }
     }
 
     public class LotExportDto

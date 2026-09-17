@@ -20,6 +20,15 @@ namespace Backend_Gestion_Magasin_API.Models
         [ForeignKey("Matelas")]
         public int? MatelasId { get; set; }
 
+        /// <summary>
+        /// Ordre de fabrication dont relève cette coupe (module OF — Phase 1).
+        /// Nullable et additif : les coupes existantes restent valides sans OF.
+        /// La suppression d'un OF met la référence à NULL (SetNull) — l'historique
+        /// des coupes n'est jamais supprimé avec l'OF.
+        /// </summary>
+        [ForeignKey("OrdreFabrication")]
+        public int? OrdreFabricationId { get; set; }
+
         [Required]
         [StringLength(50)]
         public string Taille { get; set; } = string.Empty;
@@ -38,5 +47,6 @@ namespace Backend_Gestion_Magasin_API.Models
 
         public virtual CommandeClient Commande { get; set; } = null!;
         public virtual Matelas? Matelas { get; set; }
+        public virtual OrdreFabrication? OrdreFabrication { get; set; }
     }
 }

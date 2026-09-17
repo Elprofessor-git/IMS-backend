@@ -50,6 +50,9 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<EnvoiFourniture> EnvoisFourniture { get; set; }
         public DbSet<Facture> Factures { get; set; }
         public DbSet<FactureCommandeLigne> FactureCommandesLignes { get; set; }
+        public DbSet<OrdreFabrication> OrdresFabrication { get; set; }
+        public DbSet<OrdreFabricationTailleLigne> OrdresFabricationTailles { get; set; }
+        public DbSet<OrdreFabricationEtiquette> OrdresFabricationEtiquettes { get; set; }
         public DbSet<Devise> Devises { get; set; }
         public DbSet<TauxChange> TauxChanges { get; set; }
         public DbSet<Machine> Machines { get; set; }
@@ -886,6 +889,68 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<InterventionMachine>()
                 .Property(i => i.CoutIntervention)
                 .HasPrecision(18, 4);
+
+            // ═══════════════════════════════════════════════════════════════════
+            // Ordres de fabrication — Phase 1 (structure + étiquetage).
+            // Couche additif scoping CommandeClient : aucun code de calcul
+            // (Calculer/ValiderRessources) ne référence ces entités.
+            // ═══════════════════════════════════════════════════════════════════
+
+            // OrdreFabrication -> Commande (Cascade) ; ChaineProduction (SetNull)
+            modelBuilder.Entity<OrdreFabrication>()
+                .HasOne(of => of.Commande)
+                .WithMany(c => c.OrdresFabrication)
+                .HasForeignKey(of => of.CommandeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrdreFabrication>()
+                .HasOne(of => of.ChaineProduction)
+                .WithMany()
+                .HasForeignKey(of => of.ChaineProductionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Numéro d'OF unique au sein de la commande (Décision 5)
+            modelBuilder.Entity<OrdreFabrication>()
+                .HasIndex(of => new { of.CommandeId, of.NumeroOF })
+                .IsUnique();
+
+            // OrdreFabricationTailleLigne -> OrdreFabrication (Cascade)
+            modelBuilder.Entity<OrdreFabricationTailleLigne>()
+                .HasOne(t => t.OrdreFabrication)
+                .WithMany(of => of.Tailles)
+                .HasForeignKey(t => t.OrdreFabricationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrdreFabricationTailleLigne>()
+                .HasIndex(t => t.OrdreFabricationId);
+
+            // OrdreFabricationEtiquette -> OrdreFabrication (Cascade) ;
+            // FournitureCommandeLigne (SetNull : l'étiquette survit à la ligne)
+            modelBuilder.Entity<OrdreFabricationEtiquette>()
+                .HasOne(e => e.OrdreFabrication)
+                .WithMany(of => of.Etiquettes)
+                .HasForeignKey(e => e.OrdreFabricationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrdreFabricationEtiquette>()
+                .HasOne(e => e.FournitureLigne)
+                .WithMany()
+                .HasForeignKey(e => e.FournitureCommandeLigneId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<OrdreFabricationEtiquette>()
+                .HasIndex(e => e.OrdreFabricationId);
+
+            // LotCoupe -> OrdreFabrication (nullable, SetNull : l'historique des
+            // coupes n'est jamais supprimé avec l'OF)
+            modelBuilder.Entity<LotCoupe>()
+                .HasOne(lc => lc.OrdreFabrication)
+                .WithMany()
+                .HasForeignKey(lc => lc.OrdreFabricationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<LotCoupe>()
+                .HasIndex(lc => new { lc.CommandeId, lc.OrdreFabricationId });
         }
     }
 }

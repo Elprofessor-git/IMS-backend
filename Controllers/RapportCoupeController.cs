@@ -187,6 +187,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     EffectuePar = l.EffectuePar,
                     ForcerDepassement = l.ForcerDepassement,
                     Notes = l.Notes,
+                    OrdreFabricationId = l.OrdreFabricationId,
+                    OrdreFabricationNumero = l.OrdreFabrication != null ? l.OrdreFabrication.NumeroOF : null,
                 })
                 .ToListAsync();
             return Ok(coupes);
@@ -209,6 +211,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .FirstOrDefaultAsync(ct => ct.CommandeId == commandeId && ct.Taille == dto.Taille);
             if (configTaille == null)
                 return BadRequest(new { message = $"Taille '{dto.Taille}' absente de la configuration de la commande." });
+
+            if (dto.OrdreFabricationId.HasValue &&
+                !await _context.OrdresFabrication.AnyAsync(of => of.Id == dto.OrdreFabricationId.Value && of.CommandeId == commandeId))
+                return BadRequest(new { message = "Ordre de fabrication introuvable ou hors commande." });
 
             var totalExistant = await _context.LotCoupes
                 .Where(l => l.CommandeId == commandeId && l.Taille == dto.Taille)
@@ -233,6 +239,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 EffectuePar = User.Identity?.Name,
                 ForcerDepassement = dto.ForcerDepassement,
                 Notes = dto.Notes,
+                OrdreFabricationId = dto.OrdreFabricationId,
             };
             _context.LotCoupes.Add(coupe);
             await _context.SaveChangesAsync();
