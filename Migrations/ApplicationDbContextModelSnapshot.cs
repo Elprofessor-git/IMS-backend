@@ -1717,7 +1717,7 @@ namespace Backend_Gestion_Magasin_API.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("CommandeId")
+                    b.Property<int?>("CommandeId")
                         .HasColumnType("integer");
 
                     b.Property<int>("CoupeEstimee")
@@ -3375,8 +3375,8 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.HasOne("Backend_Gestion_Magasin_API.Models.CommandeClient", "Commande")
                         .WithMany()
                         .HasForeignKey("CommandeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .IsRequired(false);
 
                     b.Navigation("Commande");
 

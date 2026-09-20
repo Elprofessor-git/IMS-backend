@@ -10,37 +10,34 @@ namespace Backend_Gestion_Magasin_API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Colonne à rattachement optionnel — PAS de NOT NULL, PAS de DEFAULT 0 :
+            // les matelas historiques partagés entre plusieurs commandes restent
+            // valides avec CommandeId = null (principe additif).
             migrationBuilder.AddColumn<int>(
                 name: "CommandeId",
                 table: "Matelas",
                 type: "integer",
                 nullable: true);
 
+            // Backfill BEST-EFFORT, uniquement pour les matelas dont toutes les coupes
+            // relèvent d'UNE SEULE et même commande (COUNT(DISTINCT) = 1).
+            // Les matelas dont les coupes portent sur plusieurs commandes différentes
+            // (ambiguïté réelle), ou sans aucune coupe, restent à NULL.
             migrationBuilder.Sql(
                 """
-                WITH lots AS (
-                    SELECT DISTINCT ON ("MatelasId")
-                           "MatelasId", "CommandeId"
-                    FROM "LotCoupes"
-                    WHERE "MatelasId" IS NOT NULL AND "CommandeId" IS NOT NULL
-                    ORDER BY "MatelasId", "DateCoupe" DESC NULLS LAST
-                )
                 UPDATE "Matelas" m
-                SET "CommandeId" = lots."CommandeId"
-                FROM lots
-                WHERE lots."MatelasId" = m."Id"
-                  AND m."CommandeId" IS NULL;
+                SET "CommandeId" = x."CommandeId"
+                FROM (
+                    SELECT lc."MatelasId" AS "MatelasId",
+                           MIN(lc."CommandeId") AS "CommandeId"
+                    FROM "LotCoupes" lc
+                    WHERE lc."MatelasId" IS NOT NULL
+                      AND lc."CommandeId" IS NOT NULL
+                    GROUP BY lc."MatelasId"
+                    HAVING COUNT(DISTINCT lc."CommandeId") = 1
+                ) x
+                WHERE x."MatelasId" = m."Id";
                 """);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "CommandeId",
-                table: "Matelas",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0,
-                oldClrType: typeof(int),
-                oldType: "integer",
-                oldNullable: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Matelas_CommandeId",
@@ -53,7 +50,7 @@ namespace Backend_Gestion_Magasin_API.Migrations
                 column: "CommandeId",
                 principalTable: "CommandesClients",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.SetNull);
         }
 
         /// <inheritdoc />
@@ -66,14 +63,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
             migrationBuilder.DropIndex(
                 name: "IX_Matelas_CommandeId",
                 table: "Matelas");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "CommandeId",
-                table: "Matelas",
-                type: "integer",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "integer");
 
             migrationBuilder.DropColumn(
                 name: "CommandeId",

@@ -764,13 +764,15 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasIndex(m => m.NumeroMatelas)
                 .IsUnique();
 
-            // Matelas -> CommandeClient (obligatoire ; la suppression d'une commande
-            // entraîne ses matelas, dont les coupes sont déjà supprimées en cascade).
+            // Matelas -> CommandeClient (nullable : la frappe exige une commande, mais
+            // les matelas historiques partagés restent valides avec CommandeId null —
+            // SetNull pour conserver les matelas en cas de suppression d'une commande,
+            // l'historique des coupes n'est jamais supprimé avec la commande).
             modelBuilder.Entity<Matelas>()
                 .HasOne(m => m.Commande)
                 .WithMany()
                 .HasForeignKey(m => m.CommandeId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<Matelas>()
                 .HasIndex(m => m.CommandeId);

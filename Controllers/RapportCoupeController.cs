@@ -220,8 +220,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 !await _context.OrdresFabrication.AnyAsync(of => of.Id == dto.OrdreFabricationId.Value && of.CommandeId == commandeId))
                 return BadRequest(new { message = "Ordre de fabrication introuvable ou hors commande." });
 
+            // Un matelas partagé/historique (CommandeId NULL) reste valide et
+            // peut être rattaché à une coupe de n'importe quelle commande.
             if (dto.MatelasId.HasValue &&
-                !await _context.Matelas.AnyAsync(m => m.Id == dto.MatelasId.Value && m.CommandeId == commandeId))
+                !await _context.Matelas.AnyAsync(m => m.Id == dto.MatelasId.Value && (m.CommandeId == null || m.CommandeId == commandeId)))
                 return BadRequest(new { message = "Matelas introuvable ou hors commande." });
 
             var totalExistant = await _context.LotCoupes

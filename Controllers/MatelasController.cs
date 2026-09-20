@@ -29,10 +29,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("commandes", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<MatelasGlobalDto>>> GetAll()
         {
-            // CommandeId > 0 : on exclut les éventuels matelas legacy orphelins
-            // (avant l'ajout de la FK, lignes sans commande — CommandeId NULL/0).
+            // Tous les matelas, y compris les partagés/historiques sans commande
+            // (CommandeId NULL) : NumeroCommande vide dans ce cas.
             var matelas = await _context.Matelas
-                .Where(m => m.CommandeId > 0)
                 .OrderByDescending(m => m.DateMatelas)
                 .Select(m => new MatelasGlobalDto
                 {

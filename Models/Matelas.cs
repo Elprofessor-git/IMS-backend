@@ -13,9 +13,12 @@ namespace Backend_Gestion_Magasin_API.Models
         [Key]
         public int Id { get; set; }
 
-        /// <summary>Commande dont relève ce matelas (frappe obligatoire à la création).</summary>
-        [Required]
-        public int CommandeId { get; set; }
+        /// <summary>
+        /// Commande dont relève ce matelas. Nullable : la frappe applicative (POST /api/Matelas)
+        /// exige toujours une commande, mais les matelas historiques partagés entre plusieurs
+        /// commandes restent valides avec CommandeId = null (principe additif).
+        /// </summary>
+        public int? CommandeId { get; set; }
 
         [Required]
         [StringLength(50)]
@@ -34,7 +37,7 @@ namespace Backend_Gestion_Magasin_API.Models
 
         public bool EstActif { get; set; } = true;
 
-        /// <summary>Commande porteuse du matelas (scope).</summary>
+        /// <summary>Commande porteuse du matelas (scope, null si matelas partagé/historique).</summary>
         public virtual CommandeClient? Commande { get; set; }
 
         // Relations : pièces réellement coupées à partir de ce matelas

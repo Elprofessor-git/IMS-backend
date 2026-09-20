@@ -20,7 +20,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
     public class MatelasGlobalDto
     {
         public int Id { get; set; }
-        public int CommandeId { get; set; }
+        public int? CommandeId { get; set; }
         public string NumeroCommande { get; set; } = string.Empty;
         public string NumeroMatelas { get; set; } = string.Empty;
         public DateTime DateMatelas { get; set; }
