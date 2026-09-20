@@ -8,12 +8,14 @@ namespace Backend_Gestion_Magasin_API.Filters
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
     public class RequireModulePermissionAttribute : Attribute, IAsyncActionFilter
     {
-        private readonly string _module;
+        // Un ou plusieurs modules séparés par des virgules (ex : "commandes,coupe").
+        // L'accès est accordé si l'utilisateur a la permission sur AU MOINS UN des modules.
+        private readonly string[] _modules;
         private readonly bool _requireWrite;
 
-        public RequireModulePermissionAttribute(string module, bool requireWrite = false)
+        public RequireModulePermissionAttribute(string modules, bool requireWrite = false)
         {
-            _module = module;
+            _modules = modules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             _requireWrite = requireWrite;
         }
 
@@ -29,27 +31,26 @@ namespace Backend_Gestion_Magasin_API.Filters
                 return;
             }
 
-            var (canAccess, canWrite) = await permissionService.GetPermissionAsync(userId, _module);
-
-            if (!canAccess)
+            foreach (var module in _modules)
             {
-                context.Result = new ObjectResult(new { message = $"Accès refusé au module '{_module}'." })
+                var (canAccess, canWrite) = await permissionService.GetPermissionAsync(userId, module);
+                if (canAccess && (!_requireWrite || canWrite))
+                {
+                    await next();
+                    return;
+                }
+            }
+
+            var modulesLabel = string.Join(" ou ", _modules);
+            context.Result = _requireWrite && _modules.Length == 1
+                ? new ObjectResult(new { message = $"Droits d'écriture insuffisants sur le module '{modulesLabel}'." })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                }
+                : new ObjectResult(new { message = $"Accès refusé au module '{modulesLabel}'." })
                 {
                     StatusCode = StatusCodes.Status403Forbidden
                 };
-                return;
-            }
-
-            if (_requireWrite && !canWrite)
-            {
-                context.Result = new ObjectResult(new { message = $"Droits d'écriture insuffisants sur le module '{_module}'." })
-                {
-                    StatusCode = StatusCodes.Status403Forbidden
-                };
-                return;
-            }
-
-            await next();
         }
     }
 }

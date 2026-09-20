@@ -63,6 +63,8 @@ namespace Backend_Gestion_Magasin_API.Data
                 PeutGererFactures = true,
                 PeutVoirMachines = true,
                 PeutGererMachines = true,
+                PeutVoirCoupe = true,
+                PeutGererCoupe = true,
                 DateCreation = DateTime.Now
             });
             await context.SaveChangesAsync();

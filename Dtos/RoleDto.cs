@@ -37,6 +37,10 @@ namespace Backend_Gestion_Magasin_API.Dtos
         // Parc machines à coudre
         public bool PeutVoirMachines { get; set; }
         public bool PeutGererMachines { get; set; }
+
+        // Module Coupe
+        public bool PeutVoirCoupe { get; set; }
+        public bool PeutGererCoupe { get; set; }
         public bool EstActif { get; set; }
     }
 
@@ -79,6 +83,10 @@ namespace Backend_Gestion_Magasin_API.Dtos
         // Parc machines à coudre
         public bool PeutVoirMachines { get; set; }
         public bool PeutGererMachines { get; set; }
+
+        // Module Coupe
+        public bool PeutVoirCoupe { get; set; }
+        public bool PeutGererCoupe { get; set; }
     }
 
     public class UpdateStatutDto

@@ -75,6 +75,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PeutGererFactures = dto.PeutGererFactures,
                 PeutVoirMachines = dto.PeutVoirMachines,
                 PeutGererMachines = dto.PeutGererMachines,
+                PeutVoirCoupe = dto.PeutVoirCoupe,
+                PeutGererCoupe = dto.PeutGererCoupe,
                 DateCreation = DateTime.Now,
                 EstActif = true
             };
@@ -127,6 +129,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             role.PeutGererFactures = dto.PeutGererFactures;
             role.PeutVoirMachines = dto.PeutVoirMachines;
             role.PeutGererMachines = dto.PeutGererMachines;
+            role.PeutVoirCoupe = dto.PeutVoirCoupe;
+            role.PeutGererCoupe = dto.PeutGererCoupe;
 
             await _context.SaveChangesAsync();
             return NoContent();
@@ -184,6 +188,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             PeutGererFactures = r.PeutGererFactures,
             PeutVoirMachines = r.PeutVoirMachines,
             PeutGererMachines = r.PeutGererMachines,
+            PeutVoirCoupe = r.PeutVoirCoupe,
+            PeutGererCoupe = r.PeutGererCoupe,
         };
     }
 }

@@ -29,7 +29,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ───────────────────────────── Rapport complet ─────────────────────────────
 
         [HttpGet("{commandeId}")]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("commandes,coupe")]
         public async Task<ActionResult<RapportCoupeDto>> GetRapportCoupe(int commandeId)
         {
             var dto = await BuildRapportCoupeAsync(commandeId);
@@ -41,7 +41,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // Export Excel : remplit le gabarit « RAP DE COUPE ».
         [HttpGet("{commandeId}/Export")]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("commandes,coupe")]
         public async Task<IActionResult> ExportRapportCoupe(int commandeId)
         {
             var dto = await BuildRapportCoupeAsync(commandeId);
@@ -57,7 +57,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // Export PDF (QuestPDF) — même préparation de données que l'export Excel.
         [HttpGet("{commandeId}/ExportPdf")]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("commandes,coupe")]
         public async Task<IActionResult> ExportRapportCoupePdf(int commandeId)
         {
             var dto = await BuildRapportCoupeAsync(commandeId);
@@ -173,7 +173,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ───────────────────────────── Entrées de coupe ─────────────────────────────
 
         [HttpGet("{commandeId}/Coupes")]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("commandes,coupe")]
         public async Task<ActionResult<IEnumerable<LotCoupeDto>>> GetCoupes(int commandeId)
         {
             var coupes = await _context.LotCoupes
@@ -199,7 +199,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpPost("{commandeId}/Coupes")]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("coupe", requireWrite: true)]
         public async Task<ActionResult> AjouterCoupe(int commandeId, [FromBody] CreateLotDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Taille) || dto.QuantiteCoupee <= 0)
@@ -270,7 +270,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpDelete("Coupes/{id}")]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("coupe", requireWrite: true)]
         public async Task<ActionResult> SupprimerCoupe(int id)
         {
             var coupe = await _context.LotCoupes.FindAsync(id);
@@ -284,7 +284,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ───────────────────────────── Entrées d'export (atelier) ─────────────────────────────
 
         [HttpGet("{commandeId}/Exports")]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("commandes,coupe")]
         public async Task<ActionResult<IEnumerable<LotExportDto>>> GetExports(int commandeId)
         {
             var exports = await _context.LotExports
@@ -308,7 +308,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpPost("{commandeId}/Exports")]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("coupe", requireWrite: true)]
         public async Task<ActionResult> AjouterExport(int commandeId, [FromBody] CreateLotDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Taille) || dto.QuantiteExportee <= 0)
@@ -363,7 +363,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpDelete("Exports/{id}")]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("coupe", requireWrite: true)]
         public async Task<ActionResult> SupprimerExport(int id)
         {
             var export = await _context.LotExports.FindAsync(id);

@@ -11,7 +11,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
     /// <summary>
     /// Module « Coupe » transversal : vue globale de tous les matelas (toutes commandes),
     /// avec accès direct au rapport de coupe de leur commande via le frontend.
-    /// Lecture seule — permission « commandes » (réutilisation, comme le rapport de coupe).
+    /// Lecture — permission « coupe » (module dédié, distinct de « commandes »).
+    /// Création de matelas partagée avec le suivi fournitures (module « commandes »).
     /// </summary>
     [Route("api/[controller]")]
     [ApiController]
@@ -26,7 +27,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpGet]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("coupe")]
         public async Task<ActionResult<IEnumerable<MatelasGlobalDto>>> GetAll()
         {
             // Tous les matelas, y compris les partagés/historiques sans commande
@@ -55,7 +56,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         [HttpPost]
-        [RequireModulePermission("commandes")]
+        [RequireModulePermission("commandes,coupe")]
         public async Task<ActionResult<Matelas>> Create(CreateMatelasDto dto)
         {
             var matelas = new Matelas

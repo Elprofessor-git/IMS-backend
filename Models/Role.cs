@@ -53,6 +53,10 @@ namespace Backend_Gestion_Magasin_API.Models
         // Parc machines à coudre (inventaire + maintenance)
         public bool PeutVoirMachines { get; set; } = false;
         public bool PeutGererMachines { get; set; } = false;
+
+        // Module Coupe (suivi transversal des matelas + rapport de coupe)
+        public bool PeutVoirCoupe { get; set; } = false;
+        public bool PeutGererCoupe { get; set; } = false;
         
         public DateTime DateCreation { get; set; } = DateTime.Now;
         
