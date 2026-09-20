@@ -35,6 +35,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
     public class CreateMatelasDto
     {
         [Required]
+        public int CommandeId { get; set; }
+        [Required]
         [StringLength(50)]
         public string NumeroMatelas { get; set; } = string.Empty;
         public DateTime? DateMatelas { get; set; }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Commande;
+using Backend_Gestion_Magasin_API.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -52,6 +53,26 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
 
             return Ok(matelas);
+        }
+
+        [HttpPost]
+        [RequireModulePermission("commandes")]
+        public async Task<ActionResult<Matelas>> Create(CreateMatelasDto dto)
+        {
+            var matelas = new Matelas
+            {
+                CommandeId = dto.CommandeId,
+                NumeroMatelas = dto.NumeroMatelas,
+                DateMatelas = dto.DateMatelas ?? DateTime.Now,
+                PiecePliage = dto.PiecePliage,
+                CoupeEstimee = dto.CoupeEstimee,
+                Notes = dto.Notes,
+            };
+
+            _context.Matelas.Add(matelas);
+            await _context.SaveChangesAsync();
+
+            return Created($"/api/Matelas/{matelas.Id}", matelas);
         }
     }
 }
