@@ -13,6 +13,10 @@ namespace Backend_Gestion_Magasin_API.Models
         [Key]
         public int Id { get; set; }
 
+        /// <summary>Commande dont relève ce matelas (frappe obligatoire à la création).</summary>
+        [Required]
+        public int CommandeId { get; set; }
+
         [Required]
         [StringLength(50)]
         public string NumeroMatelas { get; set; } = string.Empty;
@@ -29,6 +33,9 @@ namespace Backend_Gestion_Magasin_API.Models
         public string? Notes { get; set; }
 
         public bool EstActif { get; set; } = true;
+
+        /// <summary>Commande porteuse du matelas (scope).</summary>
+        public virtual CommandeClient? Commande { get; set; }
 
         // Relations : pièces réellement coupées à partir de ce matelas
         public virtual ICollection<LotCoupe> LotCoupes { get; set; } = new List<LotCoupe>();

@@ -40,7 +40,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound(new { message = "Commande introuvable." });
 
             var matelas = await _context.Matelas
-                .Where(m => m.LotCoupes.Any(lc => lc.CommandeId == commandeId))
+                .Where(m => m.CommandeId == commandeId)
                 .OrderByDescending(m => m.DateMatelas)
                 .Select(m => new MatelasDto
                 {
@@ -74,6 +74,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             var matelas = new Matelas
             {
+                CommandeId = commandeId,
                 NumeroMatelas = dto.NumeroMatelas,
                 DateMatelas = dto.DateMatelas ?? DateTime.Now,
                 PiecePliage = dto.PiecePliage,

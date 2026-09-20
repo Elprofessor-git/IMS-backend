@@ -16,6 +16,22 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int NombreCoupes { get; set; }
     }
 
+    /// <summary>Vue globale d'un matelas (module « Coupe » transversal).</summary>
+    public class MatelasGlobalDto
+    {
+        public int Id { get; set; }
+        public int CommandeId { get; set; }
+        public string NumeroCommande { get; set; } = string.Empty;
+        public string NumeroMatelas { get; set; } = string.Empty;
+        public DateTime DateMatelas { get; set; }
+        public int PiecePliage { get; set; }
+        public int CoupeEstimee { get; set; }
+        public int NombreCoupes { get; set; }
+        public int TotalPiecesCommandees { get; set; }
+        public string? Notes { get; set; }
+        public bool EstActif { get; set; }
+    }
+
     public class CreateMatelasDto
     {
         [Required]

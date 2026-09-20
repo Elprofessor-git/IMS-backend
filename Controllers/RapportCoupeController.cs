@@ -109,13 +109,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
             {
                 var coup = coupesParTaille.GetValueOrDefault(ct.Taille);
                 var exp = exportsParTaille.GetValueOrDefault(ct.Taille);
+                // Dépassement toléré jusqu'à la marge de sécurité par défaut de la commande.
+                var seuilCoupe = ct.Quantite * (1m + commande.MargeSecuriteDefaut / 100m);
                 dto.Tailles.Add(new RapportCoupeTailleDto
                 {
                     Taille = ct.Taille,
                     QuantiteCommande = ct.Quantite,
                     QuantiteCoupee = coup,
                     QuantiteExportee = exp,
-                    DepassementCoupe = coup > ct.Quantite,
+                    DepassementCoupe = coup > seuilCoupe,
                     DepassementExport = exp > coup,
                 });
                 dto.TotalQuantiteCommande += ct.Quantite;
@@ -189,6 +191,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Notes = l.Notes,
                     OrdreFabricationId = l.OrdreFabricationId,
                     OrdreFabricationNumero = l.OrdreFabrication != null ? l.OrdreFabrication.NumeroOF : null,
+                    MatelasId = l.MatelasId,
+                    MatelasNumero = l.Matelas != null ? l.Matelas.NumeroMatelas : null,
                 })
                 .ToListAsync();
             return Ok(coupes);
@@ -203,12 +207,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             var commande = await _context.CommandesClients
                 .Include(c => c.ConfigTailles)
-                .AnyAsync(c => c.Id == commandeId);
-            if (!commande)
+                .FirstOrDefaultAsync(c => c.Id == commandeId);
+            if (commande == null)
                 return NotFound(new { message = "Commande introuvable." });
 
-            var configTaille = await _context.ConfigTailles
-                .FirstOrDefaultAsync(ct => ct.CommandeId == commandeId && ct.Taille == dto.Taille);
+            var configTaille = commande.ConfigTailles
+                .FirstOrDefault(ct => ct.Taille == dto.Taille);
             if (configTaille == null)
                 return BadRequest(new { message = $"Taille '{dto.Taille}' absente de la configuration de la commande." });
 
@@ -216,18 +220,28 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 !await _context.OrdresFabrication.AnyAsync(of => of.Id == dto.OrdreFabricationId.Value && of.CommandeId == commandeId))
                 return BadRequest(new { message = "Ordre de fabrication introuvable ou hors commande." });
 
+            if (dto.MatelasId.HasValue &&
+                !await _context.Matelas.AnyAsync(m => m.Id == dto.MatelasId.Value && m.CommandeId == commandeId))
+                return BadRequest(new { message = "Matelas introuvable ou hors commande." });
+
             var totalExistant = await _context.LotCoupes
                 .Where(l => l.CommandeId == commandeId && l.Taille == dto.Taille)
                 .SumAsync(l => (int?)l.QuantiteCoupee) ?? 0;
 
             var total = totalExistant + dto.QuantiteCoupee;
-            if (total > configTaille.Quantite && !dto.ForcerDepassement)
+
+            // Dépassement toléré jusqu'à la marge de sécurité par défaut de la commande :
+            // seuil = Quantite commandée × (1 + MargeSecuriteDefaut / 100).
+            var seuilDepassement = configTaille.Quantite * (1m + commande.MargeSecuriteDefaut / 100m);
+            if (total > seuilDepassement && !dto.ForcerDepassement)
                 return Conflict(new
                 {
-                    message = $"Dépassement de coupe: {total} > quantite commandée {configTaille.Quantite} pour la taille '{dto.Taille}'. Cochez « forcer le dépassement » pour enregistrer quand même.",
+                    message = $"Dépassement de coupe: {total} > quantité commandée {configTaille.Quantite} (marge {commande.MargeSecuriteDefaut}% => seuil {seuilDepassement:0.#}) pour la taille '{dto.Taille}'. Cochez « forcer le dépassement » pour enregistrer quand même.",
                     taille = dto.Taille,
                     quantiteCommande = configTaille.Quantite,
-                    totalCoupe = total
+                    totalCoupe = total,
+                    seuilDepassement = seuilDepassement,
+                    margeSecurite = commande.MargeSecuriteDefaut,
                 });
 
             var coupe = new LotCoupe
@@ -240,6 +254,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 ForcerDepassement = dto.ForcerDepassement,
                 Notes = dto.Notes,
                 OrdreFabricationId = dto.OrdreFabricationId,
+                MatelasId = dto.MatelasId,
             };
             _context.LotCoupes.Add(coupe);
             await _context.SaveChangesAsync();
@@ -283,6 +298,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     EffectuePar = l.EffectuePar,
                     ForcerDepassement = l.ForcerDepassement,
                     Notes = l.Notes,
+                    ChaineProductionId = l.ChaineProductionId,
+                    ChaineProductionNom = l.ChaineProduction != null ? l.ChaineProduction.Nom : null,
                 })
                 .ToListAsync();
             return Ok(exports);
@@ -298,6 +315,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var commande = await _context.CommandesClients.AnyAsync(c => c.Id == commandeId);
             if (!commande)
                 return NotFound(new { message = "Commande introuvable." });
+
+            if (dto.ChaineProductionId.HasValue &&
+                !await _context.ChainesProduction.AnyAsync(cp => cp.Id == dto.ChaineProductionId.Value))
+                return BadRequest(new { message = "Chaîne de production introuvable." });
 
             var totalCoupé = await _context.LotCoupes
                 .Where(l => l.CommandeId == commandeId && l.Taille == dto.Taille)
@@ -326,6 +347,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 EffectuePar = User.Identity?.Name,
                 ForcerDepassement = dto.ForcerDepassement,
                 Notes = dto.Notes,
+                ChaineProductionId = dto.ChaineProductionId,
             };
             _context.LotExports.Add(export);
             await _context.SaveChangesAsync();

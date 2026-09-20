@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
+using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -15,10 +16,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
     public class UserController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ApplicationDbContext _context;
 
-        public UserController(UserManager<ApplicationUser> userManager)
+        public UserController(UserManager<ApplicationUser> userManager, ApplicationDbContext context)
         {
             _userManager = userManager;
+            _context = context;
         }
 
         [HttpGet]
@@ -73,6 +76,27 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var user = await _userManager.FindByIdAsync(id);
             if (user == null)
                 return NotFound();
+
+            // Garde-fou : un administrateur ne peut pas retirer son propre statut
+            // administrateur (changement de rôle sur son propre compte).
+            var userId = _userManager.GetUserId(User);
+            if (userId == id && updateDto.RoleId.HasValue)
+            {
+                var me = await _userManager.Users
+                    .Include(u => u.Role)
+                    .FirstOrDefaultAsync(u => u.Id == userId);
+                var jeSuisAdministrateur = me?.Role?.EstAdministrateur ?? false;
+
+                if (jeSuisAdministrateur)
+                {
+                    var roleCible = updateDto.RoleId.Value > 0
+                        ? await _context.AppRoles.FindAsync(updateDto.RoleId.Value)
+                        : null;
+                    var cibleEstAdministrateur = roleCible?.EstAdministrateur ?? false;
+                    if (!cibleEstAdministrateur)
+                        return StatusCode(StatusCodes.Status403Forbidden, new { message = "Impossible de retirer votre propre statut administrateur." });
+                }
+            }
 
             if (!string.IsNullOrEmpty(updateDto.Nom))
                 user.Nom = updateDto.Nom;

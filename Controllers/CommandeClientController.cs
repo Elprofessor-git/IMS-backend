@@ -678,6 +678,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (!CommandeClientExists(id))
                 return NotFound();
 
+            // Les tailles sont désormais pilotées par les Ordres de Fabrication :
+            // dès qu'un OF existe pour la commande, la saisie manuelle est refusée
+            // (la répartition est recalculée depuis les lignes de tailles des OF).
+            var aDesOrdresDeFabrication = await _context.OrdresFabrication
+                .AnyAsync(of => of.CommandeId == id);
+            if (aDesOrdresDeFabrication)
+                return BadRequest(new { message = "Les tailles sont désormais gérées par Ordre de Fabrication : commande comportant au moins un OF. Modifiez la répartition dans l'onglet « Ordres de fabrication »." });
+
             var existants = _context.ConfigTailles.Where(ct => ct.CommandeId == id);
             _context.ConfigTailles.RemoveRange(existants);
 

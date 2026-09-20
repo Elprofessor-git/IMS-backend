@@ -170,7 +170,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             {
                 Message = "Ordre de fabrication créé",
                 Id = ordre.Id,
-                AvertissementCohérence = await AvertissementCohérenceAsync(dto.CommandeId),
             });
         }
 
@@ -212,7 +211,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
             {
                 Message = "Ordre de fabrication mis à jour",
                 Id = ordre.Id,
-                AvertissementCohérence = await AvertissementCohérenceAsync(ordre.CommandeId),
             });
         }
 
@@ -230,6 +228,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             // les coupes (LotCoupe) gardent leur historique (OrdreFabricationId -> NULL, SetNull).
             _context.OrdresFabrication.Remove(ordre);
             await _context.SaveChangesAsync();
+
+            // La répartition par taille de la commande (ConfigTaille) est recalculée depuis
+            // les OF restants : elle est désormais pilotée par les OF.
+            await RecalculerConfigTaillesDepuisOF(ordre.CommandeId);
+
             return Ok(new { message = "Ordre de fabrication supprimé" });
         }
 
@@ -260,12 +263,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
             await _context.SaveChangesAsync();
 
+            // Les ConfigTailles de la commande sont recalculées depuis l'ensemble des OF :
+            // la commande (et donc Calculer/ValiderRessources) lit désormais la répartition
+            // pilotée par les OF.
+            await RecalculerConfigTaillesDepuisOF(ordre.CommandeId);
+
             var total = dtos.Sum(d => d.Quantite);
             return Ok(new OrdreFabricationWriteResponse
             {
                 Message = "Répartition enregistrée",
                 Id = id,
-                AvertissementCohérence = await AvertissementCohérenceAsync(ordre.CommandeId),
             });
         }
 
@@ -342,28 +349,35 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Helpers ═══════════
 
         /// <summary>
-        /// Option B (Q1) : saisies indépendantes en parallèle. Avertissement NON bloquant
-        /// si la somme des répartitions de TOUS les OF de la commande diffère de la
-        /// somme des ConfigTailles (commande). Le calcul reste intact.
+        /// Recalcule la répartition par taille de la commande (ConfigTaille) depuis
+        /// l'ensemble des lignes de tailles de ses Ordres de Fabrication.
+        /// Les ConfigTailles sont désormais pilotées par les OF — ce qui alimente
+        /// Calculer et ValiderRessources (lecture intacte au niveau commande).
+        /// Appelé après chaque modification/suppression de lignes de tailles d'un OF.
         /// </summary>
-        private async Task<string?> AvertissementCohérenceAsync(int commandeId)
+        private async Task RecalculerConfigTaillesDepuisOF(int commandeId)
         {
-            var totalCommande = await _context.ConfigTailles
-                .Where(ct => ct.CommandeId == commandeId)
-                .SumAsync(ct => (decimal)ct.Quantite);
-
-            var totalOfs = await _context.OrdresFabrication
+            var parTaille = await _context.OrdresFabrication
                 .Where(of => of.CommandeId == commandeId)
-                .Select(of => (decimal?)of.Tailles.Sum(t => t.Quantite))
-                .SumAsync() ?? 0;
+                .SelectMany(of => of.Tailles)
+                .GroupBy(t => t.Taille)
+                .Select(g => new { Taille = g.Key, Quantite = g.Sum(t => t.Quantite) })
+                .ToListAsync();
 
-            if (totalCommande <= 0)
-                return "La commande n'a pas de répartition par taille : les OF sont saisis indépendamment (le calcul restera au niveau commande).";
+            var existants = _context.ConfigTailles.Where(ct => ct.CommandeId == commandeId);
+            _context.ConfigTailles.RemoveRange(existants);
 
-            if (totalOfs != totalCommande)
-                return $"La répartition cumulée des OF ({totalOfs} pièces) ne correspond pas à celle de la commande ({totalCommande} pièces). Incohérence non bloquante — le calcul de couverture reste au niveau commande.";
+            foreach (var item in parTaille)
+            {
+                _context.ConfigTailles.Add(new ConfigTaille
+                {
+                    CommandeId = commandeId,
+                    Taille = item.Taille,
+                    Quantite = item.Quantite,
+                });
+            }
 
-            return null;
+            await _context.SaveChangesAsync();
         }
     }
 }

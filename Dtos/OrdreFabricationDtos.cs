@@ -115,12 +115,10 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public int QuantiteCoupee { get; set; }
     }
 
-    // ── Réponse création/édition avec avertissement de cohérence (Option B Q1) ──
+    // ── Réponse création/édition ──
     public class OrdreFabricationWriteResponse
     {
         public string Message { get; set; } = string.Empty;
         public int Id { get; set; }
-        /// <summary>Warning non bloquant : Σ répartition OF ≠ Σ ConfigTailles de la commande.</summary>
-        public string? AvertissementCohérence { get; set; }
     }
 }

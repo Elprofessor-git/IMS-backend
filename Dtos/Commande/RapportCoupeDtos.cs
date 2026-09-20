@@ -10,6 +10,10 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public string? Notes { get; set; }
         /// <summary>OF dont relève la coupe (module OF — Phase 1, optionnel).</summary>
         public int? OrdreFabricationId { get; set; }
+        /// <summary>Matelas dont relève la coupe (coupe uniquement, optionnel).</summary>
+        public int? MatelasId { get; set; }
+        /// <summary>Chaîne de production exportatrice (export uniquement, optionnel).</summary>
+        public int? ChaineProductionId { get; set; }
     }
 
     public class LotCoupeDto
@@ -25,6 +29,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         /// <summary>OF dont relève la coupe (module OF — Phase 1, optionnel).</summary>
         public int? OrdreFabricationId { get; set; }
         public string? OrdreFabricationNumero { get; set; }
+        /// <summary>Matelas dont relève la coupe (optionnel).</summary>
+        public int? MatelasId { get; set; }
+        public string? MatelasNumero { get; set; }
     }
 
     public class LotExportDto
@@ -37,6 +44,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public string? EffectuePar { get; set; }
         public bool ForcerDepassement { get; set; }
         public string? Notes { get; set; }
+        /// <summary>Chaîne de production exportatrice (optionnel, SetNull).</summary>
+        public int? ChaineProductionId { get; set; }
+        public string? ChaineProductionNom { get; set; }
     }
 
     /// <summary>Ligne taille du rapport de coupe.</summary>

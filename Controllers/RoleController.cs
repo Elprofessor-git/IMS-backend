@@ -92,6 +92,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var role = await _context.AppRoles.FindAsync(id);
             if (role == null) return NotFound();
 
+            // Garde-fou : un rôle déjà marqué Élévation admin ne peut plus être modifié
+            // (protection contre le retrait du statut administrateur et le verrouillage).
+            if (role.EstAdministrateur)
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Le rôle administrateur ne peut pas être modifié." });
+
             role.NomRole = dto.Name;
             role.Description = dto.Description;
             role.EstAdministrateur = dto.EstAdministrateur;
@@ -134,6 +139,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             var role = await _context.AppRoles.FindAsync(id);
             if (role == null) return NotFound();
+
+            // Garde-fou : le rôle administrateur ne peut pas être supprimé
+            // (verrouillage potentiel des administrateurs du système).
+            if (role.EstAdministrateur)
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Le rôle administrateur ne peut pas être supprimé." });
 
             _context.AppRoles.Remove(role);
             await _context.SaveChangesAsync();
