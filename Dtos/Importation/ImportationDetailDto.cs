@@ -59,6 +59,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Importation
         public decimal MontantLigneTND { get; set; }
         public string? Devise { get; set; }
         public string? Unite { get; set; }
+        public string? NumeroBain { get; set; }
         public bool EstAffecteStock { get; set; }
         public ImportationLigneArticleDto? Article { get; set; }
     }

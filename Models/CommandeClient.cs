@@ -11,6 +11,25 @@ namespace Backend_Gestion_Magasin_API.Models
         Terminee,
         Annulee
     }
+
+    /// <summary>
+    /// Mode de pilotage de l'atelier (document maître, Partie 3). Détermine la référence
+    /// de calcul à suivre pour la répartition par taille : Standard = ConfigTaille figée
+    /// dès le départ ; les deux autres cas (atelier sous-traitant pour un tiers, ou
+    /// donneur d'ordre faisant produire par un tiers) pilotent sur le cumul réel des
+    /// coupes (LotCoupe) au fil des matelas.
+    /// </summary>
+    public enum ModePilotage
+    {
+        /// <summary>Production classique : ConfigTaille est la source de vérité connue à l'avance.</summary>
+        Standard,
+
+        /// <summary>L'atelier est donneur d'ordre : il fait produire par des sous-traitants.</summary>
+        DonneurOrdreSousTraitance,
+
+        /// <summary>L'atelier sous-traite pour un tiers (il produit pour le compte d'un client).</summary>
+        SousTraitantPourTiers
+    }
     
     public class CommandeClient
     {
@@ -35,6 +54,13 @@ namespace Backend_Gestion_Magasin_API.Models
         public DateTime? DateLivraisonSouhaitee { get; set; }
         
         public StatutCommande Statut { get; set; } = StatutCommande.EnAttente;
+
+        /// <summary>
+        /// Mode de pilotage de l'atelier pour cette commande (Partie 3 du document maître).
+        /// Par défaut : Standard. Stocké en string en base (HasConversion&lt;string&gt;),
+        /// sérialisé en string vers le frontend.
+        /// </summary>
+        public ModePilotage ModePilotage { get; set; } = ModePilotage.Standard;
         
         public decimal MontantTotal { get; set; } = 0;
         

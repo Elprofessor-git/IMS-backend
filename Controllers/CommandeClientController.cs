@@ -35,6 +35,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 NumeroCommande = c.NumeroCommande,
                 TitreCommande = c.TitreCommande,
                 Statut = c.Statut,
+                ModePilotage = c.ModePilotage,
                 PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
                 PrixFacon = c.PrixFacon,
                 DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
@@ -64,6 +65,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     TitreCommande = c.TitreCommande,
                     DescriptionCommande = c.DescriptionCommande,
                     Statut = c.Statut,
+                    ModePilotage = c.ModePilotage,
                     DateCommande = c.DateCommande,
                     DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
                     ClientId = c.ClientId,
@@ -162,6 +164,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 NumeroCommande = c.NumeroCommande,
                 TitreCommande = c.TitreCommande,
                 Statut = c.Statut,
+                ModePilotage = c.ModePilotage,
                 PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
                 PrixFacon = c.PrixFacon,
                 DateLivraisonSouhaitee = c.DateLivraisonSouhaitee,
@@ -247,6 +250,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 SpecificationsClient = dto.SpecificationsClient,
                 CreePar = dto.CreePar,
                 PrixFacon = dto.PrixFacon,
+                ModePilotage = dto.ModePilotage ?? ModePilotage.Standard,
                 DateCreation = DateTime.Now,
                 NumeroCommande = GenerateNumeroCommande()
             };
@@ -729,6 +733,95 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(new { message = "BOM enregistrée", count = dtos.Count });
         }
 
+        // ── Coûtage par style (Partie I, §5.6) ────────────────────────────────
+        // Lecture seule : coût matière = BOM × dernier prix connu par article
+        // (HistoriquePrixArticle le plus récent ; sinon prix de référence de l'article),
+        // coût façon = PrixFacon × total pièces (config tailles).
+
+        [HttpGet("{id}/Coutage")]
+        [RequireModulePermission("commandes", requireWrite: false)]
+        public async Task<ActionResult<CoutageCommandeDto>> GetCoutage(int id)
+        {
+            var commande = await _context.CommandesClients.FindAsync(id);
+            if (commande == null)
+            {
+                return NotFound();
+            }
+
+            var totalPieces = await _context.ConfigTailles
+                .Where(ct => ct.CommandeId == id)
+                .SumAsync(ct => (decimal)ct.Quantite);
+
+            var bomLignes = await _context.BomLignes
+                .Include(b => b.Article)
+                .Where(b => b.CommandeId == id)
+                .ToListAsync();
+
+            var prixParArticle = await _context.HistoriquesPrixArticles
+                .AsNoTracking()
+                .Where(h => bomLignes.Select(b => b.ArticleId).Contains(h.ArticleId))
+                .OrderByDescending(h => h.DateEffective)
+                .ThenByDescending(h => h.Id)
+                .ToListAsync();
+
+            var lignes = new List<CoutageLigneDto>();
+            decimal coutMatiere = 0;
+
+            foreach (var bom in bomLignes)
+            {
+                var ligne = new CoutageLigneDto
+                {
+                    ArticleId = bom.ArticleId,
+                    Designation = bom.Article?.Designation ?? string.Empty,
+                    Reference = bom.Article?.Reference,
+                    QuantiteParPiece = bom.QuantiteParPiece,
+                    QuantiteTotale = bom.QuantiteParPiece * totalPieces
+                };
+
+                var dernierPrix = prixParArticle.FirstOrDefault(h => h.ArticleId == bom.ArticleId);
+                if (dernierPrix != null)
+                {
+                    ligne.PrixUnitaire = dernierPrix.PrixUnitaire;
+                    ligne.Devise = dernierPrix.Devise;
+                    ligne.SourcePrix = "Historique";
+                }
+                else if (bom.Article?.PrixUnitaireMoyen > 0)
+                {
+                    ligne.PrixUnitaire = bom.Article.PrixUnitaireMoyen;
+                    ligne.Devise = null;
+                    ligne.SourcePrix = "Article";
+                }
+                else
+                {
+                    ligne.PrixUnitaire = 0;
+                    ligne.Devise = null;
+                    ligne.SourcePrix = "Aucun prix";
+                }
+
+                ligne.CoutLigne = ligne.PrixUnitaire * ligne.QuantiteTotale;
+                coutMatiere += ligne.CoutLigne;
+                lignes.Add(ligne);
+            }
+
+            var coutFacon = commande.PrixFacon.HasValue
+                ? commande.PrixFacon.Value * totalPieces
+                : (decimal?)null;
+
+            return Ok(new CoutageCommandeDto
+            {
+                CommandeId = commande.Id,
+                NumeroCommande = commande.NumeroCommande,
+                TitreCommande = commande.TitreCommande,
+                DeviseCommande = commande.Devise,
+                TotalPieces = totalPieces,
+                PrixFacon = commande.PrixFacon,
+                CoutTotalMatiere = coutMatiere,
+                CoutTotalFacon = coutFacon,
+                CoutTotalGeneral = coutMatiere + (coutFacon ?? 0),
+                Lignes = lignes
+            });
+        }
+
         [HttpPost("{id}/Calculer")]
         [RequireModulePermission("commandes", requireWrite: true)]
         public async Task<ActionResult> Calculer(int id, [FromBody] CalculerRequest request)
@@ -1019,6 +1112,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             commande.DateLivraisonSouhaitee = dto.DateLivraisonSouhaitee;
             commande.NotesSpeciales = dto.NotesSpeciales;
             commande.PrixFacon = dto.PrixFacon;
+            commande.ModePilotage = dto.ModePilotage ?? commande.ModePilotage;
             commande.DateMiseAJour = DateTime.Now;
 
             try

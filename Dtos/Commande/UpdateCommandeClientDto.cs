@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Backend_Gestion_Magasin_API.Models;
 
 namespace Backend_Gestion_Magasin_API.Dtos.Commande
 {
@@ -17,5 +18,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         /// <summary>Prix de façonnage par pièce (nullable = non défini).</summary>
         [Range(0, double.MaxValue)]
         public decimal? PrixFacon { get; set; }
+
+        /// <summary>Mode de pilotage atelier (Partie 3). Null = inchangé (non destructif).</summary>
+        public ModePilotage? ModePilotage { get; set; }
     }
 }

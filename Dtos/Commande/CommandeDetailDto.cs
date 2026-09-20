@@ -9,6 +9,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public string? TitreCommande { get; set; }
         public string? DescriptionCommande { get; set; }
         public StatutCommande Statut { get; set; }
+        public ModePilotage ModePilotage { get; set; }
         public DateTime DateCommande { get; set; }
         public DateTime? DateLivraisonSouhaitee { get; set; }
         public int ClientId { get; set; }

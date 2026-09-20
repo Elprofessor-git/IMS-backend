@@ -51,6 +51,7 @@ namespace Backend_Gestion_Magasin_API.Models
         // Relations
         public virtual ICollection<Achat> Achats { get; set; } = new List<Achat>();
         public virtual ICollection<Importation> Importations { get; set; } = new List<Importation>();
+        public virtual ICollection<ArticleFournisseur> Articles { get; set; } = new List<ArticleFournisseur>();
     }
 }
 

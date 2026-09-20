@@ -42,6 +42,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
         public string? Dimension { get; set; }
         public string? DescriptionSpecifique { get; set; }
         public string? Notes { get; set; }
+        public string? NumeroBain { get; set; }
         public TypeDestinationAchat TypeDestination { get; set; }
         public int? CommandeClientId { get; set; }
         public int? ClientId { get; set; }

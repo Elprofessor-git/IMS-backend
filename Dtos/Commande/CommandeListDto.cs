@@ -8,6 +8,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public string NumeroCommande { get; set; } = string.Empty;
         public string? TitreCommande { get; set; }
         public StatutCommande Statut { get; set; }
+        public ModePilotage ModePilotage { get; set; }
         public decimal PourcentageRessourcesCouvertes { get; set; }
         public decimal? PrixFacon { get; set; }
         public DateTime? DateLivraisonSouhaitee { get; set; }

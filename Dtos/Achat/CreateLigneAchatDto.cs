@@ -49,5 +49,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Achat
 
         [StringLength(1000)]
         public string? Notes { get; set; }
+
+        /// <summary>Numéro de bain de teinture (traçabilité, §5.7) — optionnel.</summary>
+        [StringLength(50)]
+        public string? NumeroBain { get; set; }
     }
 }

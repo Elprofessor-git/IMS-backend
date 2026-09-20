@@ -19,6 +19,7 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<Client> Clients { get; set; }
         public DbSet<Fournisseur> Fournisseurs { get; set; }
         public DbSet<Article> Articles { get; set; }
+        public DbSet<ArticleFournisseur> ArticleFournisseurs { get; set; }
         public DbSet<Stock> Stocks { get; set; }
         public DbSet<MouvementStock> MouvementsStock { get; set; }
         public DbSet<CommandeClient> CommandesClients { get; set; }
@@ -83,6 +84,28 @@ namespace Backend_Gestion_Magasin_API.Data
                 .WithMany()
                 .HasForeignKey(b => b.ArticleId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Article -> ArticleFournisseur (catalogue multi-sourcing, §5.2)
+            modelBuilder.Entity<ArticleFournisseur>()
+                .HasOne(af => af.Article)
+                .WithMany(a => a.Fournisseurs)
+                .HasForeignKey(af => af.ArticleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ArticleFournisseur>()
+                .HasOne(af => af.Fournisseur)
+                .WithMany(f => f.Articles)
+                .HasForeignKey(af => af.FournisseurId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Un seul Catalogue par couple (Article, Fournisseur) — source d'unicité du multi-sourcing.
+            modelBuilder.Entity<ArticleFournisseur>()
+                .HasIndex(af => new { af.ArticleId, af.FournisseurId })
+                .IsUnique();
+
+            modelBuilder.Entity<ArticleFournisseur>()
+                .Property(af => af.PrixHabituel)
+                .HasPrecision(18, 4);
 
             // CommandeClient -> FactureCommandeLigne (One-to-Many)
             modelBuilder.Entity<FactureCommandeLigne>()
@@ -528,6 +551,11 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<CommandeClient>()
                 .Property(cc => cc.Statut)
                 .HasConversion<string>();
+
+            modelBuilder.Entity<CommandeClient>()
+                .Property(cc => cc.ModePilotage)
+                .HasConversion<string>()
+                .HasDefaultValue(ModePilotage.Standard);
 
             modelBuilder.Entity<TacheProduction>()
                 .Property(tp => tp.Statut)

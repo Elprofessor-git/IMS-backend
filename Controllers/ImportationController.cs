@@ -93,6 +93,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         MontantLigneTND = l.MontantLigneTND,
                         Devise = l.Devise,
                         Unite = l.Unite,
+                        NumeroBain = l.NumeroBain,
                         EstAffecteStock = l.EstAffecteStock,
                         Article = l.Article != null ? new ImportationLigneArticleDto
                         {
@@ -234,6 +235,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Devise = dto.Devise,
                 Unite = dto.Unite,
                 Notes = dto.Notes,
+                NumeroBain = dto.NumeroBain,
                 DateCreation = DateTime.Now
             };
 
@@ -349,6 +351,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneImportation.Devise = dto.Devise;
             ligneImportation.Unite = dto.Unite;
             ligneImportation.Notes = dto.Notes;
+            ligneImportation.NumeroBain = dto.NumeroBain;
 
             if (ligneImportation.TypeDestination == TypeDestinationImportation.GroupeCommandes
                 && ligneImportation.GroupeCommandeId == null

@@ -83,6 +83,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         Dimension = l.Dimension,
                         DescriptionSpecifique = l.DescriptionSpecifique,
                         Notes = l.Notes,
+                        NumeroBain = l.NumeroBain,
                         TypeDestination = l.TypeDestination,
                         CommandeClientId = l.CommandeClientId,
                         ClientId = l.ClientId,
@@ -167,6 +168,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         Dimension = l.Dimension,
                         DescriptionSpecifique = l.DescriptionSpecifique,
                         Notes = l.Notes,
+                        NumeroBain = l.NumeroBain,
                         TypeDestination = l.TypeDestination,
                         CommandeClientId = l.CommandeClientId,
                         ClientId = l.ClientId,
@@ -293,6 +295,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Unite = dto.Unite,
                 DescriptionSpecifique = dto.DescriptionSpecifique,
                 Notes = dto.Notes,
+                NumeroBain = dto.NumeroBain,
                 DateCreation = DateTime.Now
             };
 
@@ -725,6 +728,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ligneAchat.Unite = dto.Unite;
             ligneAchat.DescriptionSpecifique = dto.DescriptionSpecifique;
             ligneAchat.Notes = dto.Notes;
+            ligneAchat.NumeroBain = dto.NumeroBain;
 
             if (ligneAchat.TypeDestination == TypeDestinationAchat.GroupeCommandes
                 && ligneAchat.GroupeCommandeId == null
