@@ -41,6 +41,8 @@ namespace Backend_Gestion_Magasin_API.Dtos
         // Module Coupe
         public bool PeutVoirCoupe { get; set; }
         public bool PeutGererCoupe { get; set; }
+        public bool PeutVoirPlanning { get; set; } = false;
+        public bool PeutGererPlanning { get; set; } = false;
         public bool EstActif { get; set; }
     }
 
@@ -87,6 +89,8 @@ namespace Backend_Gestion_Magasin_API.Dtos
         // Module Coupe
         public bool PeutVoirCoupe { get; set; }
         public bool PeutGererCoupe { get; set; }
+        public bool PeutVoirPlanning { get; set; }
+        public bool PeutGererPlanning { get; set; }
     }
 
     public class UpdateStatutDto

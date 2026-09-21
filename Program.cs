@@ -17,6 +17,8 @@ Environment.SetEnvironmentVariable("DOTNET_hostBuilder:reloadConfigOnChange", "f
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddSignalR();
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -164,7 +166,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers()
-   .RequireCors("AllowFrontend"); 
+        .RequireCors("AllowFrontend");
+
+app.MapHub<Backend_Gestion_Magasin_API.Hubs.PlanningHub>("/hubs/planning")
+        .RequireCors("AllowFrontend"); 
 
 // Ensure database creation and apply migrations (with retry)
 using (var scope = app.Services.CreateScope())

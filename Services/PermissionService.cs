@@ -68,6 +68,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 "factures"     => (role.PeutVoirFactures,       role.PeutGererFactures),
                 "machines"     => (role.PeutVoirMachines,       role.PeutGererMachines),
                 "coupe"        => (role.PeutVoirCoupe,          role.PeutGererCoupe),
+                "planning"     => (role.PeutVoirPlanning,       role.PeutGererPlanning),
                 "parametres"   => (role.EstAdministrateur,      role.EstAdministrateur),
                 _              => (false,                       false),
             };

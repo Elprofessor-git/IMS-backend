@@ -58,6 +58,8 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<TauxChange> TauxChanges { get; set; }
         public DbSet<Machine> Machines { get; set; }
         public DbSet<InterventionMachine> InterventionsMachines { get; set; }
+        public DbSet<PlanningEntry> PlanningEntries { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -833,6 +835,28 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<LotExport>()
                 .HasIndex(le => new { le.CommandeId, le.ChaineProductionId });
+
+            // PlanningEntry -> ChaineProduction (nullable, SetNull ; filtre/affichage
+            // uniquement — une cellule de planning ne bloque jamais la suppression d'une chaîne)
+            modelBuilder.Entity<PlanningEntry>()
+                .HasOne(pe => pe.ChaineProduction)
+                .WithMany()
+                .HasForeignKey(pe => pe.ChaineProductionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Une commande ne peut apparaître qu'une seule fois sur la même chaîne
+            // pour le même samedi (grille « chaînes × samedis »).
+            modelBuilder.Entity<PlanningEntry>()
+                .HasIndex(pe => new { pe.ChaineProductionId, pe.DateSamedi, pe.NumeroCommande })
+                .IsUnique();
+
+            // Notification -> PlanningEntry (nullable, SetNull ; le message reste visible
+            // même si sa cellule de planning a été supprimée)
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.PlanningEntry)
+                .WithMany()
+                .HasForeignKey(n => n.PlanningEntryId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // FournitureCommandeLigne (Commande -> Lignes ; Article -> Lignes)
             modelBuilder.Entity<FournitureCommandeLigne>()

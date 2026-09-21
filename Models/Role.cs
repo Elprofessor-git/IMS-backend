@@ -57,7 +57,11 @@ namespace Backend_Gestion_Magasin_API.Models
         // Module Coupe (suivi transversal des matelas + rapport de coupe)
         public bool PeutVoirCoupe { get; set; } = false;
         public bool PeutGererCoupe { get; set; } = false;
-        
+        public bool PeutVoirPlanning { get; set; } = false;
+        public bool PeutGererPlanning { get; set; } = false;
+
+        // Module Planning (grille chaînes × samedis)
+                
         public DateTime DateCreation { get; set; } = DateTime.Now;
         
         public bool EstActif { get; set; } = true;
