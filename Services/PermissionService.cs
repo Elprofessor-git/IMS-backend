@@ -77,7 +77,7 @@ namespace Backend_Gestion_Magasin_API.Services
         [
             "articles", "stock", "mouvements", "achats", "importations",
             "commandes", "clients", "fournisseurs", "plateformes", "taches",
-            "utilisateurs", "roles", "chatbot", "dashboard", "rapports", "factures", "parametres", "machines", "coupe"
+            "utilisateurs", "roles", "chatbot", "dashboard", "rapports", "factures", "parametres", "machines", "coupe", "planning"
         ];
     }
 }

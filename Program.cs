@@ -169,7 +169,8 @@ app.MapControllers()
         .RequireCors("AllowFrontend");
 
 app.MapHub<Backend_Gestion_Magasin_API.Hubs.PlanningHub>("/hubs/planning")
-        .RequireCors("AllowFrontend"); 
+        .RequireCors("AllowFrontend")
+        .RequireAuthorization(); 
 
 // Ensure database creation and apply migrations (with retry)
 using (var scope = app.Services.CreateScope())

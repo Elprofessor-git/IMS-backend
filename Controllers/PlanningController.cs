@@ -23,11 +23,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly IHubContext<PlanningHub> _hub;
+        private readonly ILogger<PlanningController> _logger;
 
-        public PlanningController(ApplicationDbContext context, IHubContext<PlanningHub> hub)
+        public PlanningController(ApplicationDbContext context, IHubContext<PlanningHub> hub, ILogger<PlanningController> logger)
         {
             _context = context;
             _hub = hub;
+            _logger = logger;
         }
 
         /// <summary>GET : la grille complète — chaînes (colonnes) + cellules (chaîne, samedi, commande).</summary>
@@ -110,21 +112,41 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return NoContent();
         }
 
-        /// <summary>Crée une Notification pour CHAQUE utilisateur + push SignalR temps réel.</summary>
+        /// <summary>Notification AUTOMATIQUE à TOUS les utilisateurs ACTIFS + push SignalR temps réel.</summary>
+        /// <remarks>
+        /// Règle clé : l'écriture planning ne doit JAMAIS échouer à cause de la notification.
+        /// Best effort volontaire (même règle que PrixHistoriqueService) : toute erreur ici
+        /// est loggée puis ignorée. Une seule SaveChanges pour toutes les notifications.
+        /// </remarks>
         private async Task NotifierAsync(string message, int? planningEntryId)
         {
-            var users = await _context.Users.ToListAsync();
-            var notifs = users.Select(u => new Notification
+            try
             {
-                UtilisateurId = u.Id,
-                Message = message,
-                DateNotification = DateTime.Now,
-                EstLivree = false,
-                PlanningEntryId = planningEntryId
-            }).ToList();
-            _context.Notifications.AddRange(notifs);
-            await _context.SaveChangesAsync();
-            await _hub.Clients.All.SendAsync("PlanningChanged", message);
+                var utilisateursActifs = await _context.Users
+                    .Where(u => u.EstActif)
+                    .ToListAsync();
+
+                if (utilisateursActifs.Count == 0)
+                    return;
+
+                var notifs = utilisateursActifs.Select(u => new Notification
+                {
+                    UtilisateurId = u.Id,
+                    Message = message,
+                    DateNotification = DateTime.Now,
+                    EstLivree = false,
+                    PlanningEntryId = planningEntryId
+                }).ToList();
+
+                _context.Notifications.AddRange(notifs);
+                await _context.SaveChangesAsync();
+
+                await _hub.Clients.Group("PlanningClients").SendAsync("PlanningChanged", message, DateTime.UtcNow);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Échec (ignoré) de la notification planning : {Message}", message);
+            }
         }
     }
 
