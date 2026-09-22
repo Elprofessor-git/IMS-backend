@@ -140,5 +140,24 @@ namespace Backend_Gestion_Magasin_API.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { message = "Chaîne de production désactivée" });
         }
+
+        /// <summary>
+        /// Réactivation logique — miroir de <see cref="DesactiverChaine"/>.
+        /// PUT idempotent : réactiver une chaîne déjà active est sans effet.
+        /// La chaîne réactivée réapparaît dans les colonnes du planning
+        /// (GET /api/planning ne renvoie que les chaînes EstActif).
+        /// </summary>
+        [HttpPut("{id}/reactiver")]
+        [RequireModulePermission("commandes", requireWrite: true)]
+        public async Task<ActionResult> ReactiverChaine(int id)
+        {
+            var chaine = await _context.ChainesProduction.FindAsync(id);
+            if (chaine == null)
+                return NotFound(new { message = "Chaîne de production introuvable." });
+
+            chaine.EstActif = true;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Chaîne de production réactivée" });
+        }
     }
 }
