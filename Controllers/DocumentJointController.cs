@@ -34,6 +34,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // POST api/Achat/{achatId}/Documents
         [HttpPost("Achat/{achatId}/Documents")]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<IActionResult> UploadAchat(int achatId, IFormFile file, [FromForm] TypeDocument type, [FromForm] string? nature)
         {
             if (!await _context.Achats.AnyAsync(a => a.Id == achatId))
@@ -44,6 +45,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // GET api/Achat/{achatId}/Documents
         [HttpGet("Achat/{achatId}/Documents")]
+        [RequireModulePermission("achats")]
         public async Task<IActionResult> ListAchat(int achatId)
         {
             if (!await _context.Achats.AnyAsync(a => a.Id == achatId))
@@ -70,6 +72,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // GET api/Achat/{achatId}/Documents/{docId}/Download
         [HttpGet("Achat/{achatId}/Documents/{docId}/Download")]
+        [RequireModulePermission("achats")]
         public async Task<IActionResult> DownloadAchat(int achatId, int docId)
         {
             var doc = await _context.DocumentsJoints
@@ -82,6 +85,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // DELETE api/Achat/{achatId}/Documents/{docId}
         [HttpDelete("Achat/{achatId}/Documents/{docId}")]
+        [RequireModulePermission("achats", requireWrite: true)]
         public async Task<IActionResult> DeleteAchat(int achatId, int docId)
         {
             var doc = await _context.DocumentsJoints
@@ -98,6 +102,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // POST api/Importation/{importationId}/Documents
         [HttpPost("Importation/{importationId}/Documents")]
+        [RequireModulePermission("importations", requireWrite: true)]
         public async Task<IActionResult> UploadImportation(int importationId, IFormFile file, [FromForm] TypeDocument type, [FromForm] string? nature)
         {
             if (!await _context.Importations.AnyAsync(i => i.Id == importationId))
@@ -108,6 +113,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // GET api/Importation/{importationId}/Documents
         [HttpGet("Importation/{importationId}/Documents")]
+        [RequireModulePermission("importations")]
         public async Task<IActionResult> ListImportation(int importationId)
         {
             if (!await _context.Importations.AnyAsync(i => i.Id == importationId))
@@ -134,6 +140,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // GET api/Importation/{importationId}/Documents/{docId}/Download
         [HttpGet("Importation/{importationId}/Documents/{docId}/Download")]
+        [RequireModulePermission("importations")]
         public async Task<IActionResult> DownloadImportation(int importationId, int docId)
         {
             var doc = await _context.DocumentsJoints
@@ -146,6 +153,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         // DELETE api/Importation/{importationId}/Documents/{docId}
         [HttpDelete("Importation/{importationId}/Documents/{docId}")]
+        [RequireModulePermission("importations", requireWrite: true)]
         public async Task<IActionResult> DeleteImportation(int importationId, int docId)
         {
             var doc = await _context.DocumentsJoints

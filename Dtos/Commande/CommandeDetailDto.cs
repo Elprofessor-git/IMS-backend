@@ -15,6 +15,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int ClientId { get; set; }
         public decimal MontantTotal { get; set; }
         public string? Devise { get; set; }
+        public decimal MargeSecuriteDefaut { get; set; }
         public decimal PourcentageRessourcesCouvertes { get; set; }
         public decimal? PrixFacon { get; set; }
         public string? NotesSpeciales { get; set; }

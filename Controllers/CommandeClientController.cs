@@ -71,6 +71,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     ClientId = c.ClientId,
                     MontantTotal = c.MontantTotal,
                     Devise = c.Devise,
+                    MargeSecuriteDefaut = c.MargeSecuriteDefaut,
                     PourcentageRessourcesCouvertes = c.PourcentageRessourcesCouvertes,
                     PrixFacon = c.PrixFacon,
                     NotesSpeciales = c.NotesSpeciales,

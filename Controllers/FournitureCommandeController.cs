@@ -69,8 +69,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (!commandeExiste)
                 return NotFound(new { message = "Commande introuvable." });
 
-            if (await _context.Matelas.AnyAsync(m => m.NumeroMatelas == dto.NumeroMatelas))
-                return Conflict(new { message = $"Un matelas numéro '{dto.NumeroMatelas}' existe déjà." });
+            // Unicité PAR COMMANDE (insensible casse/espaces) — règle partagée avec
+            // MatelasController.Create/Update (voir 20260922090000_MatelasUniciteParCommande).
+            // Deux commandes différentes peuvent porter chacune un matelas « M1 ».
+            var cle = string.Concat(dto.NumeroMatelas.Where(c => !char.IsWhiteSpace(c))).ToUpperInvariant();
+            var numeros = await _context.Matelas
+                .Where(m => m.CommandeId == commandeId)
+                .Select(m => m.NumeroMatelas)
+                .ToListAsync();
+            if (numeros.Any(n => string.Concat(n.Where(c => !char.IsWhiteSpace(c))).ToUpperInvariant() == cle))
+                return Conflict(new { message = $"Un matelas numéro '{dto.NumeroMatelas}' existe déjà pour cette commande." });
 
             var matelas = new Matelas
             {

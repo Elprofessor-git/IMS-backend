@@ -11,10 +11,10 @@ using Backend_Gestion_Magasin_API.Filters;
 namespace Backend_Gestion_Magasin_API.Controllers
 {
     /// <summary>
-    /// Grille « Planning interne » — reprodction de PLANNING INTERNE - Copie.xlsx :
-    /// colonnes = chaînes de production (sous-traitance), lignes = samedis hebdo,
-    /// cellules = commandes de matelas (ex. 79-PO33341). Chaque changement crée
-    /// une Notification pour chaque utilisateur (cloche temps réel).
+    /// Grille « Planning interne » — reproduction de PLANNING INTERNE - Copie.xlsx :
+    /// colonnes = chaînes de production (sous-traitance), lignes = dates d'export (libres),
+    /// cellules = commandes de matelas (ex. 79-PO33341). Chaque changement crée une
+    /// Notification pour chaque utilisateur (cloche temps réel).
     /// </summary>
     [Route("api/[controller]")]
     [ApiController]
@@ -32,7 +32,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _logger = logger;
         }
 
-        /// <summary>GET : la grille complète — chaînes (colonnes) + cellules (chaîne, samedi, commande).</summary>
+        /// <summary>
+        /// GET : la grille complète — chaînes (colonnes) + dates (lignes) + cellules (chaîne, date, commande).
+        /// Les dates sont celles de la table PlanningDates ; une date présente dans une cellule mais absente
+        /// de la table est ajoutée défensivement (id 0 = pas encore une vraie ligne), pour ne jamais masquer
+        /// une cellule existante.
+        /// </summary>
         [HttpGet]
         [RequireModulePermission("planning", requireWrite: false)]
         public async Task<ActionResult> GetGrille()
@@ -42,6 +47,29 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .OrderBy(c => c.Nom)
                 .Select(c => new { c.Id, c.Nom, Type = c.TypeChaine.ToString() })
                 .ToListAsync();
+
+            var lignesDates = await _context.PlanningDates
+                .OrderBy(d => d.Date)
+                .Select(d => new { d.Id, d.Date })
+                .ToListAsync();
+
+            var datesCellules = await _context.PlanningEntries
+                .Select(p => p.DateSamedi)
+                .Distinct()
+                .ToListAsync();
+
+            var lignesParDate = lignesDates.ToDictionary(l => NormaliserDate(l.Date));
+            var toutesDates = lignesDates
+                .Select(l => NormaliserDate(l.Date))
+                .Union(datesCellules.Select(NormaliserDate))
+                .Distinct()
+                .OrderBy(d => d)
+                .Select(d => new
+                {
+                    Id = lignesParDate.TryGetValue(d, out var ligne) ? ligne.Id : 0,
+                    Date = d
+                })
+                .ToList();
 
             var cellules = await _context.PlanningEntries
                 .OrderBy(p => p.DateSamedi)
@@ -58,7 +86,82 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 })
                 .ToListAsync();
 
-            return Ok(new { chaines, cellules });
+            return Ok(new { chaines, dates = toutesDates, cellules });
+        }
+
+        /// <summary>POST : ajoute une ligne de date au planning. La date doit être libre (unicité).</summary>
+        [HttpPost("dates")]
+        [RequireModulePermission("planning", requireWrite: true)]
+        public async Task<ActionResult> PostDate([FromBody] PlanningDateDto dto)
+        {
+            if (dto.Date == default)
+                return BadRequest("La date est obligatoire.");
+
+            var date = NormaliserDate(dto.Date);
+
+            if (await _context.PlanningDates.AnyAsync(d => d.Date == date))
+                return Conflict($"La date {date:dd/MM/yyyy} existe déjà dans le planning.");
+
+            var ligne = new PlanningDate { Date = date };
+            _context.PlanningDates.Add(ligne);
+            await _context.SaveChangesAsync();
+            await NotifierAsync($"Le planning a changé : ajout de la date {date:dd/MM/yyyy}", null);
+            return CreatedAtAction(nameof(GetGrille), new { }, new { ligne.Id, ligne.Date });
+        }
+
+        /// <summary>
+        /// PUT : déplace une ligne de date (les cellules qu'elle contient suivent).
+        /// Refus 409 si la date cible est déjà une autre ligne.
+        /// </summary>
+        [HttpPut("dates/{id}")]
+        [RequireModulePermission("planning", requireWrite: true)]
+        public async Task<ActionResult> PutDate(int id, [FromBody] PlanningDateDto dto)
+        {
+            var ligne = await _context.PlanningDates.FindAsync(id);
+            if (ligne == null) return NotFound();
+
+            if (dto.Date == default)
+                return BadRequest("La date est obligatoire.");
+
+            var date = NormaliserDate(dto.Date);
+
+            if (await _context.PlanningDates.AnyAsync(d => d.Id != id && d.Date == date))
+                return Conflict($"La date {date:dd/MM/yyyy} existe déjà dans le planning.");
+
+            var cellules = await _context.PlanningEntries
+                .Where(p => p.DateSamedi == ligne.Date)
+                .ToListAsync();
+            foreach (var cellule in cellules)
+                cellule.DateSamedi = date;
+
+            ligne.Date = date;
+            await _context.SaveChangesAsync();
+            await NotifierAsync($"Le planning a changé : la date {cellules.Count} cellule(s) concernée(s) a/ont été déplacées vers {date:dd/MM/yyyy}", null);
+            return NoContent();
+        }
+
+        /// <summary>DELETE : supprime une ligne de date ainsi que les cellules qu'elle contenait.</summary>
+        [HttpDelete("dates/{id}")]
+        [RequireModulePermission("planning", requireWrite: true)]
+        public async Task<ActionResult> DeleteDate(int id)
+        {
+            var ligne = await _context.PlanningDates.FindAsync(id);
+            if (ligne == null) return NotFound();
+
+            var cellules = await _context.PlanningEntries
+                .Where(p => p.DateSamedi == ligne.Date)
+                .ToListAsync();
+
+            _context.PlanningEntries.RemoveRange(cellules);
+            _context.PlanningDates.Remove(ligne);
+            await _context.SaveChangesAsync();
+            await NotifierAsync($"Le planning a changé : suppression de la date {ligne.Date:dd/MM/yyyy} (et de ses {cellules.Count} cellule(s))", null);
+            return NoContent();
+        }
+
+        private static DateTime NormaliserDate(DateTime d)
+        {
+            return new DateTime(d.Year, d.Month, d.Day, 0, 0, 0, DateTimeKind.Utc);
         }
 
         /// <summary>POST : crée (ou met à jour) une cellule ; notifie tous les utilisateurs.</summary>
@@ -158,5 +261,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
         public int? Quantite { get; set; }
         public bool EstLivree { get; set; }
         public string? Notes { get; set; }
+    }
+
+    public class PlanningDateDto
+    {
+        public DateTime Date { get; set; }
     }
 }

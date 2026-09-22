@@ -30,6 +30,36 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int TotalPiecesCommandees { get; set; }
         public string? Notes { get; set; }
         public bool EstActif { get; set; }
+        /// <summary>
+        /// Ordre de coupe calculé (vue, sans table de planning) : rang du matelas
+        /// dans la séquence de coupe triée par (DateMatelas, NumeroMatelas) croissant.
+        /// Le matelas d'ordre 1 est le premier à découper.
+        /// </summary>
+        public int OrdreDeCoupe { get; set; }
+    }
+
+    /// <summary>Mise à jour d'un matelas (PUT /api/Matelas/{id}).</summary>
+    public class UpdateMatelasDto
+    {
+        public int? CommandeId { get; set; }
+        [StringLength(50)]
+        public string? NumeroMatelas { get; set; }
+        public DateTime? DateMatelas { get; set; }
+        public int? PiecePliage { get; set; }
+        public int? CoupeEstimee { get; set; }
+        [StringLength(1000)]
+        public string? Notes { get; set; }
+        public bool? EstActif { get; set; }
+    }
+
+    /// <summary>Totaux globaux du module Coupe (toutes commandes).</summary>
+    public class MatelasStatsDto
+    {
+        public int TotalMatelas { get; set; }
+        public int TotalMatelasActifs { get; set; }
+        public int TotalPiecesCommandees { get; set; }
+        public int TotalPiecesCoupees { get; set; }
+        public int TotalPiecesExportees { get; set; }
     }
 
     public class CreateMatelasDto

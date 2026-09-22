@@ -77,25 +77,31 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (user == null)
                 return NotFound();
 
+            // Garde-fou : seul un administrateur peut changer le rôle d'un utilisateur
+            // (y compris le sien). Un non-administrateur ne peut ni s'attribuer le rôle
+            // administrateur, ni l'assigner à quelqu'un d'autre, ni modifier un rôle.
+            var userId = _userManager.GetUserId(User);
+            if (userId == null)
+                return Unauthorized();
+
+            var me = await _userManager.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            var jeSuisAdministrateur = me?.Role?.EstAdministrateur ?? false;
+
+            if (!jeSuisAdministrateur && updateDto.RoleId.HasValue)
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Réservé aux administrateurs : la modification du rôle d'un utilisateur nécessite le rôle Administrateur." });
+
             // Garde-fou : un administrateur ne peut pas retirer son propre statut
             // administrateur (changement de rôle sur son propre compte).
-            var userId = _userManager.GetUserId(User);
-            if (userId == id && updateDto.RoleId.HasValue)
+            if (userId == id && updateDto.RoleId.HasValue && jeSuisAdministrateur)
             {
-                var me = await _userManager.Users
-                    .Include(u => u.Role)
-                    .FirstOrDefaultAsync(u => u.Id == userId);
-                var jeSuisAdministrateur = me?.Role?.EstAdministrateur ?? false;
-
-                if (jeSuisAdministrateur)
-                {
-                    var roleCible = updateDto.RoleId.Value > 0
-                        ? await _context.AppRoles.FindAsync(updateDto.RoleId.Value)
-                        : null;
-                    var cibleEstAdministrateur = roleCible?.EstAdministrateur ?? false;
-                    if (!cibleEstAdministrateur)
-                        return StatusCode(StatusCodes.Status403Forbidden, new { message = "Impossible de retirer votre propre statut administrateur." });
-                }
+                var roleCible = updateDto.RoleId.Value > 0
+                    ? await _context.AppRoles.FindAsync(updateDto.RoleId.Value)
+                    : null;
+                var cibleEstAdministrateur = roleCible?.EstAdministrateur ?? false;
+                if (!cibleEstAdministrateur)
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Impossible de retirer votre propre statut administrateur." });
             }
 
             if (!string.IsNullOrEmpty(updateDto.Nom))

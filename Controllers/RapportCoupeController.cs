@@ -269,6 +269,75 @@ namespace Backend_Gestion_Magasin_API.Controllers
             });
         }
 
+        [HttpPut("{commandeId}/Coupes/{id}")]
+        [RequireModulePermission("coupe", requireWrite: true)]
+        public async Task<ActionResult> ModifierCoupe(int commandeId, int id, [FromBody] CreateLotDto dto)
+        {
+            // Garde-fous identiques au POST AjouterCoupe (l.201-270).
+            if (string.IsNullOrWhiteSpace(dto.Taille) || dto.QuantiteCoupee <= 0)
+                return BadRequest(new { message = "Taille requise et quantité coupée > 0." });
+
+            var coupe = await _context.LotCoupes
+                .FirstOrDefaultAsync(l => l.Id == id && l.CommandeId == commandeId);
+            if (coupe == null)
+                return NotFound(new { message = "Coupe introuvable ou hors commande." });
+
+            var commande = await _context.CommandesClients
+                .Include(c => c.ConfigTailles)
+                .FirstOrDefaultAsync(c => c.Id == commandeId);
+            if (commande == null)
+                return NotFound(new { message = "Commande introuvable." });
+
+            var configTaille = commande.ConfigTailles
+                .FirstOrDefault(ct => ct.Taille == dto.Taille);
+            if (configTaille == null)
+                return BadRequest(new { message = $"Taille '{dto.Taille}' absente de la configuration de la commande." });
+
+            if (dto.OrdreFabricationId.HasValue &&
+                !await _context.OrdresFabrication.AnyAsync(of => of.Id == dto.OrdreFabricationId.Value && of.CommandeId == commandeId))
+                return BadRequest(new { message = "Ordre de fabrication introuvable ou hors commande." });
+
+            // Un matelas partagé/historique (CommandeId NULL) reste valide.
+            if (dto.MatelasId.HasValue &&
+                !await _context.Matelas.AnyAsync(m => m.Id == dto.MatelasId.Value && (m.CommandeId == null || m.CommandeId == commandeId)))
+                return BadRequest(new { message = "Matelas introuvable ou hors commande." });
+
+            // Dépassement recalculé hors de la coupe modifiée elle-même.
+            var totalExistant = await _context.LotCoupes
+                .Where(l => l.CommandeId == commandeId && l.Taille == dto.Taille && l.Id != id)
+                .SumAsync(l => (int?)l.QuantiteCoupee) ?? 0;
+
+            var total = totalExistant + dto.QuantiteCoupee;
+
+            var seuilDepassement = configTaille.Quantite * (1m + commande.MargeSecuriteDefaut / 100m);
+            if (total > seuilDepassement && !dto.ForcerDepassement)
+                return Conflict(new
+                {
+                    message = $"Dépassement de coupe: {total} > quantité commandée {configTaille.Quantite} (marge {commande.MargeSecuriteDefaut}% => seuil {seuilDepassement:0.#}) pour la taille '{dto.Taille}'. Cochez « forcer le dépassement » pour enregistrer quand même.",
+                    taille = dto.Taille,
+                    quantiteCommande = configTaille.Quantite,
+                    totalCoupe = total,
+                    seuilDepassement = seuilDepassement,
+                    margeSecurite = commande.MargeSecuriteDefaut,
+                });
+
+            coupe.Taille = dto.Taille;
+            coupe.QuantiteCoupee = dto.QuantiteCoupee;
+            coupe.ForcerDepassement = dto.ForcerDepassement;
+            if (dto.Notes != null) coupe.Notes = dto.Notes;
+            coupe.OrdreFabricationId = dto.OrdreFabricationId;
+            coupe.MatelasId = dto.MatelasId;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Coupe mise à jour",
+                id = coupe.Id,
+                totalTaille = total
+            });
+        }
+
         [HttpDelete("Coupes/{id}")]
         [RequireModulePermission("coupe", requireWrite: true)]
         public async Task<ActionResult> SupprimerCoupe(int id)

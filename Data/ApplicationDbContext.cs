@@ -59,6 +59,7 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<Machine> Machines { get; set; }
         public DbSet<InterventionMachine> InterventionsMachines { get; set; }
         public DbSet<PlanningEntry> PlanningEntries { get; set; }
+        public DbSet<PlanningDate> PlanningDates { get; set; }
         public DbSet<Notification> Notifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -789,10 +790,12 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasIndex(a => new { a.ArticleParentId, a.Taille })
                 .HasDatabaseName("IX_Articles_ParentEnfant");
 
-            // Matelas — numéro unique
-            modelBuilder.Entity<Matelas>()
-                .HasIndex(m => m.NumeroMatelas)
-                .IsUnique();
+            // Matelas — unicité PAR COMMANDE (CommandeId, NumeroMatelas), insensible
+            // casse/espaces. Portée par un index unique FONCTIONNEL PostgreSQL créé en
+            // SQL pur dans 20260922090000_MatelasUniciteParCommande (EF ne sait pas
+            // exprimer l'expression UPPER+blancs retirés) : il n'est donc PAS déclaré
+            // dans le modèle pour éviter tout drift de migration.
+            // (Un index simple sur CommandeId est déjà produit par la FK ci-dessous.)
 
             // Matelas -> CommandeClient (nullable : la frappe exige une commande, mais
             // les matelas historiques partagés restent valides avec CommandeId null —
@@ -843,6 +846,12 @@ namespace Backend_Gestion_Magasin_API.Data
                 .WithMany()
                 .HasForeignKey(pe => pe.ChaineProductionId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Les lignes de dates du planning sont distinctes : impossible d'avoir
+            // deux lignes à la même date (navigation « chaînes × dates »).
+            modelBuilder.Entity<PlanningDate>()
+                .HasIndex(pd => pd.Date)
+                .IsUnique();
 
             // Une commande ne peut apparaître qu'une seule fois sur la même chaîne
             // pour le même samedi (grille « chaînes × samedis »).

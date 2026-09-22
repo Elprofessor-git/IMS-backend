@@ -51,6 +51,24 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (model.RoleId > 0 && !roleExiste)
                 return BadRequest("Le rôle sélectionné n'existe plus. Veuillez rafraîchir la page et réessayer.");
 
+            // Garde-fou : seul un administrateur peut créer un utilisateur avec le rôle
+            // Administrateur — empêche un gestionnaire d'utilisateurs d'escalader ses droits.
+            if (model.RoleId > 0)
+            {
+                var createurId = _userManager.GetUserId(User);
+                var createur = createurId != null
+                    ? await _userManager.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == createurId)
+                    : null;
+                var createurEstAdmin = createur?.Role?.EstAdministrateur ?? false;
+
+                if (!createurEstAdmin)
+                {
+                    var roleCible = await _context.AppRoles.FindAsync(model.RoleId);
+                    if (roleCible is { EstAdministrateur: true })
+                        return StatusCode(StatusCodes.Status403Forbidden, new { message = "Réservé aux administrateurs : la création d'un utilisateur avec le rôle Administrateur nécessite le rôle Administrateur." });
+                }
+            }
+
             var user = new ApplicationUser
             {
                 UserName = model.Email,
