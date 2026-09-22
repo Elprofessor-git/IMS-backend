@@ -50,6 +50,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public decimal QuantiteUnitaire { get; set; }
         public int NombrePieces { get; set; }
         public decimal QuantiteTotale { get; set; }
+        /// <summary>Besoin brut × (1 + marge par défaut / 100) — même formule que ValiderRessources.</summary>
+        public decimal BesoinFinal { get; set; }
         public decimal QuantiteCouverte { get; set; }
         public decimal QuantiteStockImporte { get; set; }
         public decimal QuantiteAchatsLocaux { get; set; }

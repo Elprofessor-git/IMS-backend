@@ -4,6 +4,7 @@ using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Commande;
+using Backend_Gestion_Magasin_API.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -102,6 +103,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         QuantiteUnitaire = b.QuantiteUnitaire,
                         NombrePieces = b.NombrePieces,
                         QuantiteTotale = b.QuantiteTotale,
+                        BesoinFinal = b.QuantiteTotale * (1 + c.MargeSecuriteDefaut / 100),
                         QuantiteCouverte = b.QuantiteCouverte,
                         QuantiteStockImporte = b.QuantiteStockImporte,
                         QuantiteAchatsLocaux = b.QuantiteAchatsLocaux,
@@ -799,14 +801,25 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     ligne.SourcePrix = "Aucun prix";
                 }
 
-                ligne.CoutLigne = ligne.PrixUnitaire * ligne.QuantiteTotale;
+                // Conversion multi-devises : un prix d'achat/importation peut être saisi dans une
+                // autre devise que la référence système ; le coûtage est sommé en TND via
+                // TauxChangeService (devise null ou "TND" → taux implicite 1). Aligné sur les
+                // rapports de Achat/Importation (conversion au moment de la lecture).
+                var devisePrix = ligne.Devise ?? "TND";
+                var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, devisePrix, DateTime.Now);
+                ligne.TauxConvTND = tauxTND;
+                ligne.CoutLigne = ligne.PrixUnitaire * ligne.QuantiteTotale * tauxTND;
                 coutMatiere += ligne.CoutLigne;
                 lignes.Add(ligne);
             }
 
-            var coutFacon = commande.PrixFacon.HasValue
-                ? commande.PrixFacon.Value * totalPieces
-                : (decimal?)null;
+            decimal? coutFacon = null;
+            if (commande.PrixFacon.HasValue)
+            {
+                // Prix façon exprimé dans la devise de la commande → converti en TND (référence).
+                var tauxFaconTND = await TauxChangeService.ObtenirTauxAsync(_context, commande.Devise, DateTime.Now);
+                coutFacon = commande.PrixFacon.Value * totalPieces * tauxFaconTND;
+            }
 
             return Ok(new CoutageCommandeDto
             {
