@@ -53,27 +53,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .Select(d => new { d.Id, d.Date })
                 .ToListAsync();
 
-            var datesCellules = await _context.PlanningEntries
-                .Select(p => p.DateSamedi)
-                .Distinct()
-                .ToListAsync();
-
-            var lignesParDate = lignesDates.ToDictionary(l => NormaliserDate(l.Date));
-            var toutesDates = lignesDates
-                .Select(l => NormaliserDate(l.Date))
-                .Union(datesCellules.Select(NormaliserDate))
-                .Distinct()
-                .OrderBy(d => d)
-                .Select(d => new
-                {
-                    Id = lignesParDate.TryGetValue(d, out var ligne) ? ligne.Id : 0,
-                    Date = d
-                })
-                .ToList();
-
+            // Une cellule n'est affichable que si elle est rattachée à une chaîne
+            // visible de la grille. Les cellules orphelines (sans chaîne) ne sont
+            // pas des commandes de la grille : leur date ne doit jamais produire
+            // de ligne, et elles ne doivent pas gonfler les totaux.
+            var chaineIds = chaines.Select(c => c.Id).ToHashSet();
             var cellules = await _context.PlanningEntries
+                .Where(p => p.ChaineProductionId != null && chaineIds.Contains(p.ChaineProductionId.Value))
                 .OrderBy(p => p.DateSamedi)
                 .ThenBy(p => p.ChaineProductionId)
+                .ThenBy(p => p.Id)
                 .Select(p => new
                 {
                     p.Id,
@@ -85,6 +74,30 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     p.Notes
                 })
                 .ToListAsync();
+
+            // Une ligne dérivée (id = 0) ne doit exister que pour porter une cellule
+            // réelle affichable. La « pseudo-ligne défensive » du lot 2 est donc
+            // bornée : une date qui n'est ni une vraie ligne, ni portée par une
+            // cellule visible, disparaît de la réponse. DateTime.MinValue n'est
+            // jamais une vraie semaine d'export (valeur d'horloge non initialisée).
+            var datesDeCellulesVues = cellules
+                .Select(p => NormaliserDate(p.DateSamedi))
+                .ToHashSet();
+
+            var lignesParDate = lignesDates.ToDictionary(l => NormaliserDate(l.Date));
+            var toutesDates = lignesDates
+                .Select(l => NormaliserDate(l.Date))
+                .Union(datesDeCellulesVues)
+                .Where(d => d != DateTime.MinValue)
+                .Where(d => lignesParDate.ContainsKey(d) || datesDeCellulesVues.Contains(d))
+                .Distinct()
+                .OrderBy(d => d)
+                .Select(d => new
+                {
+                    Id = lignesParDate.TryGetValue(d, out var ligne) ? ligne.Id : 0,
+                    Date = d
+                })
+                .ToList();
 
             return Ok(new { chaines, dates = toutesDates, cellules });
         }
@@ -169,6 +182,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("planning", requireWrite: true)]
         public async Task<ActionResult> PostCellule([FromBody] PlanningEntryDto dto)
         {
+            if (dto.DateSamedi == default)
+                return BadRequest("La date de la cellule est obligatoire.");
+
+            if (dto.ChaineProductionId == null)
+                return BadRequest("La cellule doit être rattachée à une chaîne.");
+
             var entry = new PlanningEntry
             {
                 ChaineProductionId = dto.ChaineProductionId,
@@ -191,6 +210,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             var entry = await _context.PlanningEntries.FindAsync(id);
             if (entry == null) return NotFound();
+
+            if (dto.DateSamedi == default)
+                return BadRequest("La date de la cellule est obligatoire.");
+
+            if (dto.ChaineProductionId == null)
+                return BadRequest("La cellule doit être rattachée à une chaîne.");
+
             entry.ChaineProductionId = dto.ChaineProductionId;
             entry.DateSamedi = dto.DateSamedi;
             entry.NumeroCommande = dto.NumeroCommande;
