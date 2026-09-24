@@ -82,6 +82,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int Id { get; set; }
         public string Nom { get; set; } = string.Empty;
         public string TypeChaine { get; set; } = string.Empty;
+        public bool EstSousTraitant { get; set; } = true;
         public bool EstActif { get; set; }
         public int NombreEnvois { get; set; }
         public int NombreExports { get; set; }
@@ -101,6 +102,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         [StringLength(100)]
         public string? Nom { get; set; }
         public string? TypeChaine { get; set; }
+        public bool? EstSousTraitant { get; set; }
         public bool? EstActif { get; set; }
     }
 

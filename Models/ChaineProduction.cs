@@ -26,6 +26,14 @@ namespace Backend_Gestion_Magasin_API.Models
 
         public TypeChaineProduction TypeChaine { get; set; }
 
+        /// <summary>
+        /// Statut interne/sous-traitant de la chaîne (conception v1.1 §4.2).
+        /// Défaut TRUE : toutes les chaînes seedées sont des sous-traitants ;
+        /// le cas interne (retouche sur place, aucun EnvoiRetouche) est l'exception.
+        /// Modifiable immédiatement depuis « Gérer les chaînes » (module Planning).
+        /// </summary>
+        public bool EstSousTraitant { get; set; } = true;
+
         public bool EstActif { get; set; } = true;
 
         // Relations

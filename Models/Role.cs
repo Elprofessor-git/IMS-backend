@@ -60,6 +60,14 @@ namespace Backend_Gestion_Magasin_API.Models
         public bool PeutVoirPlanning { get; set; } = false;
         public bool PeutGererPlanning { get; set; } = false;
 
+        // Module Production (gamme opératoire des OF — LOT 8)
+        public bool PeutVoirProduction { get; set; } = false;
+        public bool PeutGererProduction { get; set; } = false;
+
+        // Module Qualité (contrôle qualité + cycle retouche — LOT 8)
+        public bool PeutVoirQualite { get; set; } = false;
+        public bool PeutGererQualite { get; set; } = false;
+
         // Module Planning (grille chaînes × samedis)
                 
         public DateTime DateCreation { get; set; } = DateTime.Now;

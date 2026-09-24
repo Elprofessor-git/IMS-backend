@@ -37,6 +37,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Id = c.Id,
                     Nom = c.Nom,
                     TypeChaine = c.TypeChaine.ToString(),
+                    EstSousTraitant = c.EstSousTraitant,
                     EstActif = c.EstActif,
                     NombreEnvois = c.EnvoisFourniture.Count,
                     NombreExports = c.LotExports.Count,
@@ -56,6 +57,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Id = c.Id,
                     Nom = c.Nom,
                     TypeChaine = c.TypeChaine.ToString(),
+                    EstSousTraitant = c.EstSousTraitant,
                     EstActif = c.EstActif,
                     NombreEnvois = c.EnvoisFourniture.Count,
                     NombreExports = c.LotExports.Count,
@@ -116,6 +118,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     return BadRequest(new { message = $"Type de chaîne invalide : '{dto.TypeChaine}'." });
                 chaine.TypeChaine = type;
             }
+
+            if (dto.EstSousTraitant.HasValue)
+                chaine.EstSousTraitant = dto.EstSousTraitant.Value;
 
             if (dto.EstActif.HasValue)
                 chaine.EstActif = dto.EstActif.Value;

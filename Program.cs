@@ -124,8 +124,9 @@ builder.Services.AddScoped<StockService>();
 builder.Services.AddScoped<CommandeService>();
 builder.Services.AddScoped<ImportationService>();
 builder.Services.AddScoped<TacheService>();
-builder.Services.AddScoped<FournisseurClientService>();
-builder.Services.AddScoped<IArticleService, ArticleService>();
+        builder.Services.AddScoped<FournisseurClientService>();
+        builder.Services.AddScoped<IArticleService, ArticleService>();
+        builder.Services.AddScoped<QualiteService>();
 
 // Chatbot IA — HttpClient typé pour GroqService, puis ToolExecutor et ChatbotAgentService
 builder.Services.AddHttpClient<GroqService>(client =>

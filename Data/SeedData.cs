@@ -67,6 +67,10 @@ namespace Backend_Gestion_Magasin_API.Data
                 PeutGererCoupe = true,
                 PeutVoirPlanning = true,
                 PeutGererPlanning = true,
+                PeutVoirProduction = true,
+                PeutGererProduction = true,
+                PeutVoirQualite = true,
+                PeutGererQualite = true,
                 DateCreation = DateTime.Now
             });
             await context.SaveChangesAsync();

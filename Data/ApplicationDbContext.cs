@@ -61,6 +61,11 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<PlanningEntry> PlanningEntries { get; set; }
         public DbSet<PlanningDate> PlanningDates { get; set; }
         public DbSet<Notification> Notifications { get; set; }
+        public DbSet<OrdreFabricationEtape> OrdresFabricationEtapes { get; set; }
+        public DbSet<ControleQualite> ControlesQualite { get; set; }
+        public DbSet<EnvoiRetouche> EnvoisRetouche { get; set; }
+        public DbSet<ControleQualiteDefautLigne> ControleQualiteDefautLignes { get; set; }
+        public DbSet<DefautCode> DefautCodes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1025,6 +1030,135 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<LotCoupe>()
                 .HasIndex(lc => new { lc.CommandeId, lc.OrdreFabricationId });
+
+            // ═══════════════════════════════════════════════════════════════════
+            // LOT 8 — Module Production (5.3) + Module Qualité (cycle retouche)
+            // Couche additif : ne touche à aucun code de calcul (Calculer /
+            // ValiderRessources / LivrerAchat / RecevoirImportation /
+            // RecevoirPartiel).
+            // ═══════════════════════════════════════════════════════════════════
+
+            modelBuilder.Entity<ChaineProduction>()
+                .Property(c => c.EstSousTraitant)
+                .HasDefaultValue(true);
+
+            // OrdreFabricationEtape -> OrdreFabrication (Cascade) ;
+            // ChaineProduction (SetNull) ; PlanningEntry (SetNull, relation à sens unique)
+            modelBuilder.Entity<OrdreFabricationEtape>()
+                .HasOne(e => e.OrdreFabrication)
+                .WithMany()
+                .HasForeignKey(e => e.OrdreFabricationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrdreFabricationEtape>()
+                .HasOne(e => e.ChaineProduction)
+                .WithMany()
+                .HasForeignKey(e => e.ChaineProductionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<OrdreFabricationEtape>()
+                .HasOne(e => e.PlanningEntry)
+                .WithMany()
+                .HasForeignKey(e => e.PlanningEntryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Enums stockés en string (règle projet, cf. TypeChaineProduction).
+            modelBuilder.Entity<OrdreFabricationEtape>()
+                .Property(e => e.TypeEtape)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+            modelBuilder.Entity<OrdreFabricationEtape>()
+                .Property(e => e.Statut)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+
+            modelBuilder.Entity<OrdreFabricationEtape>()
+                .HasIndex(e => e.OrdreFabricationId);
+
+            // ControleQualite -> OrdreFabrication (SetNull : l'historique qualité
+            // survit à la suppression de l'OF ; rattachement provisoire 4.1)
+            modelBuilder.Entity<ControleQualite>()
+                .HasOne(c => c.OrdreFabrication)
+                .WithMany()
+                .HasForeignKey(c => c.OrdreFabricationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Enum TypeControle stocké en string (règle projet).
+            modelBuilder.Entity<ControleQualite>()
+                .Property(c => c.TypeControle)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+
+            // ControleQualite -> ChaineProduction (SetNull)
+            modelBuilder.Entity<ControleQualite>()
+                .HasOne(c => c.ChaineProduction)
+                .WithMany()
+                .HasForeignKey(c => c.ChaineProductionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Auto-référence du cycle (Restrict : un contrôle à enfants n'est
+            // jamais supprimé — immuabilité post-saisie)
+            modelBuilder.Entity<ControleQualite>()
+                .HasOne(c => c.ControleParent)
+                .WithMany(c => c.ControlesEnfants)
+                .HasForeignKey(c => c.ControleParentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // ControleQualite <-> EnvoiRetouche : deux FK distinctes.
+            // Le re-contrôle pointe vers l'envoi re-contrôlé (Restrict, tour N+1).
+            modelBuilder.Entity<ControleQualite>()
+                .HasOne(c => c.EnvoiRetouche)
+                .WithMany(e => e.Controles)
+                .HasForeignKey(c => c.EnvoiRetoucheId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ControleQualite>()
+                .HasIndex(c => new { c.OrdreFabricationId, c.ChaineProductionId, c.Taille });
+
+            modelBuilder.Entity<ControleQualite>()
+                .HasIndex(c => c.ControleParentId);
+
+            modelBuilder.Entity<ControleQualite>()
+                .HasIndex(c => c.EnvoiRetoucheId);
+
+            // EnvoiRetouche -> contrôle SOURCE (Restrict : le renvoi survit à
+            // l'analyse de son contrôle) ; -> ChaineProduction (Restrict : garde
+            // d'intégrité de la destination)
+            modelBuilder.Entity<EnvoiRetouche>()
+                .HasOne(e => e.ControleSource)
+                .WithMany(c => c.EnvoisRetouche)
+                .HasForeignKey(e => e.ControleQualiteId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<EnvoiRetouche>()
+                .HasOne(e => e.ChaineProduction)
+                .WithMany()
+                .HasForeignKey(e => e.ChaineProductionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<EnvoiRetouche>()
+                .HasIndex(e => e.ControleQualiteId);
+
+            // ControleQualiteDefautLigne -> ControleQualite (Cascade) ;
+            // -> DefautCode (Restrict : le code de référence n'est pas supprimable)
+            modelBuilder.Entity<ControleQualiteDefautLigne>()
+                .HasOne(l => l.ControleQualite)
+                .WithMany(c => c.Defauts)
+                .HasForeignKey(l => l.ControleQualiteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ControleQualiteDefautLigne>()
+                .HasOne(l => l.DefautCode)
+                .WithMany()
+                .HasForeignKey(l => l.DefautCodeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ControleQualiteDefautLigne>()
+                .HasIndex(l => l.ControleQualiteId);
+
+            modelBuilder.Entity<DefautCode>()
+                .HasIndex(d => d.Code)
+                .IsUnique();
         }
     }
 }

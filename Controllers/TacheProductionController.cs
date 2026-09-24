@@ -266,20 +266,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             tache.NotesProgression = notes;
             tache.DateMiseAJour = DateTime.Now;
 
-            if (tache.CommandeClient != null)
-            {
-                var tachesRestantes = await _context.TachesProduction
-                    .CountAsync(t => t.CommandeClientId == tache.CommandeClientId &&
-                                    t.Statut != StatutTache.Termine &&
-                                    t.Statut != StatutTache.Annule);
-
-                if (tachesRestantes == 0)
-                {
-                    tache.CommandeClient.Statut = StatutCommande.Terminee;
-                    tache.CommandeClient.DateMiseAJour = DateTime.Now;
-                }
-            }
-
+            // Découplage LOT 8 : la clôture automatique de la commande ne relève
+            // plus de TacheProduction (module Magasin). Elle dépend désormais du
+            // solde comptable qualité : Q = ΣA + ΣB sur TOUS les triplets
+            // (OF, Chaîne, Taille) de la commande — effectué après chaque
+            // ControleQualite par QualiteService.CloturerCommandeSiSoldee.
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Tâche terminée avec succès" });

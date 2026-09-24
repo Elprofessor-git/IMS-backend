@@ -43,6 +43,15 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutGererCoupe { get; set; }
         public bool PeutVoirPlanning { get; set; } = false;
         public bool PeutGererPlanning { get; set; } = false;
+
+        // Module Production (LOT 8)
+        public bool PeutVoirProduction { get; set; } = false;
+        public bool PeutGererProduction { get; set; } = false;
+
+        // Module Qualité (LOT 8)
+        public bool PeutVoirQualite { get; set; } = false;
+        public bool PeutGererQualite { get; set; } = false;
+
         public bool EstActif { get; set; }
     }
 
@@ -91,6 +100,14 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutGererCoupe { get; set; }
         public bool PeutVoirPlanning { get; set; }
         public bool PeutGererPlanning { get; set; }
+
+        // Module Production (LOT 8)
+        public bool PeutVoirProduction { get; set; }
+        public bool PeutGererProduction { get; set; }
+
+        // Module Qualité (LOT 8)
+        public bool PeutVoirQualite { get; set; }
+        public bool PeutGererQualite { get; set; }
     }
 
     public class UpdateStatutDto
