@@ -170,6 +170,114 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return await q.SumAsync(s => (decimal?)s.Quantite) ?? 0m;
         }
 
+        // ───────────────────────────── Ordre de coupe document (L2) ─────────────────────────────
+        // Le plan de coupe agrégé devient la référence atelier : pour la commande, compare
+        // le cumul des plans (Σ Occurrences × PiecePliage par matelas) à la demande ConfigTaille
+        // augmentée de la marge de sécurité. Vue calculée, aucune table de planning.
+
+        [HttpGet("{commandeId}/OrdreDeCoupe")]
+        [RequireModulePermission("commandes,coupe")]
+        public async Task<ActionResult<OrdreDeCoupeDto>> GetOrdreDeCoupe(int commandeId)
+        {
+            var commande = await _context.CommandesClients
+                .Include(c => c.ConfigTailles)
+                .FirstOrDefaultAsync(c => c.Id == commandeId);
+
+            if (commande == null)
+                return NotFound(new { message = "Commande introuvable." });
+
+            // Matelas de la commande chargés séparément (nav unidirectionnelle) avec leur plan.
+            var matelas = await _context.Matelas
+                .Where(m => m.CommandeId == commandeId)
+                .Include(m => m.PlanDeCoupeLignes)
+                .Include(m => m.LotCoupes)
+                .ToListAsync();
+
+            var dto = new OrdreDeCoupeDto
+            {
+                CommandeId = commande.Id,
+                NumeroCommande = commande.NumeroCommande,
+                MargeSecuriteDefaut = commande.MargeSecuriteDefaut,
+            };
+
+            // Ordre de coupe = rang dans la séquence (DateMatelas, NumeroMatelas) croissant.
+            var matelasTries = matelas
+                .OrderBy(m => m.DateMatelas).ThenBy(m => m.NumeroMatelas)
+                .ToList();
+
+            // Cumul plan par taille + coupes réelles par taille (commande entière).
+            var planParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var coupeParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var sansMatelasParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            var lotsCommandes = await _context.LotCoupes
+                .Where(l => l.CommandeId == commandeId)
+                .ToListAsync();
+            foreach (var lot in lotsCommandes)
+            {
+                coupeParTaille[lot.Taille] = coupeParTaille.GetValueOrDefault(lot.Taille) + lot.QuantiteCoupee;
+                if (lot.MatelasId == null)
+                    sansMatelasParTaille[lot.Taille] = sansMatelasParTaille.GetValueOrDefault(lot.Taille) + lot.QuantiteCoupee;
+            }
+
+            for (var i = 0; i < matelasTries.Count; i++)
+            {
+                var m = matelasTries[i];
+                var plan = new OrdreCoupeMatelasDto
+                {
+                    MatelasId = m.Id,
+                    NumeroMatelas = m.NumeroMatelas,
+                    DateMatelas = m.DateMatelas,
+                    PiecePliage = m.PiecePliage,
+                    Longueur = m.Longueur,
+                    Laize = m.Laize,
+                    OrdreDeCoupe = i + 1,
+                };
+
+                var coupesMatelas = m.LotCoupes.Sum(lc => (int?)lc.QuantiteCoupee) ?? 0;
+                plan.TotalCoupeReelle = coupesMatelas;
+
+                foreach (var ligne in m.PlanDeCoupeLignes.OrderBy(p => p.Taille))
+                {
+                    var theorique = ligne.Occurrences * m.PiecePliage;
+                    plan.Lignes.Add(new OrdreCoupePlanLigneDto
+                    {
+                        MatelasId = m.Id,
+                        Taille = ligne.Taille,
+                        Occurrences = ligne.Occurrences,
+                        Theorique = theorique,
+                    });
+                    plan.TotalTheorique += theorique;
+                    planParTaille[ligne.Taille] = planParTaille.GetValueOrDefault(ligne.Taille) + theorique;
+                }
+
+                dto.TotalPlanTheorique += plan.TotalTheorique;
+                dto.TotalCoupeReelle += coupesMatelas;
+                dto.Matelas.Add(plan);
+            }
+
+            foreach (var ct in commande.ConfigTailles.OrderBy(c => c.Taille))
+            {
+                var planT = planParTaille.GetValueOrDefault(ct.Taille);
+                var coupeT = coupeParTaille.GetValueOrDefault(ct.Taille);
+                var seuil = ct.Quantite * (1m + commande.MargeSecuriteDefaut / 100m);
+                dto.Tailles.Add(new OrdreCoupeTailleDto
+                {
+                    Taille = ct.Taille,
+                    QuantiteCommande = ct.Quantite,
+                    Seuil =  Math.Round(seuil, 2, MidpointRounding.AwayFromZero),
+                    PlanTheorique = planT,
+                    CoupeReelle = coupeT,
+                    DepassePlan = planT > seuil,
+                    DepasseCoupe = coupeT > seuil,
+                    CoupesSansMatelas = sansMatelasParTaille.GetValueOrDefault(ct.Taille),
+                });
+                dto.TotalCoupesSansMatelas += sansMatelasParTaille.GetValueOrDefault(ct.Taille);
+            }
+
+            return Ok(dto);
+        }
+
         // ───────────────────────────── Entrées de coupe ─────────────────────────────
 
         [HttpGet("{commandeId}/Coupes")]

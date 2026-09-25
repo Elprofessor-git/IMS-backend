@@ -11,6 +11,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public DateTime DateMatelas { get; set; }
         public int PiecePliage { get; set; }
         public int CoupeEstimee { get; set; }
+        public decimal? Longueur { get; set; }
+        public decimal? Laize { get; set; }
         public string? Notes { get; set; }
         public bool EstActif { get; set; }
         public int NombreCoupes { get; set; }
@@ -26,8 +28,12 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public DateTime DateMatelas { get; set; }
         public int PiecePliage { get; set; }
         public int CoupeEstimee { get; set; }
+        public decimal? Longueur { get; set; }
+        public decimal? Laize { get; set; }
         public int NombreCoupes { get; set; }
         public int TotalPiecesCommandees { get; set; }
+        /// <summary>Total théorique du plan = Σ (Occurrences × PiecePliage).</summary>
+        public int TotalPlanTheorique { get; set; }
         public string? Notes { get; set; }
         public bool EstActif { get; set; }
         /// <summary>
@@ -47,6 +53,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public DateTime? DateMatelas { get; set; }
         public int? PiecePliage { get; set; }
         public int? CoupeEstimee { get; set; }
+        public decimal? Longueur { get; set; }
+        public decimal? Laize { get; set; }
         [StringLength(1000)]
         public string? Notes { get; set; }
         public bool? EstActif { get; set; }
@@ -72,6 +80,41 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public DateTime? DateMatelas { get; set; }
         public int PiecePliage { get; set; }
         public int CoupeEstimee { get; set; }
+        public decimal? Longueur { get; set; }
+        public decimal? Laize { get; set; }
+        [StringLength(1000)]
+        public string? Notes { get; set; }
+    }
+
+    // ── Plan de coupe (marker par matelas) — L1 ──
+    public class PlanDeCoupeLigneDto
+    {
+        public int Id { get; set; }
+        public int MatelasId { get; set; }
+        public string Taille { get; set; } = string.Empty;
+        public int Occurrences { get; set; }
+        public string? Notes { get; set; }
+        /// <summary>Quantité théorique = Occurrences × Matelas.PiecePliage (calculée).</summary>
+        public int Theorique { get; set; }
+    }
+
+    public class CreatePlanDeCoupeLigneDto
+    {
+        [Required]
+        [StringLength(50)]
+        public string Taille { get; set; } = string.Empty;
+        [Range(1, int.MaxValue)]
+        public int Occurrences { get; set; } = 1;
+        [StringLength(1000)]
+        public string? Notes { get; set; }
+    }
+
+    public class UpdatePlanDeCoupeLigneDto
+    {
+        [StringLength(50)]
+        public string? Taille { get; set; }
+        [Range(1, int.MaxValue)]
+        public int? Occurrences { get; set; }
         [StringLength(1000)]
         public string? Notes { get; set; }
     }

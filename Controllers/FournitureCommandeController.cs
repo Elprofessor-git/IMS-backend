@@ -50,6 +50,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     DateMatelas = m.DateMatelas,
                     PiecePliage = m.PiecePliage,
                     CoupeEstimee = m.CoupeEstimee,
+                    Longueur = m.Longueur,
+                    Laize = m.Laize,
                     Notes = m.Notes,
                     EstActif = m.EstActif,
                     NombreCoupes = m.LotCoupes.Where(lc => lc.CommandeId == commandeId).Sum(lc => lc.QuantiteCoupee),

@@ -66,6 +66,9 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<EnvoiRetouche> EnvoisRetouche { get; set; }
         public DbSet<ControleQualiteDefautLigne> ControleQualiteDefautLignes { get; set; }
         public DbSet<DefautCode> DefautCodes { get; set; }
+        public DbSet<PlanDeCoupeLigne> PlanDeCoupeLignes { get; set; }
+        public DbSet<GroupeTache> GroupesTaches { get; set; }
+        public DbSet<GroupeTacheLigne> GroupesTachesLignes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -222,6 +225,27 @@ namespace Backend_Gestion_Magasin_API.Data
                 .WithMany(cc => cc.Taches)
                 .HasForeignKey(tp => tp.CommandeClientId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // TacheProduction -> GroupeTache (nullable, SetNull : l'historique des tâches
+            // générées survit à la suppression du groupe).
+            modelBuilder.Entity<TacheProduction>()
+                .HasOne(tp => tp.GroupeTache)
+                .WithMany(g => g.Taches)
+                .HasForeignKey(tp => tp.GroupeTacheId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<TacheProduction>()
+                .HasIndex(tp => tp.GroupeTacheId);
+
+            // GroupeTache -> GroupeTacheLigne (One-to-Many, Cascade : le gabarit appartient au groupe).
+            modelBuilder.Entity<GroupeTacheLigne>()
+                .HasOne(l => l.GroupeTache)
+                .WithMany(g => g.Lignes)
+                .HasForeignKey(l => l.GroupeTacheId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<GroupeTacheLigne>()
+                .HasIndex(l => new { l.GroupeTacheId, l.Ordre });
 
             // Article -> Stock (One-to-Many)
             modelBuilder.Entity<Stock>()
@@ -824,6 +848,19 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<LotCoupe>()
                 .HasIndex(lc => new { lc.CommandeId, lc.MatelasId });
+
+            // PlanDeCoupeLigne -> Matelas (Cascade : le plan de coupe appartient à son matelas).
+            modelBuilder.Entity<PlanDeCoupeLigne>()
+                .HasOne(p => p.Matelas)
+                .WithMany(m => m.PlanDeCoupeLignes)
+                .HasForeignKey(p => p.MatelasId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Une seule ligne par gabarit dans le plan d'un même matelas (unicité Décision 5).
+            // L'index composite couvre aussi les recherches par MatelasId seul.
+            modelBuilder.Entity<PlanDeCoupeLigne>()
+                .HasIndex(p => new { p.MatelasId, p.Taille })
+                .IsUnique();
 
             // ChaineProduction — nom unique, type stocké en string
             modelBuilder.Entity<ChaineProduction>()

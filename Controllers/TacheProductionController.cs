@@ -339,5 +339,213 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             return _context.TachesProduction.Any(e => e.Id == id);
         }
+
+        // ───────────────────────────── Groupes de tâches ─────────────────────────────
+        // Groupe = modèle répétitif de tâches, applicable à une commande : l'application
+        // génère une TacheProduction par ligne (GroupeTacheId posé pour la traçabilité).
+
+        [HttpGet("Groupes")]
+        [RequireModulePermission("taches", requireWrite: false)]
+        public async Task<ActionResult<IEnumerable<GroupeTacheDto>>> GetGroupes()
+        {
+            var groupes = await _context.GroupesTaches
+                .Include(g => g.Lignes)
+                .Include(g => g.Taches)
+                .OrderByDescending(g => g.DateCreation)
+                .ToListAsync();
+
+            return Ok(groupes.Select(g => new GroupeTacheDto
+            {
+                Id = g.Id,
+                Nom = g.Nom,
+                Description = g.Description,
+                EstActif = g.EstActif,
+                DateCreation = g.DateCreation,
+                Lignes = g.Lignes.OrderBy(l => l.Ordre).Select(l => new GroupeTacheLigneDto
+                {
+                    Id = l.Id,
+                    GroupeTacheId = l.GroupeTacheId,
+                    Titre = l.Titre,
+                    Description = l.Description,
+                    EquipeAssignee = l.EquipeAssignee,
+                    ResponsableAssigne = l.ResponsableAssigne,
+                    Priorite = (int)l.Priorite,
+                    Ordre = l.Ordre,
+                    DureeEstimeeHeures = l.DureeEstimeeHeures,
+                }).ToList(),
+                NombreCommandesAppliquees = g.Taches.Where(t => t.CommandeClientId.HasValue).Select(t => t.CommandeClientId).Distinct().Count(),
+                NombreTachesGenerees = g.Taches.Count,
+            }).ToList());
+        }
+
+        [HttpPost("Groupes")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<ActionResult<GroupeTache>> CreateGroupe([FromBody] CreateGroupeTacheDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Nom))
+                return BadRequest(new { message = "Le nom du groupe est requis." });
+
+            var groupe = new GroupeTache { Nom = dto.Nom.Trim(), Description = dto.Description };
+            _context.GroupesTaches.Add(groupe);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Groupe créé", id = groupe.Id });
+        }
+
+        [HttpPut("Groupes/{id}")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<IActionResult> UpdateGroupe(int id, [FromBody] UpdateGroupeTacheDto dto)
+        {
+            var groupe = await _context.GroupesTaches.FindAsync(id);
+            if (groupe == null)
+                return NotFound(new { message = "Groupe introuvable." });
+
+            if (dto.Nom != null)
+            {
+                if (string.IsNullOrWhiteSpace(dto.Nom))
+                    return BadRequest(new { message = "Le nom du groupe est requis." });
+                groupe.Nom = dto.Nom.Trim();
+            }
+            if (dto.Description != null) groupe.Description = dto.Description;
+            if (dto.EstActif.HasValue) groupe.EstActif = dto.EstActif.Value;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Groupe mis à jour" });
+        }
+
+        [HttpDelete("Groupes/{id}")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<IActionResult> DeleteGroupe(int id)
+        {
+            var groupe = await _context.GroupesTaches
+                .Include(g => g.Lignes)
+                .FirstOrDefaultAsync(g => g.Id == id);
+            if (groupe == null)
+                return NotFound(new { message = "Groupe introuvable." });
+
+            // Les tâches générées survivent (GroupeTacheId -> SetNull).
+            _context.GroupesTaches.Remove(groupe);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Groupe supprimé (tâches générées conservées)" });
+        }
+
+        [HttpPost("Groupes/{id}/Lignes")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<ActionResult> AddLigneGroupe(int id, [FromBody] CreateGroupeTacheLigneDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Titre))
+                return BadRequest(new { message = "Le titre de la ligne est requis." });
+
+            var groupe = await _context.GroupesTaches.FindAsync(id);
+            if (groupe == null)
+                return NotFound(new { message = "Groupe introuvable." });
+
+            var ordre = dto.Ordre;
+            if (ordre <= 0)
+                ordre = (await _context.GroupesTachesLignes.MaxAsync(l => (int?)l.Ordre) ?? 0) + 1;
+
+            var ligne = new GroupeTacheLigne
+            {
+                GroupeTacheId = id,
+                Titre = dto.Titre.Trim(),
+                Description = dto.Description,
+                EquipeAssignee = dto.EquipeAssignee,
+                ResponsableAssigne = dto.ResponsableAssigne,
+                Priorite = (PrioriteTache)Math.Clamp(dto.Priorite, 0, 3),
+                Ordre = ordre,
+                DureeEstimeeHeures = dto.DureeEstimeeHeures,
+            };
+            _context.GroupesTachesLignes.Add(ligne);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Ligne ajoutée au groupe", id = ligne.Id });
+        }
+
+        [HttpPut("Lignes/{id}")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<ActionResult> UpdateLigneGroupe(int id, [FromBody] UpdateGroupeTacheLigneDto dto)
+        {
+            var ligne = await _context.GroupesTachesLignes.FindAsync(id);
+            if (ligne == null)
+                return NotFound(new { message = "Ligne introuvable." });
+
+            if (dto.Titre != null)
+            {
+                if (string.IsNullOrWhiteSpace(dto.Titre))
+                    return BadRequest(new { message = "Le titre de la ligne est requis." });
+                ligne.Titre = dto.Titre.Trim();
+            }
+            if (dto.Description != null) ligne.Description = dto.Description;
+            if (dto.EquipeAssignee != null) ligne.EquipeAssignee = dto.EquipeAssignee;
+            if (dto.ResponsableAssigne != null) ligne.ResponsableAssigne = dto.ResponsableAssigne;
+            if (dto.Priorite.HasValue) ligne.Priorite = (PrioriteTache)Math.Clamp(dto.Priorite.Value, 0, 3);
+            if (dto.Ordre.HasValue) ligne.Ordre = dto.Ordre.Value;
+            if (dto.DureeEstimeeHeures.HasValue) ligne.DureeEstimeeHeures = dto.DureeEstimeeHeures.Value;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Ligne mise à jour" });
+        }
+
+        [HttpDelete("Lignes/{id}")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<ActionResult> DeleteLigneGroupe(int id)
+        {
+            var ligne = await _context.GroupesTachesLignes.FindAsync(id);
+            if (ligne == null)
+                return NotFound(new { message = "Ligne introuvable." });
+
+            _context.GroupesTachesLignes.Remove(ligne);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Ligne supprimée du groupe" });
+        }
+
+        /// <summary>
+        /// Applique un groupe à une commande : génère une TacheProduction par ligne
+        /// (statut NonCommence, priorité de la ligne, commande renseignée, GroupeTacheId posé).
+        /// Retourne les tâches créées.
+        /// </summary>
+        [HttpPost("Groupes/{id}/Appliquer")]
+        [RequireModulePermission("taches", requireWrite: true)]
+        public async Task<ActionResult> AppliquerGroupe(int id, [FromBody] AppliquerGroupeTacheDto dto)
+        {
+            var groupe = await _context.GroupesTaches
+                .Include(g => g.Lignes)
+                .FirstOrDefaultAsync(g => g.Id == id);
+            if (groupe == null)
+                return NotFound(new { message = "Groupe introuvable." });
+            if (!groupe.EstActif)
+                return BadRequest(new { message = "Le groupe est inactif : impossible de l'appliquer." });
+
+            var commande = await _context.CommandesClients.FindAsync(dto.CommandeId);
+            if (commande == null)
+                return NotFound(new { message = "Commande introuvable." });
+            if (groupe.Lignes.Count == 0)
+                return BadRequest(new { message = "Le groupe ne contient aucune ligne à appliquer." });
+
+            var generees = new List<TacheProduction>();
+            foreach (var ligne in groupe.Lignes.OrderBy(l => l.Ordre))
+            {
+                var tache = new TacheProduction
+                {
+                    Titre = ligne.Titre,
+                    Description = ligne.Description,
+                    CommandeClientId = dto.CommandeId,
+                    EquipeAssignee = ligne.EquipeAssignee,
+                    ResponsableAssigne = ligne.ResponsableAssigne,
+                    Statut = StatutTache.NonCommence,
+                    Priorite = ligne.Priorite,
+                    DureeEstimeeHeures = ligne.DureeEstimeeHeures,
+                    GroupeTacheId = groupe.Id,
+                };
+                _context.TachesProduction.Add(tache);
+                generees.Add(tache);
+            }
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = $"{generees.Count} tâche(s) générée(s) pour la commande {commande.NumeroCommande}",
+                count = generees.Count,
+                ids = generees.Select(t => t.Id).ToList(),
+            });
+        }
     }
 }

@@ -37,8 +37,27 @@ namespace Backend_Gestion_Magasin_API.Models
 
         public bool EstActif { get; set; } = true;
 
+        /// <summary>
+        /// Longueur de nappe du matelas en mètres (géométrie de la table de coupe).
+        /// Optionnelle — saisie libre recommandée (défaut : à la constitution du matelas).
+        /// Couche additive L1 : n'apporte aucune contrainte, les matelas existants restent valides.
+        /// </summary>
+        public decimal? Longueur { get; set; }
+
+        /// <summary>
+        /// Laize du tissu pour ce matelas (cm). Héritée en défaut de Article.Laize d'une BOM
+        /// tissu de la commande, modifiable librement sur le matelas (Décision Conception §9.6).
+        /// </summary>
+        public decimal? Laize { get; set; }
+
         /// <summary>Commande porteuse du matelas (scope, null si matelas partagé/historique).</summary>
         public virtual CommandeClient? Commande { get; set; }
+
+        /// <summary>
+        /// Plan de coupe du matelas (marker) : une ligne par taille dessinée sur la nappe,
+        /// avec son nombre d'occurrences. Quantité théorique par taille = Occurrences × PiecePliage.
+        /// </summary>
+        public virtual ICollection<PlanDeCoupeLigne> PlanDeCoupeLignes { get; set; } = new List<PlanDeCoupeLigne>();
 
         // Relations : pièces réellement coupées à partir de ce matelas
         public virtual ICollection<LotCoupe> LotCoupes { get; set; } = new List<LotCoupe>();

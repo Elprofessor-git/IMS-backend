@@ -65,10 +65,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     DateMatelas = m.DateMatelas,
                     PiecePliage = m.PiecePliage,
                     CoupeEstimee = m.CoupeEstimee,
+                    Longueur = m.Longueur,
+                    Laize = m.Laize,
                     NombreCoupes = m.LotCoupes.Sum(lc => (int?)lc.QuantiteCoupee) ?? 0,
                     TotalPiecesCommandees = m.Commande != null
                         ? m.Commande.ConfigTailles.Sum(ct => (int?)ct.Quantite) ?? 0
                         : 0,
+                    TotalPlanTheorique = m.PlanDeCoupeLignes.Sum(p => (int?)(p.Occurrences * m.PiecePliage)) ?? 0,
                     Notes = m.Notes,
                     EstActif = m.EstActif,
                 })
@@ -127,6 +130,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 DateMatelas = dto.DateMatelas ?? DateTime.Now,
                 PiecePliage = dto.PiecePliage,
                 CoupeEstimee = dto.CoupeEstimee,
+                Longueur = dto.Longueur,
+                Laize = dto.Laize ?? await LaizeParDefautAsync(dto.CommandeId),
                 Notes = dto.Notes,
             };
 
@@ -169,6 +174,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (dto.DateMatelas.HasValue) matelas.DateMatelas = dto.DateMatelas.Value;
             if (dto.PiecePliage.HasValue) matelas.PiecePliage = dto.PiecePliage.Value;
             if (dto.CoupeEstimee.HasValue) matelas.CoupeEstimee = dto.CoupeEstimee.Value;
+            if (dto.Longueur.HasValue) matelas.Longueur = dto.Longueur.Value;
+            if (dto.Laize.HasValue) matelas.Laize = dto.Laize.Value;
             if (dto.Notes != null) matelas.Notes = dto.Notes;
             if (dto.EstActif.HasValue) matelas.EstActif = dto.EstActif.Value;
 
@@ -192,6 +199,158 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context.Matelas.Remove(matelas);
             await _context.SaveChangesAsync();
             return Ok(new { message = "Matelas supprimé" });
+        }
+
+        // ───────────────────────────── Plan de coupe (L1) ─────────────────────────────
+        // Le plan de coupe (marker) d'un matelas est la référence atelier : une ligne par
+        // gabarit/taille, Occurrences × PiecePliage = quantité théorique. Verrous identiques
+        // au matelas lui-même : immuable dès qu'une coupe réelle y est rattachée (409).
+
+        /// <summary>
+        /// Laize par défaut d'un matelas : héritée de Article.Laize d'une BOM tissu de la
+        /// commande (premier tissu consommable trouvé). Libre ensuite sur le matelas.
+        /// </summary>
+        private async Task<decimal?> LaizeParDefautAsync(int commandeId)
+        {
+            return await _context.BomLignes
+                .Where(b => b.CommandeId == commandeId && b.EstConsommableTissu && b.Article != null && b.Article.Laize.HasValue)
+                .Select(b => b.Article!.Laize)
+                .FirstOrDefaultAsync();
+        }
+
+        [HttpGet("{id}/PlanDeCoupe")]
+        [RequireModulePermission("coupe")]
+        public async Task<ActionResult<IEnumerable<PlanDeCoupeLigneDto>>> GetPlanDeCoupe(int id)
+        {
+            var matelas = await _context.Matelas.FindAsync(id);
+            if (matelas == null)
+                return NotFound(new { message = "Matelas introuvable." });
+
+            var lignes = await _context.PlanDeCoupeLignes
+                .Where(p => p.MatelasId == id)
+                .OrderBy(p => p.Taille)
+                .Select(p => new PlanDeCoupeLigneDto
+                {
+                    Id = p.Id,
+                    MatelasId = p.MatelasId,
+                    Taille = p.Taille,
+                    Occurrences = p.Occurrences,
+                    Notes = p.Notes,
+                    Theorique = p.Occurrences * matelas.PiecePliage,
+                })
+                .ToListAsync();
+
+            return Ok(lignes);
+        }
+
+        [HttpPost("{id}/PlanDeCoupe")]
+        [RequireModulePermission("coupe", requireWrite: true)]
+        public async Task<ActionResult> AjouterLignePlan(int id, [FromBody] CreatePlanDeCoupeLigneDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Taille) || dto.Occurrences < 1)
+                return BadRequest(new { message = "Taille requise et occurrences ≥ 1." });
+
+            var matelas = await _context.Matelas.FindAsync(id);
+            if (matelas == null)
+                return NotFound(new { message = "Matelas introuvable." });
+
+            // Verrou L1 : un matelas qui a déjà servi à des coupes a un plan figé.
+            if (await _context.LotCoupes.AnyAsync(lc => lc.MatelasId == id))
+                return Conflict(new { message = "Impossible de modifier le plan d'un matelas qui a des coupes enregistrées." });
+
+            var tailleValide = matelas.CommandeId.HasValue
+                && await _context.ConfigTailles.AnyAsync(ct => ct.CommandeId == matelas.CommandeId.Value && ct.Taille == dto.Taille);
+            if (matelas.CommandeId.HasValue && !tailleValide)
+                return BadRequest(new { message = $"Taille '{dto.Taille}' absente de la configuration de la commande." });
+
+            var existe = await _context.PlanDeCoupeLignes.AnyAsync(p => p.MatelasId == id && p.Taille == dto.Taille);
+            if (existe)
+                return Conflict(new { message = $"Une ligne de plan existe déjà pour la taille '{dto.Taille}' sur ce matelas." });
+
+            var ligne = new PlanDeCoupeLigne
+            {
+                MatelasId = id,
+                Taille = dto.Taille,
+                Occurrences = dto.Occurrences,
+                Notes = dto.Notes,
+            };
+            _context.PlanDeCoupeLignes.Add(ligne);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Ligne de plan enregistrée",
+                id = ligne.Id,
+                taille = ligne.Taille,
+                occurrences = ligne.Occurrences,
+                theorique = ligne.Occurrences * matelas.PiecePliage
+            });
+        }
+
+        [HttpPut("PlanDeCoupe/{id}")]
+        [RequireModulePermission("coupe", requireWrite: true)]
+        public async Task<ActionResult> ModifierLignePlan(int id, [FromBody] UpdatePlanDeCoupeLigneDto dto)
+        {
+            var ligne = await _context.PlanDeCoupeLignes
+                .Include(p => p.Matelas)
+                .FirstOrDefaultAsync(p => p.Id == id);
+            if (ligne == null || ligne.Matelas == null)
+                return NotFound(new { message = "Ligne de plan introuvable." });
+
+            // Verrou L1 : plan figé dès qu'une coupe réelle existe sur le matelas.
+            if (await _context.LotCoupes.AnyAsync(lc => lc.MatelasId == ligne.MatelasId))
+                return Conflict(new { message = "Impossible de modifier le plan d'un matelas qui a des coupes enregistrées." });
+
+            var nouvelleTaille = dto.Taille ?? ligne.Taille;
+            if (string.IsNullOrWhiteSpace(nouvelleTaille))
+                return BadRequest(new { message = "La taille est requise." });
+
+            if (ligne.Matelas.CommandeId.HasValue)
+            {
+                var tailleValide = await _context.ConfigTailles.AnyAsync(ct => ct.CommandeId == ligne.Matelas.CommandeId.Value && ct.Taille == nouvelleTaille);
+                if (!tailleValide)
+                    return BadRequest(new { message = $"Taille '{nouvelleTaille}' absente de la configuration de la commande." });
+            }
+
+            if (nouvelleTaille != ligne.Taille)
+            {
+                var existe = await _context.PlanDeCoupeLignes.AnyAsync(p => p.MatelasId == ligne.MatelasId && p.Taille == nouvelleTaille && p.Id != id);
+                if (existe)
+                    return Conflict(new { message = $"Une ligne de plan existe déjà pour la taille '{nouvelleTaille}' sur ce matelas." });
+            }
+
+            if (dto.Occurrences.HasValue && dto.Occurrences.Value < 1)
+                return BadRequest(new { message = "Occurrences ≥ 1." });
+
+            ligne.Taille = nouvelleTaille;
+            if (dto.Occurrences.HasValue) ligne.Occurrences = dto.Occurrences.Value;
+            if (dto.Notes != null) ligne.Notes = dto.Notes;
+
+            await _context.SaveChangesAsync();
+            return Ok(new
+            {
+                message = "Ligne de plan mise à jour",
+                id = ligne.Id,
+                taille = ligne.Taille,
+                occurrences = ligne.Occurrences,
+                theorique = ligne.Occurrences * ligne.Matelas.PiecePliage
+            });
+        }
+
+        [HttpDelete("PlanDeCoupe/{id}")]
+        [RequireModulePermission("coupe", requireWrite: true)]
+        public async Task<ActionResult> SupprimerLignePlan(int id)
+        {
+            var ligne = await _context.PlanDeCoupeLignes.FindAsync(id);
+            if (ligne == null)
+                return NotFound(new { message = "Ligne de plan introuvable." });
+
+            if (await _context.LotCoupes.AnyAsync(lc => lc.MatelasId == ligne.MatelasId))
+                return Conflict(new { message = "Impossible de modifier le plan d'un matelas qui a des coupes enregistrées." });
+
+            _context.PlanDeCoupeLignes.Remove(ligne);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Ligne de plan supprimée" });
         }
     }
 }

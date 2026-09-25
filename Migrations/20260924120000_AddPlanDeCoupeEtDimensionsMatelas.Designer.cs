@@ -3,6 +3,7 @@ using System;
 using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Backend_Gestion_Magasin_API.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260924120000_AddPlanDeCoupeEtDimensionsMatelas")]
+    partial class AddPlanDeCoupeEtDimensionsMatelas
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1361,78 +1364,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .IsUnique();
 
                     b.ToTable("GroupeCommandeCommandes");
-                });
-
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.GroupeTache", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("DateCreation")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<bool>("EstActif")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Nom")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("GroupesTaches");
-                });
-
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.GroupeTacheLigne", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<int>("DureeEstimeeHeures")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("EquipeAssignee")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("GroupeTacheId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Ordre")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Priorite")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ResponsableAssigne")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Titre")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GroupeTacheId", "Ordre");
-
-                    b.ToTable("GroupesTachesLignes");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.HistoriquePrixArticle", b =>
@@ -2935,9 +2866,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<int?>("GroupeTacheId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("ModifiePar")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -2974,8 +2902,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CommandeClientId");
-
-                    b.HasIndex("GroupeTacheId");
 
                     b.HasIndex("Statut", "DateFinPrevue");
 
@@ -3478,17 +3404,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("GroupeCommande");
                 });
 
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.GroupeTacheLigne", b =>
-                {
-                    b.HasOne("Backend_Gestion_Magasin_API.Models.GroupeTache", "GroupeTache")
-                        .WithMany("Lignes")
-                        .HasForeignKey("GroupeTacheId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("GroupeTache");
-                });
-
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.HistoriquePrixArticle", b =>
                 {
                     b.HasOne("Backend_Gestion_Magasin_API.Models.Article", "Article")
@@ -3899,14 +3814,7 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasForeignKey("CommandeClientId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Backend_Gestion_Magasin_API.Models.GroupeTache", "GroupeTache")
-                        .WithMany("Taches")
-                        .HasForeignKey("GroupeTacheId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("CommandeClient");
-
-                    b.Navigation("GroupeTache");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.TauxChange", b =>
@@ -4066,13 +3974,6 @@ namespace Backend_Gestion_Magasin_API.Migrations
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.GroupeCommande", b =>
                 {
                     b.Navigation("Membres");
-                });
-
-            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.GroupeTache", b =>
-                {
-                    b.Navigation("Lignes");
-
-                    b.Navigation("Taches");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Importation", b =>

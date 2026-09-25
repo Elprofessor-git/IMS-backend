@@ -74,9 +74,15 @@ namespace Backend_Gestion_Magasin_API.Models
         
         [StringLength(100)]
         public string? ModifiePar { get; set; }
-        
+
+        // Groupe d'origine si la tâche a été générée par l'application d'un modèle
+        // (module « Tâches »). SetNull : la génération se sépare du groupe supprimé.
+        [ForeignKey("GroupeTache")]
+        public int? GroupeTacheId { get; set; }
+
         // Relations
         public virtual CommandeClient? CommandeClient { get; set; }
+        public virtual GroupeTache? GroupeTache { get; set; }
         public virtual ICollection<MouvementStock> MouvementsStock { get; set; } = new List<MouvementStock>();
     }
 }

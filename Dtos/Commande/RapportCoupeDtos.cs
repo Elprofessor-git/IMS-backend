@@ -90,4 +90,62 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public List<RapportCoupeTailleDto> Tailles { get; set; } = new();
         public List<RapportCoupeTissuDto> Tissus { get; set; } = new();
     }
+
+    // ── Ordre de coupe document (L2) : le plan de coupe agrégé devient la
+    //    référence atelier. Vue calculée, aucune table de planning. ──
+
+    /// <summary>Ligne de plan d'un matelas, vue document (+ théorique = Occ × Plis).</summary>
+    public class OrdreCoupePlanLigneDto
+    {
+        public int MatelasId { get; set; }
+        public string Taille { get; set; } = string.Empty;
+        public int Occurrences { get; set; }
+        public int Theorique { get; set; }
+    }
+
+    /// <summary>Récapitulatif par taille d'un matelas (reste si coupes déjà faites).</summary>
+    public class OrdreCoupeMatelasDto
+    {
+        public int MatelasId { get; set; }
+        public string NumeroMatelas { get; set; } = string.Empty;
+        public DateTime DateMatelas { get; set; }
+        public int PiecePliage { get; set; }
+        public int OrdreDeCoupe { get; set; }
+        public decimal? Longueur { get; set; }
+        public decimal? Laize { get; set; }
+        /// <summary>Total théorique du matelas = Σ Occurrences × PiecePliage.</summary>
+        public int TotalTheorique { get; set; }
+        /// <summary>Coupes réelles déjà rattachées à ce matelas (toutes tailles).</summary>
+        public int TotalCoupeReelle { get; set; }
+        public List<OrdreCoupePlanLigneDto> Lignes { get; set; } = new();
+    }
+
+    /// <summary>Couverture par taille : Σ plans vs demande ConfigTaille (± marge).</summary>
+    public class OrdreCoupeTailleDto
+    {
+        public string Taille { get; set; } = string.Empty;
+        public int QuantiteCommande { get; set; }
+        /// <summary>Seuil = QuantiteCommande × (1 + MargeSecuriteDefaut/100).</summary>
+        public decimal Seuil { get; set; }
+        public int PlanTheorique { get; set; }
+        public int CoupeReelle { get; set; }
+        /// <summary>true si PlanTheorique &gt; Seuil — le plan déborde de la demande autorisée.</summary>
+        public bool DepassePlan { get; set; }
+        /// <summary>true si CoupeReelle &gt; Seuil — dépassement réel (garde=ForcerDepassement actif).</summary>
+        public bool DepasseCoupe { get; set; }
+        /// <summary>Coupes enregistrées sans matelas rattaché (alerte atelier).</summary>
+        public int CoupesSansMatelas { get; set; }
+    }
+
+    public class OrdreDeCoupeDto
+    {
+        public int CommandeId { get; set; }
+        public string NumeroCommande { get; set; } = string.Empty;
+        public decimal MargeSecuriteDefaut { get; set; }
+        public int TotalPlanTheorique { get; set; }
+        public int TotalCoupeReelle { get; set; }
+        public int TotalCoupesSansMatelas { get; set; }
+        public List<OrdreCoupeMatelasDto> Matelas { get; set; } = new();
+        public List<OrdreCoupeTailleDto> Tailles { get; set; } = new();
+    }
 }
