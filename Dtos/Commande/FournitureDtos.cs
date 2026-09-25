@@ -96,6 +96,50 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public string? MatelasNumero { get; set; }
     }
 
+    /// <summary>
+    /// Tableau de bord d'avancement du module Coupe, agrégé PAR COMMANDE.
+    /// Point de départ : les commandes (et non les matelas) — une commande sans
+    /// aucun matelas y figure avec planifié = 0 et reste à planifier = demandé.
+    /// Agrégats calculés en mémoire à partir de jointures SQL : aucun champ
+    /// calculé n'est stocké, donc aucune migration.
+    /// </summary>
+    public class CoupeDashboardDto
+    {
+        public DateTime Date { get; set; }
+        /// <summary>Commandes retenues (annulées exclues).</summary>
+        public int NombreCommandes { get; set; }
+        /// <summary>Σ ConfigTaille.Quantite des commandes retenues.</summary>
+        public int PiecesDemandees { get; set; }
+        /// <summary>Σ (Occurrences × PiecePliage) des plans de leurs matelas.</summary>
+        public int PiecesPlanifiees { get; set; }
+        /// <summary>Σ LotCoupe.QuantiteCoupee.</summary>
+        public int PiecesCoupees { get; set; }
+        public int ResteAPlanifier { get; set; }
+        public int ResteACouper { get; set; }
+        public List<CoupeDashboardCommandeDto> Commandes { get; set; } = new();
+    }
+
+    public class CoupeDashboardCommandeDto
+    {
+        public int CommandeId { get; set; }
+        public string NumeroCommande { get; set; } = string.Empty;
+        public string? TitreCommande { get; set; }
+        public string? ClientNom { get; set; }
+        public string? PlateformeNom { get; set; }
+        public string Statut { get; set; } = string.Empty;
+        public DateTime DateCommande { get; set; }
+        public int NombreMatelas { get; set; }
+        public int PiecesDemandees { get; set; }
+        public int PiecesPlanifiees { get; set; }
+        public int PiecesCoupees { get; set; }
+        /// <summary>Commandes non annulées uniquement (une commande annulée n'a rien à planifier).</summary>
+        public int ResteAPlanifier { get; set; }
+        public int ResteACouper { get; set; }
+        /// <summary>Coupes orphelines (sans matelas rattaché) — hors calcul des restes.</summary>
+        public int CoupesSansMatelas { get; set; }
+        public int Avancement { get; set; }
+    }
+
     public class CreateMatelasDto
     {
         [Required]
