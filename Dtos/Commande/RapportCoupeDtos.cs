@@ -97,10 +97,16 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
     /// <summary>Ligne de plan d'un matelas, vue document (+ théorique = Occ × Plis).</summary>
     public class OrdreCoupePlanLigneDto
     {
+        /// <summary>Identifiant de la ligne de plan (édition/suppression depuis l'ordre de coupe).</summary>
+        public int LigneId { get; set; }
         public int MatelasId { get; set; }
         public string Taille { get; set; } = string.Empty;
         public int Occurrences { get; set; }
         public int Theorique { get; set; }
+        /// <summary>Coupes réelles déjà rattachées à CE matelas pour CETTE taille.</summary>
+        public int CoupeReelle { get; set; }
+        /// <summary>Reste à couper = Theorique − CoupeReelle (négatif = au-delà du plan).</summary>
+        public int ResteACouper { get; set; }
     }
 
     /// <summary>Récapitulatif par taille d'un matelas (reste si coupes déjà faites).</summary>
@@ -117,6 +123,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int TotalTheorique { get; set; }
         /// <summary>Coupes réelles déjà rattachées à ce matelas (toutes tailles).</summary>
         public int TotalCoupeReelle { get; set; }
+        /// <summary>Reste à couper du matelas = Σ (Theorique − CoupeReelle) sur ses lignes de plan.</summary>
+        public int ResteTotal { get; set; }
         public List<OrdreCoupePlanLigneDto> Lignes { get; set; } = new();
     }
 

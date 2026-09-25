@@ -240,14 +240,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 foreach (var ligne in m.PlanDeCoupeLignes.OrderBy(p => p.Taille))
                 {
                     var theorique = ligne.Occurrences * m.PiecePliage;
+                    // Coupes réelles de CE matelas sur CETTE taille (vue lecture, calculée).
+                    var coupeReelle = m.LotCoupes
+                        .Where(lc => string.Equals(lc.Taille, ligne.Taille, StringComparison.OrdinalIgnoreCase))
+                        .Sum(lc => (int?)lc.QuantiteCoupee) ?? 0;
+                    var reste = theorique - coupeReelle;
                     plan.Lignes.Add(new OrdreCoupePlanLigneDto
                     {
+                        LigneId = ligne.Id,
                         MatelasId = m.Id,
                         Taille = ligne.Taille,
                         Occurrences = ligne.Occurrences,
                         Theorique = theorique,
+                        CoupeReelle = coupeReelle,
+                        ResteACouper = reste,
                     });
                     plan.TotalTheorique += theorique;
+                    plan.ResteTotal += reste;
                     planParTaille[ligne.Taille] = planParTaille.GetValueOrDefault(ligne.Taille) + theorique;
                 }
 

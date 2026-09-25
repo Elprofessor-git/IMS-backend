@@ -106,6 +106,42 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(dto);
         }
 
+        // Journal du jour : coupes enregistrées aujourd'hui, toutes commandes confondues.
+        // Alimente le tableau de bord global du module Coupe — lecture seule, aucune écriture.
+        [HttpGet("CoupesDuJour")]
+        [RequireModulePermission("coupe")]
+        public async Task<ActionResult<JournalCoupeDto>> GetCoupesDuJour()
+        {
+            var aujourdhui = DateTime.Today;
+
+            var lignes = await _context.LotCoupes
+                .Where(l => l.DateCoupe >= aujourdhui && l.DateCoupe < aujourdhui.AddDays(1))
+                .OrderByDescending(l => l.DateCoupe)
+                .ThenByDescending(l => l.Id)
+                .Select(l => new JournalCoupeLigneDto
+                {
+                    Id = l.Id,
+                    CommandeId = l.CommandeId,
+                    NumeroCommande = l.Commande != null ? l.Commande.NumeroCommande : string.Empty,
+                    Taille = l.Taille,
+                    QuantiteCoupee = l.QuantiteCoupee,
+                    DateCoupe = l.DateCoupe,
+                    EffectuePar = l.EffectuePar,
+                    ForcerDepassement = l.ForcerDepassement,
+                    MatelasId = l.MatelasId,
+                    MatelasNumero = l.Matelas != null ? l.Matelas.NumeroMatelas : null,
+                })
+                .ToListAsync();
+
+            return Ok(new JournalCoupeDto
+            {
+                Date = aujourdhui,
+                NombreLignes = lignes.Count,
+                TotalQuantite = lignes.Sum(l => l.QuantiteCoupee),
+                Lignes = lignes,
+            });
+        }
+
         [HttpPost]
         [RequireModulePermission("commandes,coupe", requireWrite: true)]
         public async Task<ActionResult<Matelas>> Create(CreateMatelasDto dto)

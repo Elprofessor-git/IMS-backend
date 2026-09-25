@@ -70,6 +70,32 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int TotalPiecesExportees { get; set; }
     }
 
+    /// <summary>
+    /// Journal du jour du module Coupe : coupes enregistrées aujourd'hui, toutes
+    /// commandes confondues (tableau de bord global, lecture seule).
+    /// </summary>
+    public class JournalCoupeDto
+    {
+        public DateTime Date { get; set; }
+        public int NombreLignes { get; set; }
+        public int TotalQuantite { get; set; }
+        public List<JournalCoupeLigneDto> Lignes { get; set; } = new();
+    }
+
+    public class JournalCoupeLigneDto
+    {
+        public int Id { get; set; }
+        public int CommandeId { get; set; }
+        public string NumeroCommande { get; set; } = string.Empty;
+        public string Taille { get; set; } = string.Empty;
+        public int QuantiteCoupee { get; set; }
+        public DateTime DateCoupe { get; set; }
+        public string? EffectuePar { get; set; }
+        public bool ForcerDepassement { get; set; }
+        public int? MatelasId { get; set; }
+        public string? MatelasNumero { get; set; }
+    }
+
     public class CreateMatelasDto
     {
         [Required]
