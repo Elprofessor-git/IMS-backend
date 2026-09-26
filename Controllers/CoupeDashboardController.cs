@@ -39,7 +39,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             // 1. Les commandes + leur demande (Σ ConfigTaille) — une seule requête.
             var commandes = await _context.CommandesClients
-                .Where(c => c.Statut != StatutCommande.Annulee)
+                .Where(c => c.Statut != StatutCommande.Annulee && c.Statut != StatutCommande.Terminee)
                 .Select(c => new
                 {
                     c.Id,
