@@ -240,7 +240,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Id = e.Id,
                     ControleQualiteId = e.ControleQualiteId,
                     ChaineProductionId = e.ChaineProductionId,
-                    ChaineNom = e.ChaineProduction != null ? e.ChaineProduction.Nom : null,
+                    ChaineNom = e.ChaineProduction != null ? e.ChaineProduction.Nom : null,  // already correct
                     QuantiteRenvoyee = e.QuantiteRenvoyee,
                     DateEnvoi = e.DateEnvoi,
                     EffectuePar = e.EffectuePar,
@@ -399,5 +399,83 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             return Ok(indicateurs);
         }
+
+        // ═══════════ Journal du jour : contrôles + envois retouche aujourd'hui ═══════════
+
+        [HttpGet("Journal")]
+        [RequireModulePermission("qualite")]
+        public async Task<ActionResult<IEnumerable<QualiteJournalLigneDto>>> GetJournal()
+        {
+            var today = DateTime.Today;
+            var tomorrow = today.AddDays(1);
+
+            // Contrôles aujourd'hui
+            var controles = await _context.ControlesQualite
+                .Where(c => c.DateControle >= today && c.DateControle < DateTime.Today.AddDays(1))
+                .Select(c => new QualiteJournalLigneDto
+                {
+                    Id = c.Id,
+                    Type = "controle",
+                    NumeroCommande = c.OrdreFabrication != null ? c.OrdreFabrication.Commande.NumeroCommande : null,
+                    Taille = c.Taille,
+                    ChaineNom = c.ChaineProduction != null ? c.ChaineProduction.Nom : null,
+                    QuantiteControlee = c.QuantiteControlee,
+                    QuantiteAcceptee = c.QuantiteAcceptee,
+                    QuantiteRetouche = c.QuantiteRetouche,
+                    QuantiteRebut = c.QuantiteRebut,
+                    TypeControle = c.TypeControle.ToString(),
+                    EffectuePar = c.EffectuePar,
+                    DateOperation = c.DateControle,
+                    Notes = c.Notes,
+                })
+                .ToListAsync();
+
+            // Envois retouche aujourd'hui
+            var envois = await _context.EnvoisRetouche
+                .Where(e => e.DateEnvoi >= today && e.DateEnvoi < DateTime.Today.AddDays(1))
+                .Select(e => new QualiteJournalLigneDto
+                {
+                    Id = e.Id,
+                    Type = "envoi",
+                    NumeroCommande = e.ControleSource != null && e.ControleSource.OrdreFabrication != null
+                        ? e.ControleSource.OrdreFabrication.Commande.NumeroCommande
+                        : null,
+                    Taille = e.ControleSource != null ? e.ControleSource.Taille : string.Empty,
+                    ChaineNom = e.ChaineProduction != null ? e.ChaineProduction.Nom : null,  // already correct
+                    QuantiteRenvoyee = e.QuantiteRenvoyee,
+                    EffectuePar = e.EffectuePar,
+                    DateOperation = e.DateEnvoi,
+                    Notes = e.Notes,
+                })
+                .ToListAsync();
+
+            var journal = controles.Cast<QualiteJournalLigneDto>()
+                .Concat(envois.Cast<QualiteJournalLigneDto>())
+                .OrderByDescending(j => j.DateOperation)
+                .ToList();
+
+            return Ok(journal);
+        }
+
+    }
+
+    // DTOs locaux pour le journal
+    public class QualiteJournalLigneDto
+    {
+        public int Id { get; set; }
+        public string Type { get; set; } = string.Empty; // "controle" | "envoi"
+        public string? NumeroCommande { get; set; }
+        public string Taille { get; set; } = string.Empty;
+        public string? ChaineNom { get; set; }
+        public int? QuantiteControlee { get; set; }
+        public int? QuantiteAcceptee { get; set; }
+        public int? QuantiteRetouche { get; set; }
+        public int? QuantiteRebut { get; set; }
+        public string? TypeControle { get; set; }
+        public int? QuantiteRenvoyee { get; set; }
+        public string? EffectuePar { get; set; }
+        public DateTime DateOperation { get; set; }
+        public string? Notes { get; set; }
     }
 }
+
