@@ -24,6 +24,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private readonly ApplicationDbContext _context;
         private readonly QualiteService _qualite;
 
+        private sealed record TripletKey(int CommandeId, int? ChaineProductionId, string Taille);
+
         public QualiteController(ApplicationDbContext context, QualiteService quality)
         {
             _context = context;
@@ -192,9 +194,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .Select(cp => new { cp.Id, cp.Nom, cp.EstSousTraitant })
                 .ToDictionaryAsync(cp => cp.Id);
 
-            // Premier OF de chaque commande (pour proposer un contrôle sans avoir à le chercher).
-            // On sélectionne l'entité entière triée par Id : deux Min() indépendants
-            // (Min(Id) / Min(NumeroOF)) pourraient provenir de deux OF différents.
+            // Premier OF de chaque commande
             var ofParCommande = (await _context.OrdresFabrication
                     .Where(of => idsCommandes.Contains(of.CommandeId))
                     .OrderBy(of => of.Id)
@@ -202,13 +202,40 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .GroupBy(of => of.CommandeId)
                 .ToDictionary(g => g.Key, g => g.First());
 
+            // --- BATCH : calculer tous les soldes en UNE passe (remplace N appels CalculerSoldeAsync) ---
+            var tripletObjects = triplets.Select(t => new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille)).ToList();
+            var soldes = await _qualite.CalculerSoldesAsync(tripletObjects);
+
+            // BATCH : nombre de contrôles et d'envois par triplet
+            var commandeIdsDansTriplets = triplets.Select(t => t.CommandeId).Distinct().ToList();
+            var chaineIdsDansTriplets = triplets.Where(t => t.ChaineProductionId.HasValue).Select(t => t.ChaineProductionId!.Value).Distinct().ToList();
+            var taillesDansTriplets = triplets.Select(t => t.Taille).Distinct().ToList();
+
+            var controlesParTriplet = await _context.ControlesQualite
+                .Where(c => c.OrdreFabrication != null
+                         && commandeIdsDansTriplets.Contains(c.OrdreFabrication.CommandeId)
+                         && (c.ChaineProductionId == null || chaineIdsDansTriplets.Contains(c.ChaineProductionId.Value))
+                         && taillesDansTriplets.Contains(c.Taille))
+                .GroupBy(c => new TripletKey(c.OrdreFabrication!.CommandeId, c.ChaineProductionId, c.Taille))
+                .Select(g => new { Key = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+            var envoisParTriplet = await _context.EnvoisRetouche
+                .Where(e => e.ControleSource != null
+                         && commandeIdsDansTriplets.Contains(e.ControleSource.OrdreFabrication!.CommandeId)
+                         && (e.ControleSource.ChaineProductionId == null || chaineIdsDansTriplets.Contains(e.ControleSource.ChaineProductionId.Value))
+                         && taillesDansTriplets.Contains(e.ControleSource.Taille))
+                .GroupBy(e => new TripletKey(e.ControleSource!.OrdreFabrication!.CommandeId, e.ControleSource.ChaineProductionId, e.ControleSource.Taille))
+                .Select(g => new { Key = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.Key, x => x.Count);
+
             var lignes = new List<QualiteDashboardLigneDto>();
 
             foreach (var t in triplets)
             {
                 var cmd = commandesActives.First(c => c.Id == t.CommandeId);
-                var solde = await _qualite.CalculerSoldeAsync(
-                    new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille));
+                var tripletKey = new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille);
+                var solde = soldes.TryGetValue(tripletKey, out var s) ? s : new QualiteService.SoldeTriplet();
 
                 bool estSousTraitant = false;
                 string? chaineNom = null;
@@ -219,17 +246,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     chaineNom = cp.Nom;
                 }
 
-                var controlesIds = await _context.ControlesQualite
-                    .Where(c => c.OrdreFabrication != null
-                             && c.OrdreFabrication.CommandeId == t.CommandeId
-                             && c.ChaineProductionId == t.ChaineProductionId
-                             && c.Taille == t.Taille)
-                    .Select(c => c.Id)
-                    .ToListAsync();
-
-                var nbEnvois = await _context.EnvoisRetouche
-                    .Where(e => controlesIds.Contains(e.ControleQualiteId))
-                    .CountAsync();
+                var tripletKeyForCounts = new TripletKey(t.CommandeId, t.ChaineProductionId, t.Taille);
+                var nbControles = controlesParTriplet.TryGetValue(tripletKeyForCounts, out var nc) ? nc : 0;
+                var nbEnvois = envoisParTriplet.TryGetValue(tripletKeyForCounts, out var ne) ? ne : 0;
 
                 var ligne = new QualiteDashboardLigneDto
                 {
@@ -255,7 +274,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     ERRestant = solde.ERRestant,
                     EnCours = solde.EnCours,
                     EstSolde = solde.EstSolde,
-                    NombreControles = controlesIds.Count,
+                    NombreControles = nbControles,
                     NombreEnvois = nbEnvois,
                 };
 

@@ -895,7 +895,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     CreePar = _currentUser.UserName
                 };
 
-                var assignee = await ResolveLigneResponsableAsync(ligne.ResponsableAssigne) ?? createur;
+                var assignee = await ResolveLigneResponsableAsync(ligne.ResponsableAssigne);
+
+                // Si un tiers est désigné, vérifier le droit PeutAssignerTaches
+                // (même garde-fou que POST /{id}/Assigner — ApplyAssignationAsync:590).
+                if (assignee != null && assignee.Id != userId)
+                {
+                    if (!await _permissions.CanAssignerTachesAsync(userId))
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden,
+                            new { message = "Vous n'êtes pas autorisé à assigner une tâche à un autre utilisateur (ligne : " + ligne.Titre + ")." });
+                    }
+                }
+                else
+                {
+                    assignee = createur;
+                }
+
                 _ownership.SetAssignee(tache, assignee);
 
                 _context.TachesProduction.Add(tache);

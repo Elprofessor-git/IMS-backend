@@ -230,6 +230,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return NotFound();
             }
 
+            // Vérifier transition de scope interdite : comparer le scope persisté vs le scope demandé
+            var scopePersiste = GetScope(stock);
+            var scopeDemande = GetScopeFromDto(dto);
+            if (scopePersiste != scopeDemande && scopeDemande != null)
+            {
+                return BadRequest(
+                    $"Transition de scope interdite : le stock appartient à « {scopePersiste} » et ne peut pas être déplacé vers « {scopeDemande} ». Utilisez la fonctionnalité de scission si nécessaire."
+                );
+            }
+
             var devise = dto.Devise ?? "EUR";
             var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, devise, DateTime.Now);
 
@@ -330,6 +340,24 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private bool StockExists(int id)
         {
             return _context.Stocks.Any(e => e.Id == id);
+        }
+
+        private static string? GetScope(Stock s)
+        {
+            if (s.CommandeClientId.HasValue) return "CommandeClient";
+            if (s.GroupeCommandeId.HasValue) return "GroupeCommande";
+            if (s.ClientId.HasValue) return "Client";
+            if (s.PlateformeId.HasValue) return "Plateforme";
+            return null;
+        }
+
+        private static string? GetScopeFromDto(CreateStockDto dto)
+        {
+            if (dto.CommandeClientId.HasValue) return "CommandeClient";
+            if (dto.GroupeCommandeId.HasValue) return "GroupeCommande";
+            if (dto.ClientId.HasValue) return "Client";
+            if (dto.PlateformeId.HasValue) return "Plateforme";
+            return null;
         }
 
         private static string? ValiderScopesExclusifs(CreateStockDto dto)

@@ -2,6 +2,8 @@ using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Dtos.Qualite;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Backend_Gestion_Magasin_API.Services
 {
@@ -25,6 +27,19 @@ namespace Backend_Gestion_Magasin_API.Services
         }
 
         public record Triplet(int CommandeId, int? ChaineId, string Taille);
+
+        private sealed record ControlBatchRow(
+            Triplet Triplet,
+            int Id,
+            int QuantiteControlee,
+            int QuantiteRetouche,
+            int QuantiteAcceptee,
+            int QuantiteRebut,
+            TypeControle Type,
+            int? ControleParentId,
+            int? EnvoiRetoucheId);
+
+        private sealed record EnvoiBatchRow(int Id, int ControleQualiteId, int QuantiteRenvoyee);
 
         /// <summary>Q = Σ QuantiteExportee des LotExport du triplet.</summary>
         public async Task<int> QuantiteExporteeAsync(Triplet t)
@@ -184,6 +199,139 @@ namespace Backend_Gestion_Magasin_API.Services
             public int ERRestant { get; init; }
             public int EnCours { get; init; }
             public bool EstSolde { get; init; }
+        }
+
+        /// <summary>
+        /// Calcule les soldes pour PLUSIEURS triplets en UNE passe (batch).
+        /// Évite le N+1 en récupérant toutes les données nécessaires par agrégations
+        /// groupées par (CommandeId, ChaineProductionId, Taille), puis en assemblant
+        /// les résultats en mémoire. Résultat IDENTIQUE à N appels à CalculerSoldeAsync.
+        /// </summary>
+        public async Task<Dictionary<Triplet, SoldeTriplet>> CalculerSoldesAsync(IEnumerable<Triplet> triplets)
+        {
+            var tripletList = triplets.ToList();
+            if (!tripletList.Any())
+                return new Dictionary<Triplet, SoldeTriplet>();
+
+            // Construire les prédicats pour filtrer par la liste de triplets
+            // On utilise une approche par jointure en mémoire car EF Core ne supporte pas
+            // facilement les "IN" multi-colonnes. On récupère toutes les données pertinentes
+            // pour les commandes concernées, puis on groupe en mémoire.
+
+            var commandeIds = tripletList.Select(t => t.CommandeId).Distinct().ToList();
+            var chaineIds = tripletList.Where(t => t.ChaineId.HasValue).Select(t => t.ChaineId!.Value).Distinct().ToList();
+            var tailles = tripletList.Select(t => t.Taille).Distinct().ToList();
+
+            // 1. Quantités exportées par triplet (batch)
+            var qParTriplet = await _context.LotExports
+                .Where(le => commandeIds.Contains(le.CommandeId)
+                          && (le.ChaineProductionId == null || chaineIds.Contains(le.ChaineProductionId.Value))
+                          && tailles.Contains(le.Taille))
+                .GroupBy(le => new Triplet(le.CommandeId, le.ChaineProductionId, le.Taille))
+                .Select(g => new { Triplet = g.Key, Q = g.Sum(le => (int?)le.QuantiteExportee) ?? 0 })
+                .ToDictionaryAsync(x => x.Triplet, x => x.Q);
+
+            // 2. Tous les contrôles des triplets concernés (batch)
+            var controls = await _context.ControlesQualite
+                .Where(c => c.OrdreFabrication != null
+                         && commandeIds.Contains(c.OrdreFabrication.CommandeId)
+                         && (c.ChaineProductionId == null || chaineIds.Contains(c.ChaineProductionId.Value))
+                         && tailles.Contains(c.Taille))
+                .Select(c => new ControlBatchRow(
+                    new Triplet(c.OrdreFabrication!.CommandeId, c.ChaineProductionId, c.Taille),
+                    c.Id,
+                    c.QuantiteControlee,
+                    c.QuantiteRetouche,
+                    c.QuantiteAcceptee,
+                    c.QuantiteRebut,
+                    c.TypeControle,
+                    c.ControleParentId,
+                    c.EnvoiRetoucheId))
+                .ToListAsync();
+
+            // 3. Tous les envois de retouche liés à ces contrôles (batch)
+            var controleIds = controls.Select(c => c.Id).ToHashSet();
+            var envois = await _context.EnvoisRetouche
+                .Where(e => controleIds.Contains(e.ControleQualiteId))
+                .Select(e => new EnvoiBatchRow(
+                    e.Id,
+                    e.ControleQualiteId,
+                    (int?)e.QuantiteRenvoyee ?? 0))
+                .ToListAsync();
+
+            // 4. Re-contrôles par envoi (batch)
+            var envoiIds = envois.Select(e => e.Id).ToHashSet();
+            var recontrolledParEnvoi = await _context.ControlesQualite
+                .Where(c => c.EnvoiRetoucheId != null && envoiIds.Contains(c.EnvoiRetoucheId!.Value))
+                .GroupBy(c => c.EnvoiRetoucheId!.Value)
+                .Select(g => new { EnvoiId = g.Key, Recontrole = g.Sum(c => (int?)c.QuantiteControlee) ?? 0 })
+                .ToDictionaryAsync(x => x.EnvoiId, x => x.Recontrole);
+
+            // Assembler en mémoire par triplet
+            var controlsByTriplet = controls.GroupBy(c => c.Triplet).ToDictionary(g => g.Key, g => g.ToList());
+            var envoisByControle = envois.GroupBy(e => e.ControleQualiteId).ToDictionary(g => g.Key, g => g.ToList());
+
+            var result = new Dictionary<Triplet, SoldeTriplet>();
+
+            foreach (var t in tripletList)
+            {
+                qParTriplet.TryGetValue(t, out var q);
+                var cList = controlsByTriplet.TryGetValue(t, out var c) ? c : new List<ControlBatchRow>();
+
+                // Tour 1 contrôlées
+                var tour1Controlee = cList
+                    .Where(c => c.Type == TypeControle.Interne && c.ControleParentId == null)
+                    .Sum(c => (int?)c.QuantiteControlee) ?? 0;
+
+                var r1Restant = Math.Max(0, q - tour1Controlee);
+
+                // RRestant : pour chaque contrôle, QuantiteRetouche - Σ envois
+                var rRestant = 0;
+                foreach (var ctrl in cList)
+                {
+                    var envoyes = 0;
+                    if (envoisByControle.TryGetValue(ctrl.Id, out var eList))
+                        envoyes = eList.Sum(e => e.QuantiteRenvoyee);
+                    rRestant += Math.Max(0, ctrl.QuantiteRetouche - envoyes);
+                }
+
+                // ERRestant : pour chaque envoi, QuantiteRenvoyee - Σ re-contrôles
+                var erRestant = 0;
+                foreach (var ctrl in cList)
+                {
+                    if (envoisByControle.TryGetValue(ctrl.Id, out var eList))
+                    {
+                        foreach (var ev in eList)
+                        {
+                            var recontrole = recontrolledParEnvoi.TryGetValue(ev.Id, out var r) ? r : 0;
+                            erRestant += Math.Max(0, ev.QuantiteRenvoyee - recontrole);
+                        }
+                    }
+                }
+
+                var enCours = r1Restant + rRestant + erRestant;
+
+                var sommeAAcceptee = cList.Sum(c => (int?)c.QuantiteAcceptee) ?? 0;
+                var sommeBRebut = cList.Sum(c => (int?)c.QuantiteRebut) ?? 0;
+                var quantiteControleeTotale = cList.Sum(c => (int?)c.QuantiteControlee) ?? 0;
+                var quantiteRetoucheTotale = cList.Sum(c => (int?)c.QuantiteRetouche) ?? 0;
+
+                result[t] = new SoldeTriplet
+                {
+                    QuantiteExportee = q,
+                    QuantiteControleeTotale = quantiteControleeTotale,
+                    QuantiteAccepteeTotale = sommeAAcceptee,
+                    QuantiteRetoucheTotale = quantiteRetoucheTotale,
+                    QuantiteRebutTotale = sommeBRebut,
+                    R1Restant = r1Restant,
+                    RRestant = rRestant,
+                    ERRestant = erRestant,
+                    EnCours = enCours,
+                    EstSolde = enCours == 0 && q > 0,
+                };
+            }
+
+            return result;
         }
 
         /// <summary>

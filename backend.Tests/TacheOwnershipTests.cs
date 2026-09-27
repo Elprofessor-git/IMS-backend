@@ -615,4 +615,145 @@ public class TacheOwnershipTests : IClassFixture<TacheApiFactory>
         var taches = await reponse.Content.ReadFromJsonAsync<List<JsonElement>>();
         return taches!.Select(t => t.GetProperty("titre").GetString()!).ToList();
     }
+
+    // ══════════════ LOT 18 §2 — Contournement PeutAssignerTaches via GroupeTache ══════════════
+    // Scénario : Alice (sans PeutAssignerTaches) applique un groupe contenant une ligne
+    // avec le nom de Carol. Le serveur doit REFUSER (403) l'assignation à Carol,
+    // au lieu de la laisser passer silencieusement via ResolveLigneResponsableAsync.
+
+    [Fact]
+    public async Task LOT18_S2_AppliquerGroupe_sans_PeutAssignerTaches_refuse_assignation_tiers()
+    {
+        // Arrange : Alice (opérateur standard, PAS de droit d'assignation)
+        var alice = await CreateOperateurAsync("lot18-alice", "A", "Alice");
+
+        // Carol (cible de l'assignation interdite)
+        var carol = await CreateOperateurAsync("lot18-carol", "C", "Carol");
+
+        // Commande pour l'application
+        var commandeId = await _factory.WithDbAsync(async db =>
+        {
+            var cmd = new CommandeClient
+            {
+                NumeroCommande = "CMD-LOT18-" + Guid.NewGuid().ToString("N")[..8],
+                TitreCommande = "Commande test LOT18",
+                Statut = StatutCommande.EnProduction,
+                DateCommande = DateTime.Now,
+                ClientId = 1
+            };
+            db.CommandesClients.Add(cmd);
+            await db.SaveChangesAsync();
+            return cmd.Id;
+        });
+
+        // Groupe avec une ligne portant le nom de Carol
+        var groupeId = await _factory.WithDbAsync(async db =>
+        {
+            var groupe = new GroupeTache
+            {
+                Nom = "Groupe LOT18 " + Guid.NewGuid().ToString("N")[..6],
+                EstActif = true,
+                DateCreation = DateTime.Now
+            };
+            db.GroupesTaches.Add(groupe);
+            await db.SaveChangesAsync();
+
+            var ligne = new GroupeTacheLigne
+            {
+                GroupeTacheId = groupe.Id,
+                Titre = "Tâche pour Carol",
+                Description = "Doit être assignée à Carol",
+                Priorite = PrioriteTache.Normale,
+                DureeEstimeeHeures = 2,
+                Ordre = 1,
+                ResponsableAssigne = "Carol" // Nom que ResolveLigneResponsableAsync va résoudre
+            };
+            db.GroupesTachesLignes.Add(ligne);
+            await db.SaveChangesAsync();
+            return groupe.Id;
+        });
+
+        // Act : Alice applique le groupe à la commande
+        var reponse = await alice.Client.PostAsJsonAsync($"/api/TacheProduction/Groupes/{groupeId}/Appliquer", new
+        {
+            CommandeId = commandeId
+        });
+
+        // Assert : 403 Forbidden — l'assignation à Carol est interdite sans PeutAssignerTaches
+        Assert.Equal(HttpStatusCode.Forbidden, reponse.StatusCode);
+
+        // Vérifier qu'AUCUNE tâche n'a été créée (transaction annulée)
+        var tachesCreees = await _factory.WithDbAsync(db =>
+            db.TachesProduction.CountAsync(t => t.GroupeTacheId == groupeId));
+        Assert.Equal(0, tachesCreees);
+    }
+
+    [Fact]
+    public async Task LOT18_S2_AppliquerGroupe_AVEC_PeutAssignerTaches_accepte_assignation_tiers()
+    {
+        // Arrange : Alice AVEC le droit d'assignation
+        var alice = await _factory.CreateUserAsync("lot18-alice-ok", "A", "Alice", role =>
+        {
+            role.PeutVoirTaches = true;
+            role.PeutGererTaches = true;
+            role.PeutAssignerTaches = true; // DROIT ACCORDÉ
+        });
+
+        var carol = await CreateOperateurAsync("lot18-carol-ok", "C", "Carol");
+
+        var commandeId = await _factory.WithDbAsync(async db =>
+        {
+            var cmd = new CommandeClient
+            {
+                NumeroCommande = "CMD-LOT18-OK-" + Guid.NewGuid().ToString("N")[..8],
+                TitreCommande = "Commande test LOT18 OK",
+                Statut = StatutCommande.EnProduction,
+                DateCommande = DateTime.Now,
+                ClientId = 1
+            };
+            db.CommandesClients.Add(cmd);
+            await db.SaveChangesAsync();
+            return cmd.Id;
+        });
+
+        var groupeId = await _factory.WithDbAsync(async db =>
+        {
+            var groupe = new GroupeTache
+            {
+                Nom = "Groupe LOT18 OK " + Guid.NewGuid().ToString("N")[..6],
+                EstActif = true,
+                DateCreation = DateTime.Now
+            };
+            db.GroupesTaches.Add(groupe);
+            await db.SaveChangesAsync();
+
+            var ligne = new GroupeTacheLigne
+            {
+                GroupeTacheId = groupe.Id,
+                Titre = "Tâche pour Carol (autorisée)",
+                Priorite = PrioriteTache.Normale,
+                DureeEstimeeHeures = 2,
+                Ordre = 1,
+                ResponsableAssigne = "Carol"
+            };
+            db.GroupesTachesLignes.Add(ligne);
+            await db.SaveChangesAsync();
+            return groupe.Id;
+        });
+
+        // Act
+        var reponse = await alice.Client.PostAsJsonAsync($"/api/TacheProduction/Groupes/{groupeId}/Appliquer", new
+        {
+            CommandeId = commandeId
+        });
+
+        // Assert : 200 OK — le droit permet l'assignation à Carol
+        Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
+
+        // Vérifier que la tâche est bien assignée à Carol
+        var tache = await _factory.WithDbAsync(db =>
+            db.TachesProduction.AsNoTracking().SingleAsync(t => t.GroupeTacheId == groupeId));
+
+        Assert.Equal(carol.Id, tache.AssignedToUserId);
+    }
 }
