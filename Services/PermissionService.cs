@@ -71,6 +71,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 "planning"     => (role.PeutVoirPlanning,       role.PeutGererPlanning),
                 "production"   => (role.PeutVoirProduction,      role.PeutGererProduction),
                 "qualite"      => (role.PeutVoirQualite,         role.PeutGererQualite),
+                "courriels"    => (role.PeutVoirCourriels,       role.PeutGererCourriels),
                 "parametres"   => (role.EstAdministrateur,      role.EstAdministrateur),
                 _              => (false,                       false),
             };
@@ -79,7 +80,7 @@ namespace Backend_Gestion_Magasin_API.Services
         [
             "articles", "stock", "mouvements", "achats", "importations",
             "commandes", "clients", "fournisseurs", "plateformes", "taches",
-            "utilisateurs", "roles", "chatbot", "dashboard", "rapports", "factures", "parametres", "machines", "coupe", "planning", "production", "qualite"
+            "utilisateurs", "roles", "chatbot", "dashboard", "rapports", "factures", "parametres", "machines", "coupe", "planning", "production", "qualite", "courriels"
         ];
     }
 }

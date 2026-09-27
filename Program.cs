@@ -7,6 +7,7 @@ using Backend_Gestion_Magasin_API.Helpers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Backend_Gestion_Magasin_API.Services.Gmail;
 
 // Fix Render (Bug 13) : désactiver le rechargement à chaud AVANT CreateBuilder.
 // C'est CreateBuilder qui charge appsettings.json en interne et crée le FileSystemWatcher
@@ -136,6 +137,27 @@ builder.Services.AddHttpClient<GroqService>(client =>
 });
 builder.Services.AddScoped<ToolExecutor>();
 builder.Services.AddScoped<ChatbotAgentService>();
+
+// Module Courriels (Gmail) — clients HTTP nommés + services.
+// « gmail » : appels Google (OAuth + API REST) — timeout large, la synchro récupère plusieurs messages.
+// « groq »  : assistant IA des emails, sur le même modèle que GroqService (partage l'API key).
+builder.Services.AddHttpClient("gmail", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("User-Agent", "IMS-Backend/2.0 (module courriels)");
+});
+builder.Services.AddHttpClient("groq", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+
+// Singleton : la clé AES est lue une seule fois au démarrage. L'injection est paresseuse,
+// le module reste donc utilisable même si la clé manque (erreur explicite au premier envoi).
+builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
+builder.Services.AddScoped<IGmailOAuthService, GmailOAuthService>();
+builder.Services.AddScoped<IGmailApiService, GmailApiService>();
+builder.Services.AddScoped<IGmailSyncService, GmailSyncService>();
+builder.Services.AddScoped<IGmailAiService, GmailAiService>();
 
 var app = builder.Build();
 

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Backend_Gestion_Magasin_API.Models;
+using Backend_Gestion_Magasin_API.Models.Gmail;
 using Microsoft.AspNetCore.Identity;
 
 namespace Backend_Gestion_Magasin_API.Data
@@ -69,6 +70,10 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<PlanDeCoupeLigne> PlanDeCoupeLignes { get; set; }
         public DbSet<GroupeTache> GroupesTaches { get; set; }
         public DbSet<GroupeTacheLigne> GroupesTachesLignes { get; set; }
+        public DbSet<GmailConnection> GmailConnections { get; set; }
+        public DbSet<GmailMessage> GmailMessages { get; set; }
+        public DbSet<EmailAiAnalysis> EmailAiAnalyses { get; set; }
+        public DbSet<EmailAiReply> EmailAiReponses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1196,6 +1201,81 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<DefautCode>()
                 .HasIndex(d => d.Code)
                 .IsUnique();
+
+            // ── Module Courriels (connexion Gmail + synchronisation IA) ──────────
+            // Un compte Google = une connexion par utilisateur IMS.
+            modelBuilder.Entity<GmailConnection>()
+                .HasOne(c => c.User)
+                .WithMany(u => u.GmailConnections)
+                .HasForeignKey(c => c.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<GmailConnection>()
+                .HasIndex(c => new { c.UserId, c.GoogleUserId })
+                .IsUnique();
+
+            // Recherche de la connexion active d'un utilisateur.
+            modelBuilder.Entity<GmailConnection>()
+                .HasIndex(c => new { c.UserId, c.IsActive });
+
+            // La suppression d'un compte IMS emporte ses emails, analyses et brouillons.
+            modelBuilder.Entity<GmailMessage>()
+                .HasOne(m => m.GmailConnection)
+                .WithMany(c => c.Messages)
+                .HasForeignKey(m => m.GmailConnectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Idempotence de la synchronisation : un GmailMessageId au plus une fois par connexion.
+            modelBuilder.Entity<GmailMessage>()
+                .HasIndex(m => new { m.GmailConnectionId, m.GmailMessageId })
+                .IsUnique();
+
+            // Tri de la liste par date de réception (ordre décroissant) sur une connexion.
+            modelBuilder.Entity<GmailMessage>()
+                .HasIndex(m => new { m.GmailConnectionId, m.ReceivedAt });
+
+            // Seule FK entre GmailMessage et TacheProduction : sans elle, EF verrouille les deux
+            // sens (CreatedTaskId + navigation) et signale une ambiguïté de chemin de FK.
+            modelBuilder.Entity<GmailMessage>()
+                .HasOne(m => m.TacheCreee)
+                .WithMany()
+                .HasForeignKey(m => m.CreatedTaskId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Une seule tâche issue d'un email donné.
+            modelBuilder.Entity<GmailMessage>()
+                .HasIndex(m => m.CreatedTaskId)
+                .IsUnique();
+
+            modelBuilder.Entity<EmailAiAnalysis>()
+                .HasOne(a => a.GmailMessage)
+                .WithMany(m => m.Analyses)
+                .HasForeignKey(a => a.GmailMessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Dernière analyse par date de création.
+            modelBuilder.Entity<EmailAiAnalysis>()
+                .HasIndex(a => new { a.GmailMessageId, a.CreatedAt });
+
+            // Assignant suggéré : le compte IMS peut être supprimé, l'analyse est conservée.
+            modelBuilder.Entity<EmailAiAnalysis>()
+                .HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(a => a.SuggestedAssigneeUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<EmailAiAnalysis>()
+                .Property(a => a.Confidence)
+                .HasPrecision(5, 4);
+
+            modelBuilder.Entity<EmailAiReply>()
+                .HasOne(r => r.GmailMessage)
+                .WithMany(m => m.Reponses)
+                .HasForeignKey(r => r.GmailMessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<EmailAiReply>()
+                .HasIndex(r => new { r.GmailMessageId, r.GeneratedAt });
         }
     }
 }

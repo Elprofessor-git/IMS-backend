@@ -71,6 +71,8 @@ namespace Backend_Gestion_Magasin_API.Data
                 PeutGererProduction = true,
                 PeutVoirQualite = true,
                 PeutGererQualite = true,
+                PeutVoirCourriels = true,
+                PeutGererCourriels = true,
                 DateCreation = DateTime.Now
             });
             await context.SaveChangesAsync();

@@ -6,3 +6,7 @@ obj/
 appsettings.Development.json
 query
 .claude/
+
+# Outillage local (index codegraph, audits Qodo) — non versionné
+.codegraph/
+.qodo/

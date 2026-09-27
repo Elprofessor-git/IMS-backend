@@ -83,6 +83,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PeutGererProduction = dto.PeutGererProduction,
                 PeutVoirQualite = dto.PeutVoirQualite,
                 PeutGererQualite = dto.PeutGererQualite,
+                PeutVoirCourriels = dto.PeutVoirCourriels,
+                PeutGererCourriels = dto.PeutGererCourriels,
                 DateCreation = DateTime.Now,
                 EstActif = true
             };
@@ -143,6 +145,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             role.PeutGererProduction = dto.PeutGererProduction;
             role.PeutVoirQualite = dto.PeutVoirQualite;
             role.PeutGererQualite = dto.PeutGererQualite;
+            role.PeutVoirCourriels = dto.PeutVoirCourriels;
+            role.PeutGererCourriels = dto.PeutGererCourriels;
 
             await _context.SaveChangesAsync();
             return NoContent();
@@ -208,6 +212,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             PeutGererProduction = r.PeutGererProduction,
             PeutVoirQualite = r.PeutVoirQualite,
             PeutGererQualite = r.PeutGererQualite,
+            PeutVoirCourriels = r.PeutVoirCourriels,
+            PeutGererCourriels = r.PeutGererCourriels,
         };
     }
 }

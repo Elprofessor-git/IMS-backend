@@ -52,6 +52,10 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutVoirQualite { get; set; } = false;
         public bool PeutGererQualite { get; set; } = false;
 
+        // Module Courriels (Gmail)
+        public bool PeutVoirCourriels { get; set; } = false;
+        public bool PeutGererCourriels { get; set; } = false;
+
         public bool EstActif { get; set; }
     }
 
@@ -108,6 +112,10 @@ namespace Backend_Gestion_Magasin_API.Dtos
         // Module Qualité (LOT 8)
         public bool PeutVoirQualite { get; set; }
         public bool PeutGererQualite { get; set; }
+
+        // Module Courriels (Gmail)
+        public bool PeutVoirCourriels { get; set; }
+        public bool PeutGererCourriels { get; set; }
     }
 
     public class UpdateStatutDto

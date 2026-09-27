@@ -68,6 +68,10 @@ namespace Backend_Gestion_Magasin_API.Models
         public bool PeutVoirQualite { get; set; } = false;
         public bool PeutGererQualite { get; set; } = false;
 
+        // Module Courriels (connexion Gmail, synchronisation, analyse IA, brouillons de réponse)
+        public bool PeutVoirCourriels { get; set; } = false;
+        public bool PeutGererCourriels { get; set; } = false;
+
         // Module Planning (grille chaînes × samedis)
                 
         public DateTime DateCreation { get; set; } = DateTime.Now;

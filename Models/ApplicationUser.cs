@@ -36,5 +36,8 @@ namespace Backend_Gestion_Magasin_API.Models
         
         // Relations
         public virtual Role? Role { get; set; }
+
+        // Module Courriels : comptes Gmail connectés par cet utilisateur IMS
+        public virtual ICollection<Models.Gmail.GmailConnection> GmailConnections { get; set; } = new List<Models.Gmail.GmailConnection>();
     }
 }
