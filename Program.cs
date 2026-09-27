@@ -135,6 +135,12 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<ITacheOwnershipService, TacheOwnershipService>();
 
+// Cloche de notifications — service partagé par les nouveaux émetteurs (tâches, email).
+// Mêmes table, même API et même faîte « cloche » que l'émetteur historique du planning
+// (PlanningController.NotifierAsync, volontairement laissé tel quel) : aucun second
+// système de notification n'est introduit.
+builder.Services.AddScoped<INotificationService, NotificationService>();
+
 // Chatbot IA — HttpClient typé pour GroqService, puis ToolExecutor et ChatbotAgentService
 builder.Services.AddHttpClient<GroqService>(client =>
 {

@@ -31,6 +31,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // (CurrentUserId, GetOwnedMessageAsync, state, AES-GCM) est inchangée.
         private readonly ITacheOwnershipService _tacheOwnership;
         private readonly IPermissionService _permissions;
+        // LOT 17 — la cloche : une tâche née d'un email prévient son responsable. Même table
+        // et mêmes endpoints que les notifications de planning.
+        private readonly INotificationService _notifications;
 
         public GmailController(
             ApplicationDbContext context,
@@ -41,6 +44,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ITokenEncryptionService tokens,
             ITacheOwnershipService tacheOwnership,
             IPermissionService permissions,
+            INotificationService notifications,
             ILogger<GmailController> logger)
         {
             _tokens = tokens;
@@ -51,6 +55,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _ai = ai;
             _tacheOwnership = tacheOwnership;
             _permissions = permissions;
+            _notifications = notifications;
             _logger = logger;
         }
 
@@ -427,6 +432,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 analysis.Statut = StatutAnalyse.Approved;
 
             await _context.SaveChangesAsync();
+
+            // Cloche : le responsable désigné est prévenu. Si l'utilisateur qui valide
+            // garde la tâche, AUCUNE notification — il vient de la créer, l'information
+            // ne lui apporterait rien (cf. LOT 17, pas d'auto-notification).
+            await _notifications.NotifierTacheDepuisEmailAsync(
+                tache, currentUserId, message.Id, HttpContext.RequestAborted);
 
             return Ok(new { taskId = tache.Id, titre = tache.Titre });
         }

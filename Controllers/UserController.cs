@@ -144,6 +144,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (user == null)
                 return NotFound();
 
+            // Les notifications ne portent PAS de FK vers AspNetUsers (une notification
+            // planning doit survivre à la disparition d'un destinataire, et l'API filtre
+            // toujours sur le demandeur) : on purge donc explicitement les lignes du
+            // compte supprimé, sinon la cloche laisse des orphelins à jamais.
+            await _context.Notifications
+                .Where(n => n.UtilisateurId == id)
+                .ExecuteDeleteAsync();
+
             var result = await _userManager.DeleteAsync(user);
             if (!result.Succeeded)
                 return BadRequest(result.Errors);

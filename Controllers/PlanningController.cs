@@ -264,6 +264,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Message = message,
                     DateNotification = DateTime.Now,
                     EstLivree = false,
+                    // Explicite (et identique à la valeur par défaut) : la cloche sait
+                    // désormais typer ses lignes, le planning reste de type Planning.
+                    Type = TypeNotification.Planning,
                     PlanningEntryId = planningEntryId
                 }).ToList();
 

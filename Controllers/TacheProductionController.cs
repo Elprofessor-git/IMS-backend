@@ -31,17 +31,20 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private readonly ICurrentUserService _currentUser;
         private readonly ITacheOwnershipService _ownership;
         private readonly IPermissionService _permissions;
+        private readonly INotificationService _notifications;
 
         public TacheProductionController(
             ApplicationDbContext context,
             ICurrentUserService currentUser,
             ITacheOwnershipService ownership,
-            IPermissionService permissions)
+            IPermissionService permissions,
+            INotificationService notifications)
         {
             _context = context;
             _currentUser = currentUser;
             _ownership = ownership;
             _permissions = permissions;
+            _notifications = notifications;
         }
 
         // ══════════════════════════ Lecture ══════════════════════════
@@ -250,8 +253,17 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (erreurAssignation != null)
                 return erreurAssignation;
 
+            // Responsable attendu AVANT enregistrement : une tâche neuve n'a pas d'ancien
+            // responsable, donc personne n'est « désassigné ».
             _context.TachesProduction.Add(tache);
             await _context.SaveChangesAsync();
+
+            // Le destinataire est déjà validé (FindActiveAssigneeAsync) et n'est jamais
+            // déduit du corps de la requête. Si le créateur s'attribue la tâche, aucune
+            // notification : il sait déjà qu'elle existe.
+            await _notifications.NotifierAssignationAsync(
+                tache, ancienResponsableUserId: null, auteurUserId: userId,
+                cancellationToken: HttpContext.RequestAborted);
 
             return CreatedAtAction(nameof(GetTacheProduction), new { id = tache.Id },
                 await MapReadAsync(tache));
@@ -345,6 +357,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var tache = await LoadWritableAsync(id);
             if (tache == null) return NotFound();
 
+            // Responsable AVANT l'opération : c'est lui, et lui seul, qui doit être prévenu
+            // d'une désassignation. Capturé avant l'écriture pour que la règle de
+            // notification repose sur l'état réel, pas sur le DTO.
+            var ancienResponsable = tache.AssignedToUserId;
+
             var erreur = await ApplyAssignationAsync(
                 tache, dto.AssignedToUserId, userId, desassignerSiVide: true);
             if (erreur != null) return erreur;
@@ -352,6 +369,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             tache.ModifiePar = _currentUser.UserName;
             tache.DateMiseAJour = DateTime.Now;
             await _context.SaveChangesAsync();
+
+            // Notifie le nouveau responsable (et l'ancien le cas échéant) — idempotent :
+            // réassigner deux fois le même responsable ne produit aucune notification.
+            await _notifications.NotifierAssignationAsync(
+                tache, ancienResponsable, userId, HttpContext.RequestAborted);
 
             return Ok(new
             {
@@ -880,6 +902,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 generees.Add(tache);
             }
             await _context.SaveChangesAsync();
+
+            // Même événement qu'une assignation manuelle : chaque tâche confiée à un tiers
+            // le prévient. Les tâches restées à l'applicateur ne génèrent rien (auto-notification).
+            foreach (var tache in generees)
+            {
+                await _notifications.NotifierAssignationAsync(
+                    tache, ancienResponsableUserId: null, auteurUserId: userId,
+                    cancellationToken: HttpContext.RequestAborted);
+            }
 
             return Ok(new
             {

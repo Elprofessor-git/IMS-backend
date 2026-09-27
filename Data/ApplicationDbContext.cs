@@ -938,6 +938,37 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasForeignKey(n => n.PlanningEntryId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // ── Notification : cibles Tâches et Courriels (LOT 17) ──────────────────
+            // Une seule table pour tous les émetteurs (planning, tâches, emails) : aucune
+            // table de types supplémentaire. L'origine est portée par une seule colonne
+            // texte, comme les autres énumérations du projet.
+            modelBuilder.Entity<Notification>()
+                .Property(n => n.Type)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .HasDefaultValue(TypeNotification.Planning);
+
+            // Notification -> TacheProduction (nullable, SetNull : une notification
+            // « tâche supprimée » reste lisible, seule sa cible disparaît)
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.TacheProduction)
+                .WithMany()
+                .HasForeignKey(n => n.TacheProductionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Notification -> GmailMessage (même règle : le texte de la notification ne
+            // dépend pas de la durée de vie de l'email)
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.GmailMessage)
+                .WithMany()
+                .HasForeignKey(n => n.GmailMessageId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Cloche : liste des notifications d'un utilisateur + compteur des non livrées.
+            // Sans cet index, chaque rafraîchissement (polling 25 s) parcourt toute la table.
+            modelBuilder.Entity<Notification>()
+                .HasIndex(n => new { n.UtilisateurId, n.EstLivree });
+
             // FournitureCommandeLigne (Commande -> Lignes ; Article -> Lignes)
             modelBuilder.Entity<FournitureCommandeLigne>()
                 .HasOne(f => f.Commande)
