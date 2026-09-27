@@ -1,9 +1,10 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Services;
 using Backend_Gestion_Magasin_API.Dtos.Qualite;
+using Backend_Gestion_Magasin_API.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -144,6 +145,218 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return Ok(cards
                 .OrderByDescending(c => c.EnCours)
                 .ThenBy(c => c.NumeroCommande));
+        }
+
+        // ═══════════ Dashboard Qualité (LOT 14) ═══════════
+        // Point d'entrée du module : part de TOUTES les commandes actives
+        // (Annulee et Terminee exclues) au lieu des seuls triplets ayant un export.
+        // Une commande sans export reste visible via une ligne de synthèse
+        // (EstCommandeSansExport = true) afin qu'une commande neuve soit
+        // exploitable en moins de 3 clics. Ne modifie aucun calcul métier LOT 8 :
+        // les soldes par triplet sont lus via QualiteService.CalculerSoldeAsync.
+        [HttpGet("Dashboard")]
+        [RequireModulePermission("qualite", requireWrite: false)]
+        public async Task<ActionResult<QualiteDashboardDto>> Dashboard(
+            [FromQuery] string? recherche,
+            [FromQuery] string? statut)
+        {
+            var commandesActives = await _context.CommandesClients
+                .Where(c => c.Statut != StatutCommande.Annulee && c.Statut != StatutCommande.Terminee)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.NumeroCommande,
+                    c.TitreCommande,
+                    ClientNom = c.Client != null ? c.Client.Nom : null,
+                    c.Statut,
+                    c.DateCommande,
+                })
+                .ToListAsync();
+
+            var idsCommandes = commandesActives.Select(c => c.Id).ToList();
+
+            // Triplets (commande, chaîne, taille) réellement exportés.
+            var triplets = await _context.LotExports
+                .Where(le => idsCommandes.Contains(le.CommandeId))
+                .GroupBy(le => new { le.CommandeId, le.ChaineProductionId, le.Taille })
+                .Select(g => new
+                {
+                    g.Key.CommandeId,
+                    g.Key.ChaineProductionId,
+                    g.Key.Taille,
+                    QuantiteExportee = g.Sum(x => x.QuantiteExportee),
+                })
+                .ToListAsync();
+
+            var chaines = await _context.ChainesProduction
+                .Select(cp => new { cp.Id, cp.Nom, cp.EstSousTraitant })
+                .ToDictionaryAsync(cp => cp.Id);
+
+            // Premier OF de chaque commande (pour proposer un contrôle sans avoir à le chercher).
+            var ofParCommande = await _context.OrdresFabrication
+                .Where(of => idsCommandes.Contains(of.CommandeId))
+                .GroupBy(of => of.CommandeId)
+                .Select(g => new { CommandeId = g.Key, Id = g.Min(x => x.Id), NumeroOF = g.Min(x => x.NumeroOF) })
+                .ToDictionaryAsync(x => x.CommandeId);
+
+            var lignes = new List<QualiteDashboardLigneDto>();
+
+            foreach (var t in triplets)
+            {
+                var cmd = commandesActives.First(c => c.Id == t.CommandeId);
+                var solde = await _qualite.CalculerSoldeAsync(
+                    new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille));
+
+                bool estSousTraitant = false;
+                string? chaineNom = null;
+                if (t.ChaineProductionId.HasValue
+                    && chaines.TryGetValue(t.ChaineProductionId.Value, out var cp))
+                {
+                    estSousTraitant = cp.EstSousTraitant;
+                    chaineNom = cp.Nom;
+                }
+
+                var controlesIds = await _context.ControlesQualite
+                    .Where(c => c.OrdreFabrication != null
+                             && c.OrdreFabrication.CommandeId == t.CommandeId
+                             && c.ChaineProductionId == t.ChaineProductionId
+                             && c.Taille == t.Taille)
+                    .Select(c => c.Id)
+                    .ToListAsync();
+
+                var nbEnvois = await _context.EnvoisRetouche
+                    .Where(e => controlesIds.Contains(e.ControleQualiteId))
+                    .CountAsync();
+
+                var ligne = new QualiteDashboardLigneDto
+                {
+                    CommandeId = t.CommandeId,
+                    NumeroCommande = cmd.NumeroCommande,
+                    TitreCommande = cmd.TitreCommande,
+                    ClientNom = cmd.ClientNom,
+                    StatutCommande = cmd.Statut.ToString(),
+                    DateCommande = cmd.DateCommande,
+                    OrdreFabricationId = ofParCommande.TryGetValue(t.CommandeId, out var of) ? of.Id : (int?)null,
+                    NumeroOF = ofParCommande.TryGetValue(t.CommandeId, out var of2) ? of2.NumeroOF : null,
+                    ChaineProductionId = t.ChaineProductionId,
+                    ChaineNom = chaineNom,
+                    Taille = t.Taille,
+                    EstCommandeSansExport = false,
+                    QuantiteExportee = t.QuantiteExportee,
+                    QuantiteControleeTotale = solde.QuantiteControleeTotale,
+                    QuantiteAccepteeTotale = solde.QuantiteAccepteeTotale,
+                    QuantiteRetoucheTotale = solde.QuantiteRetoucheTotale,
+                    QuantiteRebutTotale = solde.QuantiteRebutTotale,
+                    R1Restant = solde.R1Restant,
+                    RRestant = solde.RRestant,
+                    ERRestant = solde.ERRestant,
+                    EnCours = solde.EnCours,
+                    EstSolde = solde.EstSolde,
+                    NombreControles = controlesIds.Count,
+                    NombreEnvois = nbEnvois,
+                };
+
+                // Statut : mêmes règles dérivées que le board, extended à "pas d'export".
+                if (ligne.QuantiteExportee == 0)
+                {
+                    ligne.Statut = "termine";
+                    ligne.StatutLabel = "Terminé";
+                }
+                else if (ligne.EnCours == 0)
+                {
+                    ligne.Statut = "termine";
+                    ligne.StatutLabel = "Terminé";
+                }
+                else if (ligne.ERRestant > 0)
+                {
+                    ligne.Statut = "en-retouche-sous-traitant";
+                    ligne.StatutLabel = "En retouche chez le sous-traitant";
+                }
+                else if (ligne.RRestant > 0)
+                {
+                    ligne.Statut = estSousTraitant ? "retouches-a-renvoyer" : "retouche-sur-place";
+                    ligne.StatutLabel = estSousTraitant ? "Retouches à renvoyer au sous-traitant" : "Retouche sur place";
+                }
+                else
+                {
+                    ligne.Statut = "en-attente-premier-controle";
+                    ligne.StatutLabel = "En attente de premier contrôle";
+                }
+
+                if (statut != null && !string.Equals(statut, ligne.Statut, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                lignes.Add(ligne);
+            }
+
+            // ── Synthèse des commandes actives qui n'ont aucun export (commande neuve) ──
+            var commandesAvecTriplet = triplets.Select(t => t.CommandeId).ToHashSet();
+            foreach (var cmd in commandesActives.Where(c => !commandesAvecTriplet.Contains(c.Id)))
+            {
+                var ligne = new QualiteDashboardLigneDto
+                {
+                    CommandeId = cmd.Id,
+                    NumeroCommande = cmd.NumeroCommande,
+                    TitreCommande = cmd.TitreCommande,
+                    ClientNom = cmd.ClientNom,
+                    StatutCommande = cmd.Statut.ToString(),
+                    DateCommande = cmd.DateCommande,
+                    OrdreFabricationId = ofParCommande.TryGetValue(cmd.Id, out var of3) ? of3.Id : (int?)null,
+                    NumeroOF = ofParCommande.TryGetValue(cmd.Id, out var of4) ? of4.NumeroOF : null,
+                    ChaineProductionId = null,
+                    ChaineNom = null,
+                    Taille = string.Empty,
+                    EstCommandeSansExport = true,
+                    QuantiteExportee = 0,
+                    NombreControles = 0,
+                    NombreEnvois = 0,
+                    EstSolde = false,
+                    EnCours = 0,
+                    Statut = "aucun-export",
+                    StatutLabel = ofParCommande.ContainsKey(cmd.Id)
+                        ? "Aucun export — OF à alimenter"
+                        : "Aucun export — OF à créer",
+                };
+
+                if (statut != null && !string.Equals(statut, ligne.Statut, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                lignes.Add(ligne);
+            }
+
+            if (!string.IsNullOrWhiteSpace(recherche))
+            {
+                var q = recherche.Trim().ToLowerInvariant();
+                lignes = lignes.Where(l =>
+                    l.NumeroCommande.ToLowerInvariant().Contains(q)
+                    || (l.TitreCommande ?? "").ToLowerInvariant().Contains(q)
+                    || (l.ClientNom ?? "").ToLowerInvariant().Contains(q)
+                    || (l.ChaineNom ?? "").ToLowerInvariant().Contains(q)
+                    || l.Taille.ToLowerInvariant().Contains(q)
+                ).ToList();
+            }
+
+            var dto = new QualiteDashboardDto
+            {
+                Date = DateTime.Now,
+                NombreCommandesActives = commandesActives.Count,
+                NombreLignes = lignes.Count,
+                QuantiteExporteeTotale = lignes.Sum(l => l.QuantiteExportee),
+                QuantiteControleeTotale = lignes.Sum(l => l.QuantiteControleeTotale),
+                QuantiteAccepteeTotale = lignes.Sum(l => l.QuantiteAccepteeTotale),
+                QuantiteRetoucheTotale = lignes.Sum(l => l.QuantiteRetoucheTotale),
+                QuantiteRebutTotale = lignes.Sum(l => l.QuantiteRebutTotale),
+                CommandesAvecControle = lignes.Where(l => l.NombreControles > 0).Select(l => l.CommandeId).Distinct().Count(),
+                CommandesSansControle = lignes.Where(l => l.NombreControles == 0).Select(l => l.CommandeId).Distinct().Count(),
+                CommandesSoldees = lignes.Where(l => l.EstSolde).Select(l => l.CommandeId).Distinct().Count(),
+                Lignes = lignes
+                    .OrderByDescending(l => l.EnCours)
+                    .ThenBy(l => l.DateCommande)
+                    .ThenBy(l => l.NumeroCommande)
+                    .ToList(),
+            };
+
+            return Ok(dto);
         }
 
         private static (string, string) DeriverStatut(BoardCard c)

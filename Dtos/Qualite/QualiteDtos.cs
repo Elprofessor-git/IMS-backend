@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace Backend_Gestion_Magasin_API.Dtos.Qualite
 {
@@ -173,5 +173,59 @@ namespace Backend_Gestion_Magasin_API.Dtos.Qualite
         public bool EstSolde { get; set; }
         public List<ControleQualiteDto> Controles { get; set; } = new();
         public List<EnvoiRetoucheDto> Envois { get; set; } = new();
+    }
+
+    // ── Dashboard Qualité (LOT 14) ──
+    // Une ligne par triplet (commande, chaîne, taille) ayant un export,
+    // PLUS une ligne de synthèse par commande active sans aucun export
+    // (commande neuve : aucun contrôle encore possible mais visible et actionnable).
+    public class QualiteDashboardLigneDto
+    {
+        public int CommandeId { get; set; }
+        public string NumeroCommande { get; set; } = string.Empty;
+        public string? TitreCommande { get; set; }
+        public string? ClientNom { get; set; }
+        public string StatutCommande { get; set; } = string.Empty;
+        public DateTime DateCommande { get; set; }
+
+        public int? OrdreFabricationId { get; set; }
+        public string? NumeroOF { get; set; }
+        public int? ChaineProductionId { get; set; }
+        public string? ChaineNom { get; set; }
+        public string? Taille { get; set; }
+
+        /// <summary>Fausses lignes de synthèse pour une commande sans export.</summary>
+        public bool EstCommandeSansExport { get; set; }
+
+        public int QuantiteExportee { get; set; }
+        public int QuantiteControleeTotale { get; set; }
+        public int QuantiteAccepteeTotale { get; set; }
+        public int QuantiteRetoucheTotale { get; set; }
+        public int QuantiteRebutTotale { get; set; }
+        public int R1Restant { get; set; }
+        public int RRestant { get; set; }
+        public int ERRestant { get; set; }
+        public int EnCours { get; set; }
+        public bool EstSolde { get; set; }
+        public string Statut { get; set; } = string.Empty;
+        public string StatutLabel { get; set; } = string.Empty;
+        public int NombreControles { get; set; }
+        public int NombreEnvois { get; set; }
+    }
+
+    public class QualiteDashboardDto
+    {
+        public DateTime Date { get; set; }
+        public int NombreCommandesActives { get; set; }
+        public int NombreLignes { get; set; }
+        public int QuantiteExporteeTotale { get; set; }
+        public int QuantiteControleeTotale { get; set; }
+        public int QuantiteAccepteeTotale { get; set; }
+        public int QuantiteRetoucheTotale { get; set; }
+        public int QuantiteRebutTotale { get; set; }
+        public int CommandesAvecControle { get; set; }
+        public int CommandesSansControle { get; set; }
+        public int CommandesSoldees { get; set; }
+        public List<QualiteDashboardLigneDto> Lignes { get; set; } = new();
     }
 }
