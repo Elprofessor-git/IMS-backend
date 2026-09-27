@@ -30,7 +30,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Listage par commande ═══════════
 
         [HttpGet("CommandeClient/{commandeId}")]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("commandes,production", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<OrdreFabricationDto>>> GetOrdresDeCommande(int commandeId)
         {
             if (!await _context.CommandesClients.AnyAsync(c => c.Id == commandeId))
@@ -59,7 +59,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Détail ═══════════
 
         [HttpGet("{id}")]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("commandes,production", requireWrite: false)]
         public async Task<ActionResult<OrdreFabricationDetailDto>> GetOrdreFabrication(int id)
         {
             var dto = await _context.OrdresFabrication
@@ -137,7 +137,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Création ═══════════
 
         [HttpPost]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("commandes,production", requireWrite: true)]
         public async Task<ActionResult<OrdreFabricationWriteResponse>> CreateOrdreFabrication([FromBody] CreateOrdreFabricationDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.NumeroOF))
@@ -176,7 +176,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Mise à jour ═══════════
 
         [HttpPut("{id}")]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("commandes,production", requireWrite: true)]
         public async Task<ActionResult<OrdreFabricationWriteResponse>> UpdateOrdreFabrication(int id, [FromBody] UpdateOrdreFabricationDto dto)
         {
             var ordre = await _context.OrdresFabrication.FindAsync(id);
@@ -217,7 +217,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Suppression ═══════════
 
         [HttpDelete("{id}")]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("commandes,production", requireWrite: true)]
         public async Task<ActionResult> DeleteOrdreFabrication(int id)
         {
             var ordre = await _context.OrdresFabrication.FindAsync(id);
@@ -239,7 +239,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Répartition par taille (remplacement, pattern SetTailles) ═══════════
 
         [HttpPost("{id}/Tailles")]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("commandes,production", requireWrite: true)]
         public async Task<ActionResult> SetOrdreFabricationTailles(int id, [FromBody] List<SaisieOrdreFabricationTailleDto> dtos)
         {
             var ordre = await _context.OrdresFabrication.FindAsync(id);
@@ -279,7 +279,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Étiquettes ═══════════
 
         [HttpPost("{id}/Etiquettes")]
-        [RequireModulePermission("commandes", requireWrite: true)]
+        [RequireModulePermission("commandes,production", requireWrite: true)]
         public async Task<ActionResult> CreateEtiquette(int id, [FromBody] CreateOrdreFabricationEtiquetteDto dto)
         {
             var ordre = await _context.OrdresFabrication.FindAsync(id);
@@ -316,7 +316,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // ═══════════ Matelas rattachés (lecture via LotCoupes) ═══════════
 
         [HttpGet("{id}/Matelas")]
-        [RequireModulePermission("commandes", requireWrite: false)]
+        [RequireModulePermission("commandes,production", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<OrdreFabricationMatelasDto>>> GetMatelasDeOrdreFabrication(int id)
         {
             if (!await _context.OrdresFabrication.AnyAsync(of => of.Id == id))

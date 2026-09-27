@@ -193,11 +193,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToDictionaryAsync(cp => cp.Id);
 
             // Premier OF de chaque commande (pour proposer un contrôle sans avoir à le chercher).
-            var ofParCommande = await _context.OrdresFabrication
-                .Where(of => idsCommandes.Contains(of.CommandeId))
+            // On sélectionne l'entité entière triée par Id : deux Min() indépendants
+            // (Min(Id) / Min(NumeroOF)) pourraient provenir de deux OF différents.
+            var ofParCommande = (await _context.OrdresFabrication
+                    .Where(of => idsCommandes.Contains(of.CommandeId))
+                    .OrderBy(of => of.Id)
+                    .ToListAsync())
                 .GroupBy(of => of.CommandeId)
-                .Select(g => new { CommandeId = g.Key, Id = g.Min(x => x.Id), NumeroOF = g.Min(x => x.NumeroOF) })
-                .ToDictionaryAsync(x => x.CommandeId);
+                .ToDictionary(g => g.Key, g => g.First());
 
             var lignes = new List<QualiteDashboardLigneDto>();
 
@@ -336,6 +339,19 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 ).ToList();
             }
 
+            // Agrégation par commande : une commande est « avec contrôle » si AU MOINS
+            // une de ses lignes en a, et « sans contrôle » UNIQUEMENT si aucune n'en a.
+            // Sans ce regroupement, une commande à plusieurs triplets (dont un contrôlé et
+            // un non contrôlé) était comptée dans les deux KPI à la fois.
+            var parCommande = lignes
+                .GroupBy(l => l.CommandeId)
+                .Select(g => new
+                {
+                    AvecControle = g.Any(l => l.NombreControles > 0),
+                    Soldee = g.All(l => l.EstSolde)
+                })
+                .ToList();
+
             var dto = new QualiteDashboardDto
             {
                 Date = DateTime.Now,
@@ -346,9 +362,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 QuantiteAccepteeTotale = lignes.Sum(l => l.QuantiteAccepteeTotale),
                 QuantiteRetoucheTotale = lignes.Sum(l => l.QuantiteRetoucheTotale),
                 QuantiteRebutTotale = lignes.Sum(l => l.QuantiteRebutTotale),
-                CommandesAvecControle = lignes.Where(l => l.NombreControles > 0).Select(l => l.CommandeId).Distinct().Count(),
-                CommandesSansControle = lignes.Where(l => l.NombreControles == 0).Select(l => l.CommandeId).Distinct().Count(),
-                CommandesSoldees = lignes.Where(l => l.EstSolde).Select(l => l.CommandeId).Distinct().Count(),
+                CommandesAvecControle = parCommande.Count(c => c.AvecControle),
+                CommandesSansControle = parCommande.Count(c => !c.AvecControle),
+                CommandesSoldees = parCommande.Count(c => c.Soldee),
                 Lignes = lignes
                     .OrderByDescending(l => l.EnCours)
                     .ThenBy(l => l.DateCommande)
