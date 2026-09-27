@@ -39,6 +39,11 @@ namespace Backend_Gestion_Magasin_API.Data
                 PeutGererStock = true,
                 PeutGererCommandes = true,
                 PeutGererTaches = true,
+                // Droits de RESSOURCE sur les tâches (LOT 16) : l'administrateur les
+                // possède de fait (EstAdministrateur), on les pose explicitement pour
+                // que l'UI d'édition des rôles reste cohérente.
+                PeutVoirToutesTaches = true,
+                PeutAssignerTaches = true,
                 PeutGererClients = true,
                 PeutGererFournisseurs = true,
                 PeutGererAchats = true,

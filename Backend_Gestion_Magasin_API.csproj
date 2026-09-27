@@ -33,5 +33,17 @@
     </Content>
   </ItemGroup>
 
+  <!--
+    Le projet de tests est imbriqué dans ce dépôt, donc dans le périmètre des globs
+    par défaut de ce projet. On l'exclut explicitement : sans cela, les .cs du projet
+    de tests (et les AssemblyAttributes générés dans son obj/) seraient compilés dans
+    l'API, provoquant des erreurs d'attributs dupliqués.
+  -->
+  <ItemGroup>
+    <Compile Remove="backend.Tests/**" />
+    <EmbeddedResource Remove="backend.Tests/**" />
+    <None Remove="backend.Tests/**" />
+  </ItemGroup>
+
 </Project>
 

@@ -242,6 +242,30 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<TacheProduction>()
                 .HasIndex(tp => tp.GroupeTacheId);
 
+            // TacheProduction -> ApplicationUser (créateur / responsable) — LOT 16.
+            // Deux FK vers le même type : les navigations opposées sont nommées pour lever
+            // l'ambiguïté. OnDelete SetNull : la suppression d'un compte IMS ne doit pas
+            // supprimer l'historique de production, elle le rend simplement orphelin
+            // (visible uniquement par les rôles disposant de PeutVoirToutesTaches).
+            modelBuilder.Entity<TacheProduction>()
+                .HasOne(tp => tp.CreatedBy)
+                .WithMany()
+                .HasForeignKey(tp => tp.CreatedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<TacheProduction>()
+                .HasOne(tp => tp.AssignedTo)
+                .WithMany()
+                .HasForeignKey(tp => tp.AssignedToUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Index des requêtes d'ownership : « Mes tâches » filtre sur ces colonnes.
+            modelBuilder.Entity<TacheProduction>()
+                .HasIndex(tp => tp.AssignedToUserId);
+
+            modelBuilder.Entity<TacheProduction>()
+                .HasIndex(tp => tp.CreatedByUserId);
+
             // GroupeTache -> GroupeTacheLigne (One-to-Many, Cascade : le gabarit appartient au groupe).
             modelBuilder.Entity<GroupeTacheLigne>()
                 .HasOne(l => l.GroupeTache)

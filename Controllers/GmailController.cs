@@ -6,6 +6,7 @@ using Backend_Gestion_Magasin_API.Dtos.Gmail;
 using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Models.Gmail;
+using Backend_Gestion_Magasin_API.Services;
 using Backend_Gestion_Magasin_API.Services.Gmail;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,6 +26,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private readonly IGmailAiService _ai;
         private readonly ITokenEncryptionService _tokens;
         private readonly ILogger<GmailController> _logger;
+        // LOT 16 — intégration Email → Tâches : attribution de propriété de la tâche créée.
+        // Ce sont les SEULES dépendances ajoutées à ce contrôleur ; l'isolation Gmail
+        // (CurrentUserId, GetOwnedMessageAsync, state, AES-GCM) est inchangée.
+        private readonly ITacheOwnershipService _tacheOwnership;
+        private readonly IPermissionService _permissions;
 
         public GmailController(
             ApplicationDbContext context,
@@ -33,6 +39,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             IGmailSyncService sync,
             IGmailAiService ai,
             ITokenEncryptionService tokens,
+            ITacheOwnershipService tacheOwnership,
+            IPermissionService permissions,
             ILogger<GmailController> logger)
         {
             _tokens = tokens;
@@ -41,6 +49,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _gmailApi = gmailApi;
             _sync = sync;
             _ai = ai;
+            _tacheOwnership = tacheOwnership;
+            _permissions = permissions;
             _logger = logger;
         }
 
@@ -366,16 +376,28 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .OrderByDescending(a => a.CreatedAt)
                 .FirstOrDefaultAsync();
 
-            string? responsable = null;
-            if (!string.IsNullOrWhiteSpace(dto.AssigneUserId))
-            {
-                var assignee = await _context.Users
-                    .Where(u => u.Id == dto.AssigneUserId)
-                    .Select(u => new { u.Nom, u.Prenom })
-                    .FirstOrDefaultAsync();
+            // ── LOT 16 : la tâche appartient à l'utilisateur IMS qui valide.
+            // CreatedByUserId est TOUJOURS l'utilisateur courant : le corps de la requête
+            // ne peut pas le définir. L'assignation à un tiers reste possible mais
+            // contrôlée (droit PeutAssignerTaches + destinataire existant et actif).
+            var currentUserId = CurrentUserId;
+            ApplicationUser? assignee;
 
-                if (assignee != null)
-                    responsable = string.IsNullOrWhiteSpace(assignee.Prenom) ? assignee.Nom : $"{assignee.Prenom} {assignee.Nom}";
+            if (string.IsNullOrWhiteSpace(dto.AssigneUserId) || dto.AssigneUserId == currentUserId)
+            {
+                assignee = await _tacheOwnership.FindActiveAssigneeAsync(currentUserId);
+            }
+            else
+            {
+                if (!await _permissions.CanAssignerTachesAsync(currentUserId))
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        message = "Vous n'êtes pas autorisé à assigner une tâche à un autre utilisateur."
+                    });
+
+                assignee = await _tacheOwnership.FindActiveAssigneeAsync(dto.AssigneUserId);
+                if (assignee == null)
+                    return BadRequest(new { message = "Utilisateur destinataire introuvable ou inactif." });
             }
 
             var tache = new TacheProduction
@@ -384,11 +406,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Description = AppendSource(dto.Description, message.From, message.Subject, message.ReceivedAt),
                 Priorite = ParsePriority(dto.Priorite),
                 DateFinPrevue = dto.DateEcheance,
-                ResponsableAssigne = responsable,
                 Statut = StatutTache.NonCommence,
                 DateCreation = DateTime.Now,
-                CreePar = CurrentUserName
+                CreePar = CurrentUserName,
+
+                // Propriété décidée côté serveur — jamais depuis le DTO.
+                CreatedByUserId = currentUserId
             };
+
+            // Champ legacy aligné sur la FK (source de vérité).
+            _tacheOwnership.SetAssignee(tache, assignee);
 
             _context.TachesProduction.Add(tache);
             await _context.SaveChangesAsync();

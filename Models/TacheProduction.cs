@@ -37,10 +37,26 @@ namespace Backend_Gestion_Magasin_API.Models
         
         [StringLength(100)]
         public string? EquipeAssignee { get; set; }
-        
+
+        // ── Propriété utilisateur (source de vérité de l'ownership) ──────────────
+        // AssignedToUserId : le responsable de l'exécution. CreatedByUserId : l'utilisateur
+        // IMS qui a créé/validé la tâche. Les deux sont des FK vers AspNetUsers.
+        // NULL n'est possible que pour les tâches historiques antérieures à cette colonne :
+        // voir la migration « AddTacheOwnershipUsers » et la stratégie de backfill documentée.
+        // Toute tâche créée par l'API est enregistrée avec CurrentUserId, jamais avec
+        // une valeur fournie par le client.
+        [StringLength(450)]
+        public string? CreatedByUserId { get; set; }
+
+        [StringLength(450)]
+        public string? AssignedToUserId { get; set; }
+
+        // Champs legacy conservés pour la compatibilité d'affichage (et l'export) :
+        // ils ne sont plus la source de vérité. Toute écriture de la FK utilisateur
+        // réécrit le libellé legacy correspondant (voir TacheOwnershipService).
         [StringLength(100)]
         public string? ResponsableAssigne { get; set; }
-        
+
         public StatutTache Statut { get; set; } = StatutTache.NonCommence;
         
         public PrioriteTache Priorite { get; set; } = PrioriteTache.Normale;
@@ -84,6 +100,12 @@ namespace Backend_Gestion_Magasin_API.Models
         public virtual CommandeClient? CommandeClient { get; set; }
         public virtual GroupeTache? GroupeTache { get; set; }
         public virtual ICollection<MouvementStock> MouvementsStock { get; set; } = new List<MouvementStock>();
+
+        // Relations utilisateur (ownership). Configurées côté TacheProduction dans
+        // ApplicationDbContext (deux FK vers le même type : navigations opposées nommées
+        // pour éviter toute ambiguïté).
+        public virtual ApplicationUser? CreatedBy { get; set; }
+        public virtual ApplicationUser? AssignedTo { get; set; }
     }
 }
 

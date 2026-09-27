@@ -11,6 +11,8 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutGererStock { get; set; }
         public bool PeutGererCommandes { get; set; }
         public bool PeutGererTaches { get; set; }
+        public bool PeutVoirToutesTaches { get; set; }
+        public bool PeutAssignerTaches { get; set; }
         public bool PeutGererClients { get; set; }
         public bool PeutGererFournisseurs { get; set; }
         public bool PeutGererAchats { get; set; }
@@ -72,6 +74,8 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutGererStock { get; set; }
         public bool PeutGererCommandes { get; set; }
         public bool PeutGererTaches { get; set; }
+        public bool PeutVoirToutesTaches { get; set; }
+        public bool PeutAssignerTaches { get; set; }
         public bool PeutGererClients { get; set; }
         public bool PeutGererFournisseurs { get; set; }
         public bool PeutGererAchats { get; set; }

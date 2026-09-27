@@ -51,6 +51,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PeutGererStock = dto.PeutGererStock,
                 PeutGererCommandes = dto.PeutGererCommandes,
                 PeutGererTaches = dto.PeutGererTaches,
+                PeutVoirToutesTaches = dto.PeutVoirToutesTaches,
+                PeutAssignerTaches = dto.PeutAssignerTaches,
                 PeutGererClients = dto.PeutGererClients,
                 PeutGererFournisseurs = dto.PeutGererFournisseurs,
                 PeutGererAchats = dto.PeutGererAchats,
@@ -113,6 +115,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             role.PeutGererStock = dto.PeutGererStock;
             role.PeutGererCommandes = dto.PeutGererCommandes;
             role.PeutGererTaches = dto.PeutGererTaches;
+            role.PeutVoirToutesTaches = dto.PeutVoirToutesTaches;
+            role.PeutAssignerTaches = dto.PeutAssignerTaches;
             role.PeutGererClients = dto.PeutGererClients;
             role.PeutGererFournisseurs = dto.PeutGererFournisseurs;
             role.PeutGererAchats = dto.PeutGererAchats;
@@ -180,6 +184,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             PeutGererStock = r.PeutGererStock,
             PeutGererCommandes = r.PeutGererCommandes,
             PeutGererTaches = r.PeutGererTaches,
+            PeutVoirToutesTaches = r.PeutVoirToutesTaches,
+            PeutAssignerTaches = r.PeutAssignerTaches,
             PeutGererClients = r.PeutGererClients,
             PeutGererFournisseurs = r.PeutGererFournisseurs,
             PeutGererAchats = r.PeutGererAchats,

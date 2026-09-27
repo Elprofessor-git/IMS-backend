@@ -124,10 +124,16 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<StockService>();
 builder.Services.AddScoped<CommandeService>();
 builder.Services.AddScoped<ImportationService>();
-builder.Services.AddScoped<TacheService>();
-        builder.Services.AddScoped<FournisseurClientService>();
-        builder.Services.AddScoped<IArticleService, ArticleService>();
-        builder.Services.AddScoped<QualiteService>();
+builder.Services.AddScoped<FournisseurClientService>();
+builder.Services.AddScoped<IArticleService, ArticleService>();
+builder.Services.AddScoped<QualiteService>();
+
+// Identité de l'utilisateur courant (claims JWT) et règles d'ownership du module Tâches.
+// ICurrentUserService est la seule source d'identité serveur : le frontend ne fournit
+// jamais l'Id du propriétaire d'une ressource.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<ITacheOwnershipService, TacheOwnershipService>();
 
 // Chatbot IA — HttpClient typé pour GroqService, puis ToolExecutor et ChatbotAgentService
 builder.Services.AddHttpClient<GroqService>(client =>
@@ -234,3 +240,8 @@ app.MapGet("/health", () => Results.Ok(new {
 })).AllowAnonymous();
 
 app.Run();
+
+// Point d'entrée exposé pour les tests d'intégration (WebApplicationFactory<Program>).
+// Les instructions top-level génèrent une classe Program interne : sans cette
+// déclaration partielle, la fabrique de tests ne peut pas démarrer l'hôte.
+public partial class Program { }
