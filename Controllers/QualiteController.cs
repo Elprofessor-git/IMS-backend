@@ -671,24 +671,4 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
     }
-
-    // DTOs locaux pour le journal
-    public class QualiteJournalLigneDto
-    {
-        public int Id { get; set; }
-        public string Type { get; set; } = string.Empty; // "controle" | "envoi"
-        public string? NumeroCommande { get; set; }
-        public string Taille { get; set; } = string.Empty;
-        public string? ChaineNom { get; set; }
-        public int? QuantiteControlee { get; set; }
-        public int? QuantiteAcceptee { get; set; }
-        public int? QuantiteRetouche { get; set; }
-        public int? QuantiteRebut { get; set; }
-        public string? TypeControle { get; set; }
-        public int? QuantiteRenvoyee { get; set; }
-        public string? EffectuePar { get; set; }
-        public DateTime DateOperation { get; set; }
-        public string? Notes { get; set; }
-    }
 }
-
