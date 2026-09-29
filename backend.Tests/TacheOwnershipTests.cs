@@ -766,4 +766,247 @@ public class TacheOwnershipTests : IClassFixture<TacheApiFactory>
 
         Assert.Equal(carol.Id, tache.AssignedToUserId);
     }
+
+    // ══════════════ LOT 19 — Résolution fiable du responsable ══════════════
+    // Le libellé de responsable d'une ligne de groupe est saisi librement (UI :
+    // groupes-tab.tsx). L'ancien ResolveLigneResponsableAsync renvoyait
+    // ApplicationUser? : « aucun responsable désigné » et « aucun utilisateur
+    // trouvé » se confondaient, un homonyme était choisi au hasard, et la casse
+    // comme les accents tombaient. Le résultat est désormais discriminé et
+    // l'appelant REFUSE (400) sur 0 correspondance comme sur homonymie, sans
+    // jamais créer la moindre tâche.
+
+    // ── Outils ───────────────────────────────────────────────────────────
+
+    /// <summary>Applicatrice disposant du droit d'assignation (sinon le 403
+    /// masquerait le 400 que ces tests doivent observer).</summary>
+    private Task<TestUser> CreateApplicatriceAsync(string id) =>
+        _factory.CreateUserAsync(id, id, "Alice", role =>
+        {
+            role.PeutVoirTaches = true;
+            role.PeutGererTaches = true;
+            role.PeutVoirToutesTaches = false;
+            role.PeutAssignerTaches = true;
+        });
+
+    private async Task<int> CreerCommandeAsync(string suffixe)
+    {
+        return await _factory.WithDbAsync(async db =>
+        {
+            var cmd = new CommandeClient
+            {
+                NumeroCommande = "CMD-LOT19-" + suffixe + "-" + Guid.NewGuid().ToString("N")[..8],
+                TitreCommande = "Commande LOT19 " + suffixe,
+                Statut = StatutCommande.EnProduction,
+                DateCommande = DateTime.Now,
+                ClientId = await _factory.CreateClientAsync("lot19-" + suffixe)
+            };
+            db.CommandesClients.Add(cmd);
+            await db.SaveChangesAsync();
+            return cmd.Id;
+        });
+    }
+
+    /// <summary>Groupe actif de N lignes. Chaque ligne porte un responsable libre
+    /// (null = aucun responsable désigné, cas nominal qui doit rester accepté).</summary>
+    private async Task<int> CreerGroupeAsync(
+        string suffixe, params (string Titre, int Ordre, string? Responsable)[] lignes)
+    {
+        return await _factory.WithDbAsync(async db =>
+        {
+            var groupe = new GroupeTache
+            {
+                Nom = "Groupe LOT19 " + suffixe + " " + Guid.NewGuid().ToString("N")[..6],
+                EstActif = true,
+                DateCreation = DateTime.Now
+            };
+            db.GroupesTaches.Add(groupe);
+            await db.SaveChangesAsync();
+
+            foreach (var (titre, ordre, responsable) in lignes)
+            {
+                db.GroupesTachesLignes.Add(new GroupeTacheLigne
+                {
+                    GroupeTacheId = groupe.Id,
+                    Titre = titre,
+                    Priorite = PrioriteTache.Normale,
+                    DureeEstimeeHeures = 1,
+                    Ordre = ordre,
+                    ResponsableAssigne = responsable
+                });
+            }
+
+            await db.SaveChangesAsync();
+            return groupe.Id;
+        });
+    }
+
+    private Task<int> CompterTachesAsync(int groupeId, int commandeId) =>
+        _factory.WithDbAsync(db => db.TachesProduction.CountAsync(
+            t => t.GroupeTacheId == groupeId || t.CommandeClientId == commandeId));
+
+    // ── Tests ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LOT19_AucunMatch_refuse_le_groupe_et_cree_aucune_tache()
+    {
+        var alice = await CreateApplicatriceAsync("lot19-alice-0match");
+        var commandeId = await CreerCommandeAsync("0match");
+        var groupeId = await CreerGroupeAsync("0match", ("Découpe", 1, "Zebulon Introuvable"));
+
+        var reponse = await alice.Client.PostAsJsonAsync(
+            $"/api/TacheProduction/Groupes/{groupeId}/Appliquer", new { CommandeId = commandeId });
+
+        Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
+
+        // Le message cite le libellé introuvable ET la ligne fautive.
+        var corps = await reponse.Content.ReadAsStringAsync();
+        Assert.Contains("Zebulon Introuvable", corps);
+        Assert.Contains("Découpe", corps);
+
+        // Aucun repli silencieux sur le créateur : rien n'est écrit.
+        Assert.Equal(0, await CompterTachesAsync(groupeId, commandeId));
+    }
+
+    [Fact]
+    public async Task LOT19_Homonymes_refuse_le_groupe_et_liste_les_candidats()
+    {
+        var alice = await CreateApplicatriceAsync("lot19-alice-ambigu");
+        // Deux homonymes exacts : aucun des 4 formats ne peut les départager.
+        await CreateOperateurAsync("lot19-dupont-a", "Dupont", "Jean");
+        await CreateOperateurAsync("lot19-dupont-b", "Dupont", "Jean");
+
+        var commandeId = await CreerCommandeAsync("ambigu");
+        var groupeId = await CreerGroupeAsync("ambigu", ("Pliage", 1, "Jean Dupont"));
+
+        var reponse = await alice.Client.PostAsJsonAsync(
+            $"/api/TacheProduction/Groupes/{groupeId}/Appliquer", new { CommandeId = commandeId });
+
+        Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
+
+        // Chaque candidat est cité par son nom lisible ET son UserName, sans
+        // exposer d'identifiant interne supplémentaire.
+        var corps = await reponse.Content.ReadAsStringAsync();
+        Assert.Contains("Jean Dupont (lot19-dupont-a)", corps);
+        Assert.Contains("Jean Dupont (lot19-dupont-b)", corps);
+        Assert.Contains("Pliage", corps);
+
+        // Aucun homonyme n'est retenu au hasard.
+        Assert.Equal(0, await CompterTachesAsync(groupeId, commandeId));
+    }
+
+    [Fact]
+    public async Task LOT19_Casse_differente_resout_le_responsable()
+    {
+        var alice = await CreateApplicatriceAsync("lot19-alice-casse");
+        var carol = await CreateOperateurAsync("lot19-carol-casse", "Carol", "Caroline");
+
+        var commandeId = await CreerCommandeAsync("casse");
+        // « carol » vs « Carol » : la comparaison était sensible à la casse.
+        var groupeId = await CreerGroupeAsync("casse", ("Marquage", 1, "carol"));
+
+        var reponse = await alice.Client.PostAsJsonAsync(
+            $"/api/TacheProduction/Groupes/{groupeId}/Appliquer", new { CommandeId = commandeId });
+
+        Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
+
+        var tache = await _factory.WithDbAsync(db =>
+            db.TachesProduction.AsNoTracking().SingleAsync(t => t.GroupeTacheId == groupeId));
+        Assert.Equal(carol.Id, tache.AssignedToUserId);
+    }
+
+    [Fact]
+    public async Task LOT19_Accent_different_resout_le_responsable_dans_les_deux_sens()
+    {
+        var alice = await CreateApplicatriceAsync("lot19-alice-accent");
+        // Stocké AVEC accent dans la base.
+        var avecAccent = await CreateOperateurAsync("lot19-francois", "François", "Jean");
+        // Stocké SANS accent dans la base.
+        var sansAccent = await CreateOperateurAsync("lot19-gontran", "Gontran", "Achille");
+
+        // Sens 1 : libellé sans accent, utilisateur avec accent.
+        var commande1 = await CreerCommandeAsync("accent1");
+        var groupe1 = await CreerGroupeAsync("accent1", ("Découpe", 1, "Francois"));
+
+        var reponse1 = await alice.Client.PostAsJsonAsync(
+            $"/api/TacheProduction/Groupes/{groupe1}/Appliquer", new { CommandeId = commande1 });
+
+        Assert.Equal(HttpStatusCode.OK, reponse1.StatusCode);
+        Assert.Equal(avecAccent.Id, await _factory.WithDbAsync(db =>
+            db.TachesProduction.AsNoTracking()
+                .Where(t => t.GroupeTacheId == groupe1)
+                .Select(t => t.AssignedToUserId)
+                .SingleAsync()));
+
+        // Sens 2 : libellé avec accent, utilisateur sans accent.
+        var commande2 = await CreerCommandeAsync("accent2");
+        var groupe2 = await CreerGroupeAsync("accent2", ("Pliage", 1, "Gontran"));
+
+        var reponse2 = await alice.Client.PostAsJsonAsync(
+            $"/api/TacheProduction/Groupes/{groupe2}/Appliquer", new { CommandeId = commande2 });
+
+        Assert.Equal(HttpStatusCode.OK, reponse2.StatusCode);
+        Assert.Equal(sansAccent.Id, await _factory.WithDbAsync(db =>
+            db.TachesProduction.AsNoTracking()
+                .Where(t => t.GroupeTacheId == groupe2)
+                .Select(t => t.AssignedToUserId)
+                .SingleAsync()));
+    }
+
+    [Fact]
+    public async Task LOT19_Groupe_3_lignes_dont_la_2e_ambigue_ne_cree_AUCUNE_tache()
+    {
+        var alice = await CreateApplicatriceAsync("lot19-alice-3lignes");
+        var cible = await CreateOperateurAsync("lot19-cible-3lignes", "Cible", "Celine");
+        await CreateOperateurAsync("lot19-durand-a", "Durand", "Paul");
+        await CreateOperateurAsync("lot19-durand-b", "Durand", "Paul");
+
+        var commandeId = await CreerCommandeAsync("3lignes");
+        var groupeId = await CreerGroupeAsync("3lignes",
+            ("Étape 1 résolue", 1, "lot19-cible-3lignes"),
+            ("Étape 2 ambiguë", 2, "Paul Durand"),
+            ("Étape 3 résolue", 3, "lot19-cible-3lignes"));
+
+        var reponse = await alice.Client.PostAsJsonAsync(
+            $"/api/TacheProduction/Groupes/{groupeId}/Appliquer", new { CommandeId = commandeId });
+
+        Assert.Equal(HttpStatusCode.BadRequest, reponse.StatusCode);
+        var corps = await reponse.Content.ReadAsStringAsync();
+        Assert.Contains("Étape 2 ambiguë", corps);
+
+        // Le refus porte sur le GROUPE ENTIER : les lignes 1 et 3, pourtant
+        // parfaitement résolues, ne doivent laisser AUCUNE trace. On contrôle
+        // par commande ET par titres, pour ne pas manquer une tâche orpheline.
+        Assert.Equal(0, await CompterTachesAsync(groupeId, commandeId));
+        Assert.Equal(0, await _factory.WithDbAsync(db => db.TachesProduction.CountAsync(
+            t => t.Titre == "Étape 1 résolue" || t.Titre == "Étape 3 résolue")));
+
+        // Garde-fou : la cible des lignes 1 et 3 n'a rien reçu non plus.
+        Assert.Equal(0, await _factory.WithDbAsync(db =>
+            db.TachesProduction.CountAsync(t => t.AssignedToUserId == cible.Id)));
+    }
+
+    [Fact]
+    public async Task LOT19_Aucun_responsable_designe_reste_le_cas_nominal()
+    {
+        // Non-régression : une ligne SANS responsable n'est pas un échec, la tâche
+        // revient au créateur. C'est ce qui distingue « non désigné » de
+        // « introuvable » dans le résultat discriminé.
+        var alice = await CreateApplicatriceAsync("lot19-alice-non-designe");
+        var commandeId = await CreerCommandeAsync("non-designe");
+        var groupeId = await CreerGroupeAsync("non-designe",
+            ("Étape sans responsable", 1, null),
+            ("Étape responsable vide", 2, "   "));
+
+        var reponse = await alice.Client.PostAsJsonAsync(
+            $"/api/TacheProduction/Groupes/{groupeId}/Appliquer", new { CommandeId = commandeId });
+
+        Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
+        Assert.Equal(2, await CompterTachesAsync(groupeId, commandeId));
+
+        // Les deux tâches reviennent à l'applicatrice (comparaison limitée à CETTE
+        // commande : les autres tests de la classe ont leurs propres tâches).
+        Assert.Equal(0, await _factory.WithDbAsync(db => db.TachesProduction.CountAsync(
+            t => t.CommandeClientId == commandeId && t.AssignedToUserId != alice.Id)));
+    }
 }

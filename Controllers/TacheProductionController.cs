@@ -6,6 +6,8 @@ using Backend_Gestion_Magasin_API.Data;
 using Microsoft.EntityFrameworkCore;
 using Backend_Gestion_Magasin_API.Dtos;
 using Backend_Gestion_Magasin_API.Services;
+using System.Globalization;
+using System.Text;
 
 namespace Backend_Gestion_Magasin_API.Controllers
 {
@@ -849,10 +851,19 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         /// <summary>
         /// Applique un groupe à une commande : génère une TacheProduction par ligne.
+        ///
         /// Les tâches générées appartiennent à l'utilisateur qui applique le groupe
-        /// (CreatedByUserId), et sont assignées à lui par défaut. Si la ligne désigne un
-        /// responsable par son NOM, on tente de le résoudre vers un utilisateur IMS actif ;
-        /// à défaut, la tâche reste celle du créateur et le libellé legacy est conservé.
+        /// (CreatedByUserId). Trois issues possibles pour le responsable d'une ligne :
+        ///
+        ///   1. aucun responsable désigné  → la tâche revient au créateur (cas nominal) ;
+        ///   2. un responsable résolu      → si c'est un tiers, le droit PeutAssignerTaches
+        ///                                     est exigé, sinon la tâche reste au créateur ;
+        ///   3. libellé introuvable ou ambigu (homonymes) → 400, AUCUNE tâche n'est créée.
+        ///
+        /// Le refus porte sur le GROUPE ENTIER, pas seulement sur la ligne fautive : les
+        /// tâches sont construites en mémoire (Add) et ne sont écrites qu'unique fois, par
+        /// le SaveChangesAsync final, situé APRÈS la boucle. Un retour anticipé laisse donc
+        /// la base strictement inchangée — même garantie que le 403 de permission ligne 906.
         /// </summary>
         [HttpPost("Groupes/{id}/Appliquer")]
         [RequireModulePermission("taches", requireWrite: true)]
@@ -895,21 +906,47 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     CreePar = _currentUser.UserName
                 };
 
-                var assignee = await ResolveLigneResponsableAsync(ligne.ResponsableAssigne);
+                var resolution = await ResolveLigneResponsableAsync(ligne.ResponsableAssigne);
 
-                // Si un tiers est désigné, vérifier le droit PeutAssignerTaches
-                // (même garde-fou que POST /{id}/Assigner — ApplyAssignationAsync:590).
-                if (assignee != null && assignee.Id != userId)
+                // Refus explicite : ni repli sur le créateur, ni choix arbitraire
+                // parmi des homonymes. Tout le groupe est rejeté.
+                if (resolution.Statut == StatutResolutionResponsable.AucunMatch)
                 {
+                    return BadRequest(new
+                    {
+                        message = $"Responsable « {resolution.Libelle} » introuvable : aucun utilisateur actif ne porte ce libellé (ligne « {ligne.Titre} », ordre {ligne.Ordre} du groupe « {groupe.Nom} »). Aucune tâche n'a été créée : corrigez le responsable de cette ligne avant d'appliquer le groupe."
+                    });
+                }
+
+                if (resolution.Statut == StatutResolutionResponsable.Ambigu)
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Responsable « {resolution.Libelle} » ambigu : {resolution.Candidats.Count} utilisateurs actifs portent ce libellé — {ListerCandidats(resolution.Candidats)} (ligne « {ligne.Titre} », ordre {ligne.Ordre} du groupe « {groupe.Nom} »). Aucune tâche n'a été créée : désignez le responsable par son identifiant (UserName) pour lever l'ambiguïté."
+                    });
+                }
+
+                ApplicationUser? assignee;
+
+                // Aucun responsable désigné (les deux cas d'échec sont déjà sortis
+                // plus haut), ou le responsable désigné est l'applicateur lui-même :
+                // dans les deux cas la tâche lui revient.
+                if (resolution.Statut != StatutResolutionResponsable.Resolu
+                    || resolution.Utilisateur!.Id == userId)
+                {
+                    assignee = createur;
+                }
+                else
+                {
+                    // Si un tiers est désigné, vérifier le droit PeutAssignerTaches
+                    // (même garde-fou que POST /{id}/Assigner — ApplyAssignationAsync:590).
                     if (!await _permissions.CanAssignerTachesAsync(userId))
                     {
                         return StatusCode(StatusCodes.Status403Forbidden,
                             new { message = "Vous n'êtes pas autorisé à assigner une tâche à un autre utilisateur (ligne : " + ligne.Titre + ")." });
                     }
-                }
-                else
-                {
-                    assignee = createur;
+
+                    assignee = resolution.Utilisateur;
                 }
 
                 _ownership.SetAssignee(tache, assignee);
@@ -937,24 +974,134 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         /// <summary>
-        /// Résolution au mieux d'un libellé de responsable vers un utilisateur IMS actif.
-        /// AUCUNE affectation arbitraire : sans correspondance, l'appelant reçoit null et
-        /// la tâche reste assignée à son créateur.
+        /// Résolution EXPLICITE d'un libellé de responsable vers un utilisateur IMS actif.
+        ///
+        /// AUCUNE affectation arbitraire : le résultat est discriminé
+        /// (<see cref="ResolutionResponsable"/>) et l'appelant REFUSE (400) sur
+        /// <see cref="StatutResolutionResponsable.AucunMatch"/> et
+        /// <see cref="StatutResolutionResponsable.Ambigu"/>, plutôt que de laisser
+        /// filer la tâche vers le créateur ou de retenir un homonyme au hasard.
+        ///
+        /// NORMALISATION : casse ET accents des deux côtés (libellé saisi, et
+        /// Nom / Prenom / UserName en base), via <see cref="NormaliserLibelle"/>.
+        /// Les 4 libellés acceptés restent inchangés — Nom, « Prenom Nom »,
+        /// UserName, « Nom Prenom » — tous construits par la même fonction
+        /// symétrique : <c>Prenom ?? ""</c> est traité exactement comme un prénom
+        /// présent, sans cas particulier pour le null (l'ancien format 4
+        /// produisait « C » avec une espace finale quand Prenom était null).
+        ///
+        /// PERFORMANCES : la comparaison se fait côté application, ce qui impose de
+        /// lire les utilisateurs actifs (3 colonnes, table interne de quelques
+        /// dizaines de lignes) au lieu de laisser PostgreSQL filtrer. C'est le
+        /// repli retenu faute d'extension <c>unaccent</c> activée sur la base : voir
+        /// « Décisions en attente ». La résolution est appelée une fois par ligne
+        /// de groupe, opération rare et déjà multi-requêtes.
         /// </summary>
-        private async Task<ApplicationUser?> ResolveLigneResponsableAsync(string? libelle)
+        private async Task<ResolutionResponsable> ResolveLigneResponsableAsync(string? libelle)
         {
-            if (string.IsNullOrWhiteSpace(libelle)) return null;
+            if (string.IsNullOrWhiteSpace(libelle))
+                return ResolutionResponsable.NonDesignee(string.Empty);
 
-            var nom = libelle.Trim();
+            var recherche = NormaliserLibelle(libelle);
+            if (recherche.Length == 0)
+                return ResolutionResponsable.NonDesignee(libelle);
 
-            return await _context.Users
-                .Where(u => u.EstActif
-                            && (u.Nom == nom
-                                || (u.Prenom != null && (u.Prenom + " " + u.Nom) == nom)
-                                || (u.UserName != null && u.UserName == nom)
-                                || (u.Nom + " " + (u.Prenom ?? "") == nom)))
-                .OrderBy(u => u.Nom)
-                .FirstOrDefaultAsync();
+            // Projection minimale : seuls les champs participant à la comparaison
+            // sont lus, et AsNoTracking évite de charger une entité pour un
+            // simple rapprochement de libellés.
+            var candidats = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.EstActif)
+                .Select(u => new ApplicationUser
+                {
+                    Id = u.Id,
+                    UserName = u.UserName,
+                    Nom = u.Nom,
+                    Prenom = u.Prenom
+                })
+                .ToListAsync();
+
+            // Un même utilisateur peut correspondre par PLUSIEURS formats à la fois
+            // (Nom = UserName, ou « Prenom Nom » = « Nom Prenom » pour un prénom
+            // identique) : on déduplique par Id, sans quoi il serait signalé
+            // ambigu à tort. OrderBy assure un message de refus déterministe.
+            var correspondants = candidats
+                .Where(u => LibellesPossibles(u).Contains(recherche))
+                .OrderBy(u => u.Nom, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(u => u.UserName, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(u => u.Id)
+                .Select(g => g.First())
+                .ToList();
+
+            if (correspondants.Count == 1)
+                return ResolutionResponsable.Resolue(libelle, correspondants[0]);
+
+            if (correspondants.Count == 0)
+                return ResolutionResponsable.SansCorrespondance(libelle);
+
+            return ResolutionResponsable.Multiples(libelle, correspondants);
+        }
+
+        /// <summary>
+        /// Les 4 libellés acceptés pour un utilisateur, tous normalisés.
+        /// Construction symétrique : <c>Prenom ?? ""</c> et le nom passent par le
+        /// même <see cref="NormaliserLibelle"/>, donc une espace finale ou un accent
+        /// ne font jamais basculer une comparaison.
+        /// </summary>
+        private static HashSet<string> LibellesPossibles(ApplicationUser u) =>
+            new(StringComparer.Ordinal)
+            {
+                NormaliserLibelle(u.Nom),
+                NormaliserLibelle((u.Prenom ?? string.Empty) + " " + u.Nom),
+                NormaliserLibelle(u.UserName),
+                NormaliserLibelle(u.Nom + " " + (u.Prenom ?? string.Empty)),
+            };
+
+        /// <summary>
+        /// Normalise un libellé pour comparaison : espaces de bord retirés, casse
+        /// abaissée, diacritiques supprimés.
+        ///
+        /// Les diacritiques sont retirés en passant en forme DÉCOMPOSÉE
+        /// (<see cref="NormalizationForm.FormD"/>) puis en écartant les caractères
+        /// de catégorie <see cref="UnicodeCategory.NonSpacingMark"/> (« é » devient
+        /// « e » + U+0301, dont on jette la combining acute) ; on recompose ensuite
+        /// en <see cref="NormalizationForm.FormC"/> pour ne pas propager de chaîne
+        /// décomposée. <c>ToLowerInvariant</c> (et non <c>ToLower</c>) : la culture
+        /// turque ne doit pas transformer un « I » en « ı » et faire diverger deux
+        /// exécutions sur des machines de cultures différentes.
+        /// </summary>
+        private static string NormaliserLibelle(string? valeur)
+        {
+            if (string.IsNullOrWhiteSpace(valeur)) return string.Empty;
+
+            var decompose = valeur.Trim().Normalize(NormalizationForm.FormD);
+            var tampon = new StringBuilder(decompose.Length);
+            foreach (var caractere in decompose)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(caractere) != UnicodeCategory.NonSpacingMark)
+                    tampon.Append(caractere);
+            }
+
+            return tampon.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// Liste les candidats d'un refus pour ambiguïté : nom lisible + UserName,
+        /// jamais l'identifiant interne (qui n'aide pas l'utilisateur et évite
+        /// d'exposer une clé d'authentification). Plafonnée, pour qu'un groupe de
+        /// homonymes ne produise pas un message géant.
+        /// </summary>
+        private string ListerCandidats(IReadOnlyList<ApplicationUser> candidats, int plafond = 5)
+        {
+            var nommes = candidats
+                .Take(plafond)
+                .Select(u => $"{_ownership.DisplayNameOf(u) ?? u.Nom} ({u.UserName})")
+                .ToList();
+
+            if (candidats.Count > plafond)
+                nommes.Add($"… et {candidats.Count - plafond} autre(s)");
+
+            return string.Join(", ", nommes);
         }
     }
 }
