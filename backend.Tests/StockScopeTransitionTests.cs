@@ -66,13 +66,14 @@ namespace Backend.Tests
         public async Task PostStock_ScopeIdentique_Reussi()
         {
             var articleId = await CreateArticleAsync();
+            var commandeId = await _factory.CreateCommandeClientAsync();
 
             // Créer stock avec CommandeClientId
             var res = await PostStockAsync(_admin!.Client, new
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                CommandeClientId = 1
+                CommandeClientId = commandeId
             });
 
             Assert.Equal(HttpStatusCode.Created, res.StatusCode);
@@ -82,14 +83,16 @@ namespace Backend.Tests
         public async Task PostStock_MultiplesScopes_Rejete()
         {
             var articleId = await CreateArticleAsync();
+            var commandeId = await _factory.CreateCommandeClientAsync();
+            var groupeId = await _factory.CreateGroupeCommandeAsync();
 
             // Tenter de créer avec CommandeClientId ET GroupeCommandeId
             var res = await PostStockAsync(_admin!.Client, new
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                CommandeClientId = 1,
-                GroupeCommandeId = 1
+                CommandeClientId = commandeId,
+                GroupeCommandeId = groupeId
             });
 
             Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
@@ -101,24 +104,25 @@ namespace Backend.Tests
         public async Task PutStock_ScopeIdentique_Reussi()
         {
             var articleId = await CreateArticleAsync();
+            var commandeId = await _factory.CreateCommandeClientAsync();
 
             // Créer stock initial avec CommandeClientId
             var createRes = await PostStockAsync(_admin!.Client, new
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                CommandeClientId = 1
+                CommandeClientId = commandeId
             });
             createRes.EnsureSuccessStatusCode();
             var createJson = await createRes.Content.ReadAsStringAsync();
             var stockId = JsonSerializer.Deserialize<JsonElement>(createJson).GetProperty("id").GetInt32();
 
-            // PUT avec le même scope (CommandeClientId = 1)
+            // PUT avec le même scope (même CommandeClientId)
             var putRes = await PutStockAsync(_admin!.Client, stockId, new
             {
                 ArticleId = articleId,
                 Quantite = 150,
-                CommandeClientId = 1
+                CommandeClientId = commandeId
             });
 
             Assert.Equal(HttpStatusCode.NoContent, putRes.StatusCode);
@@ -128,13 +132,15 @@ namespace Backend.Tests
         public async Task PutStock_TransitionGroupeVersCommande_Rejete()
         {
             var articleId = await CreateArticleAsync();
+            var groupeId = await _factory.CreateGroupeCommandeAsync();
+            var commandeId = await _factory.CreateCommandeClientAsync();
 
             // Créer stock initial avec GroupeCommandeId
             var createRes = await PostStockAsync(_admin!.Client, new
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                GroupeCommandeId = 1
+                GroupeCommandeId = groupeId
             });
             createRes.EnsureSuccessStatusCode();
             var createJson = await createRes.Content.ReadAsStringAsync();
@@ -145,7 +151,7 @@ namespace Backend.Tests
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                CommandeClientId = 1
+                CommandeClientId = commandeId
             });
 
             Assert.Equal(HttpStatusCode.BadRequest, putRes.StatusCode);
@@ -159,13 +165,15 @@ namespace Backend.Tests
         public async Task PutStock_TransitionCommandeVersGroupe_Rejete()
         {
             var articleId = await CreateArticleAsync();
+            var commandeId = await _factory.CreateCommandeClientAsync();
+            var groupeId = await _factory.CreateGroupeCommandeAsync();
 
             // Créer stock initial avec CommandeClientId
             var createRes = await PostStockAsync(_admin!.Client, new
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                CommandeClientId = 1
+                CommandeClientId = commandeId
             });
             createRes.EnsureSuccessStatusCode();
             var createJson = await createRes.Content.ReadAsStringAsync();
@@ -176,7 +184,7 @@ namespace Backend.Tests
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                GroupeCommandeId = 1
+                GroupeCommandeId = groupeId
             });
 
             Assert.Equal(HttpStatusCode.BadRequest, putRes.StatusCode);
@@ -190,13 +198,15 @@ namespace Backend.Tests
         public async Task PutStock_TransitionClientVersPlateforme_Rejete()
         {
             var articleId = await CreateArticleAsync();
+            var clientId = await _factory.CreateClientAsync();
+            var plateformeId = await _factory.CreatePlateformeAsync();
 
             // Créer stock initial avec ClientId
             var createRes = await PostStockAsync(_admin!.Client, new
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                ClientId = 1
+                ClientId = clientId
             });
             createRes.EnsureSuccessStatusCode();
             var createJson = await createRes.Content.ReadAsStringAsync();
@@ -207,7 +217,7 @@ namespace Backend.Tests
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                PlateformeId = 1
+                PlateformeId = plateformeId
             });
 
             Assert.Equal(HttpStatusCode.BadRequest, putRes.StatusCode);
@@ -219,13 +229,14 @@ namespace Backend.Tests
         public async Task PutStock_ScopeVersNull_Autorise()
         {
             var articleId = await CreateArticleAsync();
+            var commandeId = await _factory.CreateCommandeClientAsync();
 
             // Créer stock initial avec CommandeClientId
             var createRes = await PostStockAsync(_admin!.Client, new
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                CommandeClientId = 1
+                CommandeClientId = commandeId
             });
             createRes.EnsureSuccessStatusCode();
             var createJson = await createRes.Content.ReadAsStringAsync();
@@ -245,14 +256,18 @@ namespace Backend.Tests
             getRes.EnsureSuccessStatusCode();
             var getJson = await getRes.Content.ReadAsStringAsync();
             var stock = JsonSerializer.Deserialize<JsonElement>(getJson);
-            Assert.False(stock.GetProperty("commandeClientId").ValueKind != JsonValueKind.Null, "CommandeClientId should be null");
-            Assert.Equal("Libre", stock.GetProperty("typeStock").GetString());
+            Assert.Equal(JsonValueKind.Null, stock.GetProperty("commandeClientId").ValueKind);
+
+            // TypeStock est un enum sérialisé en NOMBRE (aucun JsonStringEnumConverter
+            // n'est enregistré) : Libre = 0. Le frontend consomme de même typeStock: number.
+            Assert.Equal((int)TypeStock.Libre, stock.GetProperty("typeStock").GetInt32());
         }
 
         [Fact]
         public async Task PutStock_NullVersScope_Rejete()
         {
             var articleId = await CreateArticleAsync();
+            var commandeId = await _factory.CreateCommandeClientAsync();
 
             // Créer stock initial SANS scope (Libre)
             var createRes = await PostStockAsync(_admin!.Client, new
@@ -269,7 +284,7 @@ namespace Backend.Tests
             {
                 ArticleId = articleId,
                 Quantite = 100,
-                CommandeClientId = 1
+                CommandeClientId = commandeId
             });
 
             Assert.Equal(HttpStatusCode.BadRequest, putRes.StatusCode);

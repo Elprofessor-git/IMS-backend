@@ -217,6 +217,80 @@ namespace Backend.Tests
             }
         }
 
+        // ── Données de référence (contraintes de clé étrangère) ────────────
+        //
+        // Les scopes de Stock (ClientId, CommandeClientId, GroupeCommandeId,
+        // PlateformeId) et CommandeClient.ClientId sont des clés étrangères
+        // SANS valeur par défaut ni cascade. Un test qui renseigne « 1 » en
+        // dur suppose une ligne seedée qui n'existe pas sur la base jetable
+        // (créée par les MIGRATIONS seules) : l'insertion échoue alors en
+        // 23503. Ces helpers créent réellement les lignes référencées.
+
+        /// <summary>Plateforme de référence (requis par <see cref="Client.PlateformeId"/>).</summary>
+        public async Task<int> CreatePlateformeAsync(string suffixe = "")
+        {
+            return await WithDbAsync(async context =>
+            {
+                var plateforme = new Plateforme
+                {
+                    Nom = "Plateforme test " + suffixe + Guid.NewGuid().ToString("N")[..6],
+                    EstActif = true
+                };
+                context.Plateformes.Add(plateforme);
+                await context.SaveChangesAsync();
+                return plateforme.Id;
+            });
+        }
+
+        /// <summary>Client de référence, rattaché à une plateforme dédiée.</summary>
+        public async Task<int> CreateClientAsync(string suffixe = "")
+        {
+            return await WithDbAsync(async context =>
+            {
+                var client = new Client
+                {
+                    Nom = "Client test " + suffixe + Guid.NewGuid().ToString("N")[..6],
+                    Email = $"client.{Guid.NewGuid():N}@ims.test",
+                    PlateformeId = await CreatePlateformeAsync(suffixe),
+                    EstActif = true
+                };
+                context.Clients.Add(client);
+                await context.SaveChangesAsync();
+                return client.Id;
+            });
+        }
+
+        /// <summary>Commande client rattachée à un Client réellement persisté.</summary>
+        public async Task<int> CreateCommandeClientAsync(string suffixe = "")
+        {
+            return await WithDbAsync(async context =>
+            {
+                var commande = new CommandeClient
+                {
+                    NumeroCommande = "CMD-TEST-" + Guid.NewGuid().ToString("N")[..8],
+                    TitreCommande = "Commande de test",
+                    ClientId = await CreateClientAsync(suffixe),
+                    DateCommande = DateTime.Now,
+                    Statut = StatutCommande.EnProduction
+                };
+                context.CommandesClients.Add(commande);
+                await context.SaveChangesAsync();
+                return commande.Id;
+            });
+        }
+
+        /// <summary>Groupe de commandes : scope de stock alternative.</summary>
+        public async Task<int> CreateGroupeCommandeAsync(string suffixe = "")
+        {
+            return await WithDbAsync(async context =>
+            {
+                var groupe = new GroupeCommande { DateCreation = DateTime.UtcNow };
+                context.GroupesCommandes.Add(groupe);
+                await context.SaveChangesAsync();
+                return groupe.Id;
+            });
+        }
+
         /// <summary>Modifie les droits du rôle d'un utilisateur (droits de ressource).</summary>
         public async Task SetRoleFlagsAsync(
             string userId,

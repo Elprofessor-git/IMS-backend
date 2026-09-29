@@ -631,6 +631,7 @@ public class TacheOwnershipTests : IClassFixture<TacheApiFactory>
         var carol = await CreateOperateurAsync("lot18-carol", "C", "Carol");
 
         // Commande pour l'application
+        var clientId = await _factory.CreateClientAsync("lot18-");
         var commandeId = await _factory.WithDbAsync(async db =>
         {
             var cmd = new CommandeClient
@@ -639,7 +640,7 @@ public class TacheOwnershipTests : IClassFixture<TacheApiFactory>
                 TitreCommande = "Commande test LOT18",
                 Statut = StatutCommande.EnProduction,
                 DateCommande = DateTime.Now,
-                ClientId = 1
+                ClientId = clientId
             };
             db.CommandesClients.Add(cmd);
             await db.SaveChangesAsync();
@@ -666,7 +667,13 @@ public class TacheOwnershipTests : IClassFixture<TacheApiFactory>
                 Priorite = PrioriteTache.Normale,
                 DureeEstimeeHeures = 2,
                 Ordre = 1,
-                ResponsableAssigne = "Carol" // Nom que ResolveLigneResponsableAsync va résoudre
+                // Libellé résolu par ResolveLigneResponsableAsync. On utilise le
+                // UserName (« lot18-carol ») et NON le nom « Carol » : les deux
+                // tests de ce fichier créent un opérateur dont le Nom vaut « C »
+                // sur la MÊME base (IClassFixture), et un libellé non qualifié
+                // serait ambigu — la résolution retiendrait le premier trouvé par
+                // OrderBy(Nom), c'est-à-dire potentiellement l'autre Carol.
+                ResponsableAssigne = "lot18-carol" // UserName de Carol
             };
             db.GroupesTachesLignes.Add(ligne);
             await db.SaveChangesAsync();
@@ -701,6 +708,7 @@ public class TacheOwnershipTests : IClassFixture<TacheApiFactory>
 
         var carol = await CreateOperateurAsync("lot18-carol-ok", "C", "Carol");
 
+        var clientId = await _factory.CreateClientAsync("lot18-ok-");
         var commandeId = await _factory.WithDbAsync(async db =>
         {
             var cmd = new CommandeClient
@@ -709,7 +717,7 @@ public class TacheOwnershipTests : IClassFixture<TacheApiFactory>
                 TitreCommande = "Commande test LOT18 OK",
                 Statut = StatutCommande.EnProduction,
                 DateCommande = DateTime.Now,
-                ClientId = 1
+                ClientId = clientId
             };
             db.CommandesClients.Add(cmd);
             await db.SaveChangesAsync();
@@ -734,7 +742,9 @@ public class TacheOwnershipTests : IClassFixture<TacheApiFactory>
                 Priorite = PrioriteTache.Normale,
                 DureeEstimeeHeures = 2,
                 Ordre = 1,
-                ResponsableAssigne = "Carol"
+                // Même raison que le test précédent : UserName unique, jamais un
+                // libellé de nom ambigu entre les deux Carol de la base partagée.
+                ResponsableAssigne = "lot18-carol-ok"
             };
             db.GroupesTachesLignes.Add(ligne);
             await db.SaveChangesAsync();
