@@ -9,6 +9,17 @@ namespace Backend_Gestion_Magasin_API.Services
 {
     public class TokenService
     {
+        /// <summary>
+        /// Claim portant le SecurityStamp au moment de l'émission du jeton.
+        ///
+        /// Type de claim maison (et non ClaimTypes.SecurityStamp) : c'est la seule
+        /// source de vérité du couple, et le référencer par constante dans les deux
+        /// sens (émission ici, validation dans SessionValidationHandler) évite qu'un
+        /// typage divergent — l'un « stamp », l'autre « securitystamp » — fasse
+        /// silencieusement échouer l'invalidation de session.
+        /// </summary>
+        public const string SecurityStampClaim = "SecurityStamp";
+
         private readonly IConfiguration _configuration;
 
         public TokenService(IConfiguration configuration)
@@ -29,7 +40,12 @@ namespace Backend_Gestion_Magasin_API.Services
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
                 new Claim(ClaimTypes.Email, user.Email ?? ""),
                 new Claim(ClaimTypes.Name, user.Nom),
-                new Claim("UserId", user.Id)
+                new Claim("UserId", user.Id),
+                // Revocable : toute opération qui change le SecurityStamp en base
+                // (changement/réinitialisation de mot de passe, désactivation, changement
+                // de rôle) invalide rétroactivement TOUS les jetons
+                // déjà émis, sans liste de révocation ni refresh token.
+                new Claim(SecurityStampClaim, user.SecurityStamp ?? string.Empty)
             };
 
             // Utiliser uniquement le rôle personnalisé (plus de rôles Identity)

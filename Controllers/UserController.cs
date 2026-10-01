@@ -126,12 +126,31 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 user.EstActif = updateDto.EstActif.Value;
 
             // RoleId : 0 = retirer le rôle, valeur positive = assigner, absent/null = inchangé
+            var roleChange = updateDto.RoleId.HasValue &&
+                             (updateDto.RoleId.Value == 0 ? null : updateDto.RoleId) != user.RoleId;
             if (updateDto.RoleId.HasValue)
                 user.RoleId = updateDto.RoleId.Value == 0 ? null : updateDto.RoleId;
 
             var result = await _userManager.UpdateAsync(user);
             if (!result.Succeeded)
                 return BadRequest(result.Errors);
+
+            // Le RÔLE est figé dans le JWT (ClaimTypes.Role). Sans changement de
+            // SecurityStamp, un jeton déjà émis conserverait les permissions de
+            // l'ancien rôle jusqu'à son expiration — jusqu'à 24 h. On invalide donc
+            // les sessions à chaque changement de rôle.
+            //
+            // La DÉSACTIVATION, elle, n'a pas besoin de ce tour : SessionValidationService
+            // relit EstActif à CHAQUE requête, l'effet est donc immédiat sans coût
+            // supplémentaire. On ne touche pas au stamp pour elle — inutile et
+            // destructif (ça déconnecterait aussi un administrateur en train de
+            // simplement désactiver quelqu'un).
+            if (roleChange)
+            {
+                var stamp = await _userManager.UpdateSecurityStampAsync(user);
+                if (!stamp.Succeeded)
+                    return BadRequest(stamp.Errors);
+            }
 
             return NoContent();
         }

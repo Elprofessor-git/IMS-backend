@@ -10,6 +10,8 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Backend_Gestion_Magasin_API.Services.Gmail;
 using Backend_Gestion_Magasin_API.Models.Gmail;
+using Backend_Gestion_Magasin_API.Services.Auth;
+using Backend_Gestion_Magasin_API.Services.Email;
 
 // Fix Render (Bug 13) : désactiver le rechargement à chaud AVANT CreateBuilder.
 // C'est CreateBuilder qui charge appsettings.json en interne et crée le FileSystemWatcher
@@ -99,6 +101,29 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
+// Durée de vie d'un lien « mot de passe oublié » / « choisir mon mot de passe ».
+//
+// .NET 9 a DÉPLACÉ ce réglage : `TokenOptions.PasswordResetTokenLifespan` n'existe
+// plus, la durée est une option du fournisseur de jetons lui-même
+// (`DataProtectionTokenProviderOptions.TokenLifespan`, défaut 24 h). Le setter sur
+// l'ancien emplacement ne compile pas — c'est vérifié, pas supposé.
+// 24 h serait igual à la durée de vie du JWT lui-même : un lien de réinitialisation
+// resterait alors utilisable aussi longtemps qu'un jeton de session, dans la boîte
+// mail du destinataire. Une heure est le compromis habituel : assez pour un
+// utilisateur absent de son poste, trop court pour un lien laissé dans une boîte
+// partagée. Le jeton reste à usage unique (il embarque le SecurityStamp).
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+{
+    // Lisible depuis la configuration pour une seule raison : rendre le test
+    // « jeton expiré » réalisable sans attendre une heure. Une durée nulle fait expirer
+    // le jeton à l'instant même de sa création — c'est le plus court délai qu'on puisse
+    // observer. Le défaut reste d'une heure.
+    var duree = builder.Configuration["Identity:PasswordResetTokenLifespan"];
+    options.TokenLifespan = TimeSpan.TryParse(duree, out var d) && d >= TimeSpan.Zero
+        ? d
+        : TimeSpan.FromHours(1);
+});
+
 // Variable d'environnement en premier : c'est elle que le .env vient alimenter juste
 // au-dessus, et celle qu'injectent docker-compose et les plateformes de déploiement.
 var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
@@ -143,6 +168,31 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtAudience,
         ClockSkew = TimeSpan.Zero
     };
+
+    // Révocation des sessions SANS liste de révocation et SANS refresh token : à chaque
+    // requête authentifiée, on relit le SecurityStamp du compte et on le compare à la
+    // claim du jeton. Un mot de passe changé/réinitialisé, un compte désactivé ou un
+    // ou rôle modifié change ce stamp nativement (Identity, ou
+    // UserController.Update) → le jeton devient inutilisable sur-le-champ.
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            if (context.Principal?.Identity?.IsAuthenticated != true)
+                return;
+
+            var validation = context.HttpContext.RequestServices
+                .GetRequiredService<ISessionValidationService>();
+
+            var resultat = await validation.ValiderAsync(context.Principal);
+
+            // context.Fail → 401. Le motif n'est jamais renvoyé au client (il est
+            // journalisé côté serveur) : un attaquant ne doit pas distinguer
+            // « compte désactivé » de « session révoquée ».
+            if (!resultat.EstValide)
+                context.Fail(resultat.Motif ?? "Session invalide.");
+        }
+    };
 });
 
 // Add CORS
@@ -167,6 +217,35 @@ builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<ExcelExportService>();
 builder.Services.AddScoped<PdfExportService>();
 builder.Services.AddScoped<TokenService>();
+
+// Authentification — emails de mot de passe et validation de session.
+//
+// IEmailSender : Resend si une clé est configurée, sinon un émetteur qui journalise.
+// Le choix se fait sur IConfiguration (présence de RESEND_API_KEY), jamais sur
+// #if DEBUG : un environnement de recette sans clé doit continuer à démarrer, et une
+// suite de tests ne doit jamais faire d'appel réseau vers un service externe.
+builder.Services.AddHttpClient(ResendEmailSender.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Add("User-Agent", "IMS-Backend/2.0 (emails transactionnels)");
+});
+
+var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY")
+                   ?? builder.Configuration["Resend:ApiKey"];
+
+if (!string.IsNullOrWhiteSpace(resendApiKey))
+{
+    builder.Services.AddScoped<IEmailSender, ResendEmailSender>();
+    Console.WriteLine("Emails transactionnels : Resend (RESEND_API_KEY détectée).");
+}
+else
+{
+    builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+    Console.WriteLine("Emails transactionnels : émetteur journalisé (aucune RESEND_API_KEY configurée).");
+}
+
+builder.Services.AddScoped<IPasswordSetupLinkService, PasswordSetupLinkService>();
+builder.Services.AddScoped<ISessionValidationService, SessionValidationService>();
 builder.Services.AddScoped<StockService>();
 builder.Services.AddScoped<CommandeService>();
 builder.Services.AddScoped<ImportationService>();
