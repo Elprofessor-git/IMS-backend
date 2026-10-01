@@ -270,29 +270,22 @@ builder.Services.AddScoped<TokenService>();
 
 // Authentification — emails de mot de passe et validation de session.
 //
-// IEmailSender : Resend si une clé est configurée, sinon un émetteur qui journalise.
-// Le choix se fait sur IConfiguration (présence de RESEND_API_KEY), jamais sur
-// #if DEBUG : un environnement de recette sans clé doit continuer à démarrer, et une
-// suite de tests ne doit jamais faire d'appel réseau vers un service externe.
-builder.Services.AddHttpClient(ResendEmailSender.HttpClientName, client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(15);
-    client.DefaultRequestHeaders.Add("User-Agent", "IMS-Backend/2.0 (emails transactionnels)");
-});
+// IEmailSender : Gmail (module Courriels) si une adresse système est configurée,
+// sinon un émetteur qui journalise. Le choix se fait sur IConfiguration
+// (Email:SenderGmailAddress), jamais sur #if DEBUG : un environnement de recette
+// sans adresse doit continuer à démarrer, et une suite de tests ne doit jamais
+// faire d'appel réseau vers un service externe.
+//
+// Aucune clé ni SDK supplémentaire : l'envoi réutilise IGmailApiService et la
+// connexion OAuth déjà autorisée par un administrateur (scopes gmail.compose).
+builder.Services.AddScoped<GmailApiEmailSender>();
+builder.Services.AddScoped<LoggingEmailSender>();
+builder.Services.AddScoped<IEmailSender, SystemEmailSender>();
 
-var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY")
-                   ?? builder.Configuration["Resend:ApiKey"];
-
-if (!string.IsNullOrWhiteSpace(resendApiKey))
-{
-    builder.Services.AddScoped<IEmailSender, ResendEmailSender>();
-    Console.WriteLine("Emails transactionnels : Resend (RESEND_API_KEY détectée).");
-}
-else
-{
-    builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
-    Console.WriteLine("Emails transactionnels : émetteur journalisé (aucune RESEND_API_KEY configurée).");
-}
+var adresseSysteme = builder.Configuration["Email:SenderGmailAddress"];
+Console.WriteLine(string.IsNullOrWhiteSpace(adresseSysteme)
+    ? "Emails transactionnels : émetteur journalisé (Email__SenderGmailAddress non configurée)."
+    : $"Emails transactionnels : Gmail ({adresseSysteme}).");
 
 builder.Services.AddScoped<IPasswordSetupLinkService, PasswordSetupLinkService>();
 builder.Services.AddScoped<ISessionValidationService, SessionValidationService>();

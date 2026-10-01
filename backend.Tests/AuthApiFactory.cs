@@ -24,7 +24,7 @@ namespace Backend.Tests;
 /// <see cref="CapturingEmailSender"/> : capture les emails au lieu de les envoyer.
 /// </summary>
 /// <remarks>
-/// On ne teste pas l'envoi réseau — ni Resend, ni journalisation : on teste ce qui
+/// On ne teste pas l'envoi réseau — ni Gmail, ni journalisation : on teste ce qui
 /// est observable côté API (codes HTTP, état en base, invalidation de session). La
 /// capture permet en revanche de RÉCUPÉRER le jeton d'un lien, ce qui est la seule
 /// façon d'exercer le flux « email → reset » de bout en bout sans boîte mail réelle.
@@ -134,9 +134,10 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Environment.SetEnvironmentVariable("JWT_SECRET", TestJwtSecret);
         Environment.SetEnvironmentVariable("JwtSettings__Issuer", "SystemeGestionTextile");
         Environment.SetEnvironmentVariable("JwtSettings__Audience", "SystemeGestionTextileUsers");
-        // Aucune clé d'email en test : aucun appel réseau, quelle que soit la machine
-        // qui exécute la suite.
-        Environment.SetEnvironmentVariable("RESEND_API_KEY", null);
+        // Aucune adresse émettrice Gmail en test : aucun appel réseau, quelle que soit
+        // la machine qui exécute la suite (IEmailSender est de toute façon remplacé par
+        // CapturingEmailSender ci-dessous).
+        Environment.SetEnvironmentVariable("Email__SenderGmailAddress", null);
     }
 
     private readonly TestDatabase _database = new();

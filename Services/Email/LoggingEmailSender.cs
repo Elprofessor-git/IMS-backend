@@ -3,11 +3,11 @@ namespace Backend_Gestion_Magasin_API.Services.Email
     /// <summary>
     /// Émetteur de substitution : journalise l'email au lieu de l'envoyer.
     ///
-    /// C'est l'implémentation ACTIVE dès qu'aucune clé Resend n'est configurée
-    /// (poste de dev, suite de tests d'intégration, environnement de recette sans
-    /// accès à Resend). Objectif : aucun test ne doit dépendre d'un envoi réseau
-    /// réel, et l'API doit rester utilisable — un email non parti est un incident,
-    /// pas une raison de ne pas démarrer.
+    /// C'est l'implémentation ACTIVE dès qu'aucune adresse Gmail émettrice n'est
+    /// configurée (`Email:SenderGmailAddress` absente : poste de dev, suite de tests
+    /// d'intégration, environnement de recette). Objectif : aucun test ne doit
+    /// dépendre d'un envoi réseau réel, et l'API doit rester utilisable — un email
+    /// non parti est un incident, pas une raison de ne pas démarrer.
     ///
     /// Le CORPS n'est journalisé qu'hors Production, et c'est la partie qui compte :
     /// un corps d'email de mot de passe contient le jeton, donc la capacité à
@@ -38,8 +38,9 @@ namespace Backend_Gestion_Magasin_API.Services.Email
                 // Ni corps, ni lien : en production, cet émetteur signale une
                 // configuration manquante, il n'est pas un outil de débogage.
                 _logger.LogError(
-                    "EMAIL NON ENVOYÉ (aucun émetteur configuré en production — RESEND_API_KEY absente). " +
-                    "Destinataire : {Recipient}. Objet : {Subject}. Le destinataire ne recevra rien.",
+                    "EMAIL NON ENVOYÉ (aucune adresse émettrice Gmail configurée en production — " +
+                    "Email:SenderGmailAddress absente). Destinataire : {Recipient}. Objet : {Subject}. " +
+                    "Le destinataire ne recevra rien.",
                     to, subject);
             }
             else
