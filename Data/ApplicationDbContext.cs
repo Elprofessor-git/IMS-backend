@@ -72,6 +72,7 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<GroupeTacheLigne> GroupesTachesLignes { get; set; }
         public DbSet<GmailConnection> GmailConnections { get; set; }
         public DbSet<GmailMessage> GmailMessages { get; set; }
+        public DbSet<GmailAttachment> GmailAttachments { get; set; }
         public DbSet<EmailAiAnalysis> EmailAiAnalyses { get; set; }
         public DbSet<EmailAiReply> EmailAiReponses { get; set; }
 
@@ -1283,6 +1284,20 @@ namespace Backend_Gestion_Magasin_API.Data
             // Idempotence de la synchronisation : un GmailMessageId au plus une fois par connexion.
             modelBuilder.Entity<GmailMessage>()
                 .HasIndex(m => new { m.GmailConnectionId, m.GmailMessageId })
+                .IsUnique();
+
+            // Métadonnées de pièces jointes : supprimées avec l'email (elles n'ont aucun
+            // sens sans lui), et jamais en cascade vers un autre parent.
+            modelBuilder.Entity<GmailAttachment>()
+                .HasOne(a => a.GmailMessage)
+                .WithMany(m => m.Attachments)
+                .HasForeignKey(a => a.GmailMessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Une même pièce jointe ne doit pas être enregistrée deux fois pour un email :
+            // la resynchronisation ré-extrait les mêmes métadonnées à chaque passage.
+            modelBuilder.Entity<GmailAttachment>()
+                .HasIndex(a => new { a.GmailMessageId, a.GmailAttachmentId })
                 .IsUnique();
 
             // Tri de la liste par date de réception (ordre décroissant) sur une connexion.

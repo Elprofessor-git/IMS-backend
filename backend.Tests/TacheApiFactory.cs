@@ -83,12 +83,21 @@ namespace Backend.Tests
         /// par les lectures de builder.Configuration faites au démarrage de Program.cs.
         /// Les variables d'environnement, elles, sont vues par les deux, ce qui évite que
         /// le jeton soit émis pour une audience et validé contre une autre (401).
+        ///
+        /// <c>GROQ_API_KEY</c> est retirée de l'environnement, et c'est délibéré :
+        /// <list type="bullet">
+        /// <item>aucun test ne doit appeler l'API Groq réelle — clé du développeur, quota,
+        /// réseau, et résultat non déterministe ;</item>
+        /// <item>la disponibilité de l'IA est donc toujours « indisponible », ce qui rend
+        /// les assertions sur le 503 exactes au lieu de dépendre du poste qui exécute.</item>
+        /// </list>
         /// </summary>
         static TacheApiFactory()
         {
             Environment.SetEnvironmentVariable("JWT_SECRET", TestJwtSecret);
             Environment.SetEnvironmentVariable("JwtSettings__Issuer", "Backend_Gestion_Magasin_API");
             Environment.SetEnvironmentVariable("JwtSettings__Audience", "Backend_Gestion_Magasin_API_Users");
+            Environment.SetEnvironmentVariable("GROQ_API_KEY", null);
         }
 
         private readonly TestDatabase _database = new();

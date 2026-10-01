@@ -69,6 +69,11 @@ namespace Backend_Gestion_Magasin_API.Models.Gmail
         public string? Rfc822MessageId { get; set; }
 
         public string? BodyText { get; set; }
+
+        // Version HTML du corps, ASSAINIE à la réception (scripts, handlers on*, javascript:
+        // et iframes retirés) et dont les src="cid:" ont été réécrites vers le proxy IMS.
+        // BodyText reste la référence : c'est lui qui alimente l'analyse IA et la recherche.
+        public string? BodyHtml { get; set; }
         [StringLength(500)]
         public string? Snippet { get; set; }
 
@@ -92,6 +97,52 @@ namespace Backend_Gestion_Magasin_API.Models.Gmail
         public virtual TacheProduction? TacheCreee { get; set; }
         public virtual ICollection<EmailAiAnalysis> Analyses { get; set; } = new List<EmailAiAnalysis>();
         public virtual ICollection<EmailAiReply> Reponses { get; set; } = new List<EmailAiReply>();
+        public virtual ICollection<GmailAttachment> Attachments { get; set; } = new List<GmailAttachment>();
+
+        /// <summary>
+        /// Pièces jointes en attente d'enregistrement, le temps que l'Id IMS du message soit
+        /// attribué (les lignes <c>GmailAttachment</c> en ont besoin comme clé étrangère).
+        /// Jamais persistée ni exposée : c'est un tampon de synchronisation, d'où le nom
+        /// intracellular et l'absence de mapping EF.
+        /// </summary>
+        [NotMapped]
+        public List<Services.Gmail.GmailApiAttachment> _PendingAttachments { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Métadonnées d'une pièce jointe d'un email. On ne stocke QUE les métadonnées :
+    /// le contenu binaire est relu à la demande via l'API Gmail (endpoint proxy), ce qui
+    /// évite de dupliquer des mégaoctets en base et garde la source de vérité Gmail.
+    /// </summary>
+    public class GmailAttachment
+    {
+        public int Id { get; set; }
+
+        // FK -> GmailMessage.Id (la propriété Images, clé composite)
+        public int GmailMessageId { get; set; }
+
+        // Identifiant de pièce renvoyé par l'API Gmail (payload.parts[].body.attachmentId).
+        [StringLength(255)]
+        public string GmailAttachmentId { get; set; } = null!;
+
+        [StringLength(255)]
+        public string? FileName { get; set; }
+
+        [StringLength(255)]
+        public string? MimeType { get; set; }
+
+        public long SizeBytes { get; set; }
+
+        /// <summary>Image intégrée au corps HTML (src="cid:...") plutôt que pièce jointe classique.</summary>
+        public bool IsInline { get; set; }
+
+        // En-tête « Content-ID » (sans les chevrons) pour les images intégrées.
+        [StringLength(255)]
+        public string? ContentId { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public virtual GmailMessage GmailMessage { get; set; } = null!;
     }
 
     public enum StatutAnalyse

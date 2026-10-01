@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -224,17 +225,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var query = _context.GmailMessages
                 .Where(m => m.GmailConnectionId == connection.Id);
 
+            // Boîte de réception uniquement : un message archivé ou mis à la corbeille chez
+            // Gmail ne doit plus hanter la liste IMS.
+            query = query.Where(InInboxFilter);
+
             if (unreadOnly) query = query.Where(m => !m.IsRead);
 
-            // Recherche plein texte simple sur l'expéditeur, l'objet et l'extrait.
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var term = search.Trim();
-                query = query.Where(m =>
-                    (m.From != null && m.From.Contains(term)) ||
-                    (m.Subject != null && m.Subject.Contains(term)) ||
-                    (m.Snippet != null && m.Snippet.Contains(term)));
-            }
+            // Insensible à la casse, jokers LIKE échappés, et recherche dans le corps complet
+            // (et pas seulement dans l'extrait tronqué par Gmail).
+            query = GmailSearch.Apply(query, search, GmailSearch.BuildPattern(search ?? ""));
 
             var total = await query.CountAsync();
 
@@ -276,7 +275,229 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var message = await GetOwnedMessageAsync(id);
             if (message == null) return NotFound(new { message = "Message introuvable." });
 
-            return Ok(new GmailMessageDetailDto
+            return Ok(await MapDetailAsync(message));
+        }
+
+        /// <summary>
+        /// PATCH: api/gmail/messages/5 — marque lu/non-lu, étoile, archive, corbeille.
+        /// <para>
+        /// Gmail est la source de vérité : l'étiquette est modifiée chez Gmail
+        /// <b>puis</b> le miroir IMS est mis à jour. L'ordre est délibéré — si Gmail échoue,
+        /// l'IMS reste cohérent avec la boîte réelle et l'utilisateur reçoit une erreur
+        /// explicite plutôt qu'un état d'interface optimiste qui mentirait. Un échec réseau
+        /// ne laisse donc jamais la base désynchronisée.
+        /// </para>
+        /// </summary>
+        [HttpPatch("messages/{id:int}")]
+        [RequireModulePermission("courriels", requireWrite: true)]
+        public async Task<ActionResult<GmailMessageFlagsDto>> UpdateMessageFlags(
+            int id, [FromBody] UpdateMessageFlagsDto dto)
+        {
+            var message = await GetOwnedMessageAsync(id);
+            if (message == null) return NotFound(new { message = "Message introuvable." });
+
+            if (!HasUsableConnection(message.GmailConnection))
+                return BadRequest(new { message = "Aucun compte Gmail connecté." });
+
+            try
+            {
+                if (dto.Trash == true)
+                {
+                    // trash plutôt que modify : Gmail gère seul le retrait de INBOX et
+                    // l'ajout de TRASHED, et l'action reste réversible depuis l'interface Gmail.
+                    await _gmailApi.TrashMessageAsync(message.GmailConnection, message.GmailMessageId);
+                }
+                else
+                {
+                    var (add, remove) = BuildLabelChanges(dto);
+                    if (add.Count > 0 || remove.Count > 0)
+                        await _gmailApi.ModifyMessageLabelsAsync(message.GmailConnection, message.GmailMessageId, add, remove);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+            }
+
+            ApplyFlagsLocally(message, dto);
+            await _context.SaveChangesAsync();
+
+            return Ok(ToFlagsDto(message));
+        }
+
+        /// <summary>
+        /// PATCH: api/gmail/threads/{gmailThreadId} — mêmes actions, mais sur toute la
+        /// conversation en un seul appel Gmail.
+        /// <para>
+        /// L'interface travaille la conversation comme une unité : « marquer comme lu »
+        /// doit concerner les 12 messages d'un fil. Faire 12 appels messages.modify serait
+        /// lent et fragile (une coupure réseau au milieu laisserait le fil à moitié traité) ;
+        /// <c>threads.modify</c> applique l'étiquette d'un coup, exactement comme Gmail.
+        /// </para>
+        /// </summary>
+        [HttpPatch("threads/{gmailThreadId}")]
+        [RequireModulePermission("courriels", requireWrite: true)]
+        public async Task<ActionResult<GmailThreadFlagsDto>> UpdateThreadFlags(
+            string gmailThreadId, [FromBody] UpdateMessageFlagsDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(gmailThreadId) || gmailThreadId.Length > 255)
+                return NotFound(new { message = "Conversation introuvable." });
+
+            var userId = CurrentUserId;
+
+            // L'appartenance du fil est vérifiée par l'existence d'un message à l'utilisateur :
+            // un fil qu'il ne connaît pas ne doit rien modifier, chez lui comme chez autrui.
+            var owned = await _context.GmailMessages
+                .Where(m => m.GmailConnection.UserId == userId && m.GmailThreadId == gmailThreadId)
+                .Select(m => new
+                {
+                    m.GmailConnection,
+                    m.GmailConnection.RefreshTokenEncrypted,
+                    m.GmailConnection.IsActive
+                })
+                .FirstOrDefaultAsync();
+
+            if (owned == null) return NotFound(new { message = "Conversation introuvable." });
+
+            if (!owned.IsActive || string.IsNullOrEmpty(owned.RefreshTokenEncrypted))
+                return BadRequest(new { message = "Aucun compte Gmail connecté." });
+
+            try
+            {
+                if (dto.Trash == true)
+                {
+                    await _gmailApi.TrashThreadAsync(owned.GmailConnection, gmailThreadId);
+                }
+                else
+                {
+                    var (add, remove) = BuildLabelChanges(dto);
+                    if (add.Count > 0 || remove.Count > 0)
+                        await _gmailApi.ModifyThreadLabelsAsync(owned.GmailConnection, gmailThreadId, add, remove);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+            }
+
+            // Miroir local : toutes les lignes du fil, en une seule sauvegarde.
+            var messages = await _context.GmailMessages
+                .Where(m => m.GmailConnection.UserId == userId && m.GmailThreadId == gmailThreadId)
+                .ToListAsync();
+
+            foreach (var message in messages) ApplyFlagsLocally(message, dto);
+            await _context.SaveChangesAsync();
+
+            var reference = messages.OrderByDescending(m => m.ReceivedAt).ThenByDescending(m => m.Id).First();
+            var flags = ToFlagsDto(reference);
+
+            return Ok(new GmailThreadFlagsDto
+            {
+                GmailThreadId = gmailThreadId,
+                MessageCount = messages.Count,
+                IsRead = flags.IsRead,
+                IsStarred = flags.IsStarred,
+                IsArchived = flags.IsArchived,
+                IsTrashed = flags.IsTrashed
+            });
+        }
+
+        /// <summary>Connexion utilisable : active et porteuse d'un token rafraîchissable.</summary>
+        private static bool HasUsableConnection(GmailConnection connection) =>
+            connection.IsActive && !string.IsNullOrEmpty(connection.RefreshTokenEncrypted);
+
+        /// <summary>
+        /// Traduit la demande utilisateur en étiquettes Gmail. La liste fermée évite qu'un
+        /// client n'essaie de poser une étiquette arbitraire (« IMPORTANT », « SPAM »…).
+        /// </summary>
+        private static (List<string> Add, List<string> Remove) BuildLabelChanges(UpdateMessageFlagsDto dto)
+        {
+            var add = new List<string>();
+            var remove = new List<string>();
+
+            if (dto.IsRead == true) remove.Add("UNREAD");
+            if (dto.IsRead == false) add.Add("UNREAD");
+            if (dto.IsStarred == true) add.Add("STARRED");
+            if (dto.IsStarred == false) remove.Add("STARRED");
+            if (dto.Archive == true) remove.Add("INBOX");
+            if (dto.Archive == false) add.Add("INBOX");
+
+            return (add, remove);
+        }
+
+        /// <summary>
+        /// Miroir local des étiquettes Gmail. Appelé APRÈS l'appel à Gmail : si celui-ci
+        /// échoue, cette méthode n'est jamais atteinte et la base reste inchangée.
+        /// </summary>
+        private static void ApplyFlagsLocally(GmailMessage message, UpdateMessageFlagsDto dto)
+        {
+            var labels = ParseLabels(message.LabelsJson);
+
+            if (dto.Trash == true)
+            {
+                labels.Remove("INBOX");
+                if (!labels.Contains("TRASHED")) labels.Add("TRASHED");
+            }
+            else if (dto.Archive == true) labels.Remove("INBOX");
+            // Remettre en boîte un message qui est à la corbeille n'a pas de sens : on ne
+            // rend l'étiquette INBOX que si le message n'est pas déjà à la poubelle.
+            else if (dto.Archive == false && !labels.Contains("TRASHED")) labels.Add("INBOX");
+
+            if (dto.IsRead == true) labels.Remove("UNREAD");
+            else if (dto.IsRead == false && !labels.Contains("UNREAD")) labels.Add("UNREAD");
+
+            if (dto.IsStarred == true && !labels.Contains("STARRED")) labels.Add("STARRED");
+            else if (dto.IsStarred == false) labels.Remove("STARRED");
+
+            message.LabelsJson = JsonSerializer.Serialize(labels);
+            if (dto.IsRead.HasValue) message.IsRead = dto.IsRead.Value;
+            if (dto.IsStarred.HasValue) message.IsStarred = dto.IsStarred.Value;
+        }
+
+        private static GmailMessageFlagsDto ToFlagsDto(GmailMessage message)
+        {
+            var labels = ParseLabels(message.LabelsJson);
+            return new GmailMessageFlagsDto
+            {
+                Id = message.Id,
+                IsRead = message.IsRead,
+                IsStarred = message.IsStarred,
+                IsArchived = !labels.Contains("INBOX"),
+                IsTrashed = labels.Contains("TRASHED")
+            };
+        }
+
+        /// <summary>
+        /// Relit <c>LabelsJson</c>. Une valeur absente ou illisible ne doit pas faire échouer
+        /// une action : on repart d'un ensemble vide, ce qui laisse le miroir local moins
+        /// précis mais cohérent avec ce que Gmail renvoie à la synchronisation suivante.
+        /// </summary>
+        private static List<string> ParseLabels(string? labelsJson)
+        {
+            if (string.IsNullOrWhiteSpace(labelsJson)) return new List<string>();
+            try
+            {
+                return JsonSerializer.Deserialize<List<string>>(labelsJson) ?? new List<string>();
+            }
+            catch (JsonException)
+            {
+                return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// Construit le DTO de détail. Le HTML est assaini AU MOMENT DE LA LECTURE (et pas
+        /// seulement à la synchronisation) : les messages enregistrés avant l'existence de
+        /// l'assainisseur ne seraient jamais repassés par lui.
+        /// </summary>
+        private async Task<GmailMessageDetailDto> MapDetailAsync(GmailMessage message)
+        {
+            var attachments = await _context.GmailAttachments
+                .Where(a => a.GmailMessageId == message.Id)
+                .OrderBy(a => a.IsInline).ThenBy(a => a.FileName)
+                .ToListAsync();
+
+            return new GmailMessageDetailDto
             {
                 Id = message.Id,
                 GmailMessageId = message.GmailMessageId,
@@ -286,10 +507,270 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Cc = message.Cc,
                 Subject = message.Subject,
                 BodyText = message.BodyText,
+                BodyHtml = HtmlSanitizer.Sanitize(GmailInlineImageRewriter.Rewrite(message.BodyHtml, message.Id)),
                 ReceivedAt = message.ReceivedAt,
                 IsRead = message.IsRead,
                 IsStarred = message.IsStarred,
+                HasAttachments = attachments.Any(a => !a.IsInline),
+                Attachments = attachments.Select(a => new GmailAttachmentDto
+                {
+                    GmailAttachmentId = a.GmailAttachmentId,
+                    FileName = a.FileName,
+                    MimeType = a.MimeType,
+                    SizeBytes = a.SizeBytes,
+                    IsInline = a.IsInline,
+                    Url = $"/api/gmail/messages/{message.Id}/attachments/{Uri.EscapeDataString(a.GmailAttachmentId)}"
+                }).ToList(),
                 CreatedTaskId = message.CreatedTaskId
+            };
+        }
+
+        // GET: api/gmail/messages/5/attachments/{attachmentId} — relais binaire depuis Gmail.
+        // L'isolation passe par GetOwnedMessageAsync : une pièce d'un email d'un autre
+        // utilisateur répond 404, et le contenu n'est JAMAIS mis en cache par un proxy
+        // partagé (Cache-Control: private, no-store).
+        [HttpGet("messages/{id:int}/attachments/{attachmentId}")]
+        [RequireModulePermission("courriels", requireWrite: false)]
+        public async Task<IActionResult> DownloadAttachment(int id, string attachmentId)
+        {
+            var message = await GetOwnedMessageAsync(id);
+            if (message == null) return NotFound(new { message = "Message introuvable." });
+
+            if (string.IsNullOrWhiteSpace(attachmentId) || attachmentId.Length > 255)
+                return NotFound(new { message = "Pièce jointe introuvable." });
+
+            var attachment = await _context.GmailAttachments
+                .FirstOrDefaultAsync(a => a.GmailMessageId == id && a.GmailAttachmentId == attachmentId);
+
+            if (attachment == null) return NotFound(new { message = "Pièce jointe introuvable." });
+
+            var connection = await GetActiveConnectionAsync();
+            if (connection == null) return BadRequest(new { message = "Aucun compte Gmail connecté." });
+
+            try
+            {
+                var (_, _, content) = await _gmailApi.GetAttachmentAsync(connection, message.GmailMessageId, attachment.GmailAttachmentId);
+                var fileName = attachment.FileName ?? "piece-jointe";
+                var mimeType = attachment.MimeType ?? "application/octet-stream";
+
+                return PrivateNoStore(File(content, mimeType, fileName));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+            }
+        }
+
+        // GET: api/gmail/messages/5/inline/{contentId} — image intégrée au corps HTML.
+        // Servie avec un type MIME strict et sans stockage : un PDF ou un SVG « inline »
+        // ne doit jamais être interprété dans le contexte de l'application.
+        [HttpGet("messages/{id:int}/inline/{contentId}")]
+        [RequireModulePermission("courriels", requireWrite: false)]
+        public async Task<IActionResult> GetInlineImage(int id, string contentId)
+        {
+            var message = await GetOwnedMessageAsync(id);
+            if (message == null) return NotFound();
+
+            if (string.IsNullOrWhiteSpace(contentId) || contentId.Length > 255)
+                return NotFound();
+
+            var attachment = await _context.GmailAttachments
+                .FirstOrDefaultAsync(a => a.GmailMessageId == id && a.ContentId == contentId && a.IsInline);
+
+            if (attachment == null) return NotFound();
+
+            // Un « inline » qui n'est pas une image raster est refusé : le proxy ne doit
+            // pas devenir un vecteur de rendu de contenu arbitraire dans l'origine IMS.
+            var mimeType = attachment.MimeType ?? "";
+            if (!mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                return NotFound();
+
+            if (mimeType.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase))
+            {
+                // Un SVG est un document actif (script) : il ne peut pas être servi tel quel
+                // dans une page, même encodé en base64.
+                return NotFound();
+            }
+
+            var connection = await GetActiveConnectionAsync();
+            if (connection == null) return NotFound();
+
+            try
+            {
+                var (_, _, content) = await _gmailApi.GetAttachmentAsync(connection, message.GmailMessageId, attachment.GmailAttachmentId);
+                return PrivateNoStore(File(content, mimeType));
+            }
+            catch (InvalidOperationException)
+            {
+                // Une image cassée ne doit pas faire échouer le rendu de l'email.
+                return NotFound();
+            }
+        }
+
+        /// <summary>
+        /// Interdit la mise en cache d'un contenu relé depuis Gmail.
+        /// <para>
+        /// Une pièce jointe ou une image intégrée est un octet privé appartenant à
+        /// l'utilisateur : la conserver dans un cache partagé (CDN, proxy d'entreprise) la
+        /// rendrait lisible par le service après expiration, et la res servirait ensuite à
+        /// un tiers non autorisé sur la même URL. <c>private, no-store</c> ferme les deux risques.
+        /// </para>
+        /// </summary>
+        private IActionResult PrivateNoStore(IActionResult result)
+        {
+            Response.Headers.CacheControl = "private, no-store";
+            Response.Headers.Pragma = "no-cache";
+            return result;
+        }
+
+        /// <summary>
+        /// Filtre « boîte de réception » appliqué en base.
+        /// <para>
+        /// Un <c>LabelsJson</c> nul vient d'un email synchronisé avant le stockage des
+        /// étiquettes : il est traité comme présent dans la boîte de réception plutôt que
+        /// filtré, sinon tous les emails historiques disparaîtraient de la liste.
+        /// </para>
+        /// </summary>
+        private static readonly Expression<Func<GmailMessage, bool>> InInboxFilter =
+            m => m.LabelsJson == null || EF.Functions.ILike(m.LabelsJson, "%\"INBOX\"%");
+
+
+        // ── Fils de discussion ───────────────────────────────────────────────
+
+        // GET: api/gmail/threads — UN fil par ligne, positionné sur son message le plus récent.
+        // Sans ce regroupement, une discussion de 12 messages occupait 12 lignes de la liste
+        // et l'utilisateur n'en voyait qu'une, la plus ancienne en haut de l'extrait.
+        [HttpGet("threads")]
+        [RequireModulePermission("courriels", requireWrite: false)]
+        public async Task<ActionResult<GmailThreadPageDto>> GetThreads(
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 25,
+            [FromQuery] bool unreadOnly = false, [FromQuery] string? search = null)
+        {
+            var connection = await GetActiveConnectionAsync();
+            if (connection == null)
+                return Ok(new GmailThreadPageDto { Page = 1, PageSize = pageSize });
+
+            var safePage = Math.Max(1, page);
+            var safeSize = Math.Clamp(pageSize, 1, 100);
+
+            var scope = _context.GmailMessages.Where(m => m.GmailConnectionId == connection.Id);
+            // Boîte de réception uniquement, comme pour la liste de messages : un fil dont
+            // tous les messages sont archivés ou à la corbeille ne doit plus occuper de ligne.
+            scope = scope.Where(InInboxFilter);
+            if (unreadOnly) scope = scope.Where(m => !m.IsRead);
+            scope = GmailSearch.Apply(scope, search, GmailSearch.BuildPattern(search ?? ""));
+
+            // Le total compte des FILS, pas des messages : c'est ce que l'interface pagine.
+            var total = await scope.Select(m => m.GmailThreadId).Distinct().CountAsync();
+
+            // Le « dernier message du fil » est le plus récent de chaque GmailThreadId.
+            // On l'obtient par GROUP BY sur la date maximale (les timestamps Gmail sont en
+            // millisecondes : les égalités sont théoriques, et départagées côté client par
+            // l'Id). Éviter g.OrderBy().First() dans la projection : Npgsql ne le traduit pas.
+            var pagePairs = await scope
+                .GroupBy(m => m.GmailThreadId)
+                .Select(g => new { GmailThreadId = g.Key, ReceivedAt = g.Max(m => m.ReceivedAt) })
+                .OrderByDescending(x => x.ReceivedAt)
+                .Skip((safePage - 1) * safeSize)
+                .Take(safeSize)
+                .ToListAsync();
+
+            if (pagePairs.Count == 0)
+                return Ok(new GmailThreadPageDto { Total = total, Page = safePage, PageSize = safeSize });
+
+            // Toutes les lignes des fils de la page (page ≤ 100, les agrégations se font en
+            // mémoire) : on évite ainsi les projections GROUP BY complexes mal traduites.
+            var pageThreadIds = pagePairs.Select(p => p.GmailThreadId).ToList();
+            var pageMessages = await _context.GmailMessages
+                .Where(m => m.GmailConnectionId == connection.Id && pageThreadIds.Contains(m.GmailThreadId))
+                .Select(m => new
+                {
+                    m.Id, m.GmailThreadId, m.GmailMessageId, m.Subject, m.Snippet, m.ReceivedAt, m.IsRead,
+                    m.IsStarred, m.HasAttachments, m.From,
+                    HasTaskSuggestion = m.Analyses.Any(a => a.IsTask)
+                })
+                .ToListAsync();
+
+            // Regroupement et comptage client-side : le dernier message du fil reste celui
+            // dont (ReceivedAt, Id) est maximal, dragage des égalités de date.
+            // Suivi et pièces jointes ne sont PAS lus sur ce dernier message : Gmail rattache
+            // l'étoile et le trombone au FIL, c'est-à-dire à l'un de ses messages. Lire
+            // l'état du dernier message ferait disparaître le suivi dès qu'un tiers répond
+            // (cas réel : on suit le premier email, la client répond, l'icône s'éteint) et
+            // masquerait la pièce jointe d'un message plus ancien.
+            var byThread = pageMessages
+                .GroupBy(m => m.GmailThreadId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (
+                        Last: g.OrderByDescending(m => m.ReceivedAt).ThenByDescending(m => m.Id).First(),
+                        Count: g.Count(),
+                        Unread: g.Count(m => !m.IsRead),
+                        IsStarred: g.Any(m => m.IsStarred),
+                        HasAttachments: g.Any(m => m.HasAttachments),
+                        HasSuggestion: g.Any(m => m.HasTaskSuggestion),
+                        Participants: g.Select(m => m.From).Where(f => f != null).Select(f => f!).Distinct().ToList()));
+
+            var items = pagePairs.Select(p =>
+            {
+                var (last, count, unread, isStarred, hasAttachments, hasSuggestion, participants) = byThread[p.GmailThreadId];
+                return new GmailThreadListItemDto
+                {
+                    GmailThreadId = p.GmailThreadId,
+                    Subject = last.Subject,
+                    Snippet = last.Snippet,
+                    LastMessageId = last.Id,
+                    LastGmailMessageId = last.GmailMessageId,
+                    LastMessageAt = last.ReceivedAt,
+                    MessageCount = count,
+                    UnreadCount = unread,
+                    IsStarred = isStarred,
+                    HasAttachments = hasAttachments,
+                    HasTaskSuggestion = hasSuggestion,
+                    Participants = participants
+                };
+            }).ToList();
+
+            return Ok(new GmailThreadPageDto { Items = items, Total = total, Page = safePage, PageSize = safeSize });
+        }
+
+        // GET: api/gmail/threads/{gmailThreadId} — conversation complète, du plus ancien au plus récent.
+        // L'isolation passe par GmailConnectionId : un identifiant de fil devin par un autre
+        // utilisateur ne doit rien révéler, il doit répondre 404.
+        [HttpGet("threads/{gmailThreadId}")]
+        [RequireModulePermission("courriels", requireWrite: false)]
+        public async Task<ActionResult<GmailThreadDetailDto>> GetThread(string gmailThreadId)
+        {
+            if (string.IsNullOrWhiteSpace(gmailThreadId) || gmailThreadId.Length > 255)
+                return NotFound(new { message = "Fil introuvable." });
+
+            var connection = await GetActiveConnectionAsync();
+            if (connection == null) return NotFound(new { message = "Fil introuvable." });
+
+            var rows = await _context.GmailMessages
+                .Where(m => m.GmailConnectionId == connection.Id && m.GmailThreadId == gmailThreadId)
+                .OrderBy(m => m.ReceivedAt).ThenBy(m => m.Id)
+                .Select(m => new { m.Id })
+                .ToListAsync();
+
+            if (rows.Count == 0) return NotFound(new { message = "Fil introuvable." });
+
+            // Réutilise le mapping de détail (assainissement HTML + pièces jointes) plutôt
+            // que de le dupliquer : deux chemins de projection divergeraient vite.
+            var entities = await _context.GmailMessages
+                .Where(m => m.GmailConnectionId == connection.Id && m.GmailThreadId == gmailThreadId)
+                .OrderBy(m => m.ReceivedAt).ThenBy(m => m.Id)
+                .ToListAsync();
+
+            var messages = new List<GmailMessageDetailDto>(entities.Count);
+            foreach (var entity in entities)
+                messages.Add(await MapDetailAsync(entity));
+
+            return Ok(new GmailThreadDetailDto
+            {
+                GmailThreadId = gmailThreadId,
+                Subject = messages[^1].Subject,
+                Messages = messages
             });
         }
 
@@ -333,6 +814,17 @@ namespace Backend_Gestion_Magasin_API.Controllers
             catch (InvalidOperationException ex)
             {
                 return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                // Filet de sécurité : une défaillance inattendue du service IA ne doit JAMAIS
+                // remonter en 500 avec la stack trace dans le corps de la réponse. Le message
+                // au client reste générique ; le détail va au journal, sans clé ni corps d'email.
+                _logger.LogError(ex, "Échec inattendu de l'analyse IA du message {MessageId}.", id);
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "L'assistance IA n'a pas pu analyser cet email. Réessayez dans un instant."
+                });
             }
 
             var analysis = new EmailAiAnalysis
@@ -632,6 +1124,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         // POST: api/gmail/replies/7/reject
+        // Refuser = « je ne veux pas de cette réponse ». Si un brouillon a déjà été figé
+        // dans Gmail, il doit disparaître de la boîte de réception de l'utilisateur :
+        // le laisser produirait exactement le déchet que l'utilisateur vient de refuser.
         [HttpPost("replies/{id:int}/reject")]
         [RequireModulePermission("courriels", requireWrite: true)]
         public async Task<IActionResult> RejectReply(int id)
@@ -642,9 +1137,230 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (reply.Statut == StatutReponseIa.Sent)
                 return StatusCode(StatusCodes.Status409Conflict, new { message = "Cette réponse a déjà été envoyée." });
 
+            if (!string.IsNullOrEmpty(reply.GmailDraftId))
+            {
+                var connection = await GetActiveConnectionAsync();
+                if (connection == null)
+                {
+                    // Sans connexion active on ne peut pas appeler Gmail. On ne fige surtout
+                    // pas un « Refusé » : la décision utilisateur n'est pas appliquée.
+                    return BadRequest(new { message = "Aucun compte Gmail connecté : le brouillon Gmail ne peut pas être supprimé." });
+                }
+
+                try
+                {
+                    await _gmailApi.DeleteDraftAsync(connection, reply.GmailDraftId!);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+                }
+
+                // L'identifiant n'est plus valide : le conserver ferait rejouer un 404 à chaque action.
+                reply.GmailDraftId = null;
+            }
+
             reply.Statut = StatutReponseIa.Rejected;
             await _context.SaveChangesAsync();
             return NoContent();
+        }
+
+        // POST: api/gmail/drafts/edit — reformulation ou traduction du texte saisi par
+        // l'utilisateur. Endpoint sans état : AUCUN enregistrement n'est créé ni modifié,
+        // le résultat est renvoyé pour remplacer le contenu de la zone de composition.
+        [HttpPost("drafts/edit")]
+        [RequireModulePermission("courriels", requireWrite: true)]
+        public async Task<ActionResult<EditDraftResponseDto>> EditDraft([FromBody] EditDraftRequestDto dto)
+        {
+            // Validation AVANT disponibilité : une requête invalide (mauvaise langue, mauvaise
+            // action) doit être rejetée 400 que l'IA soit up ou down — le 503 ne concerne
+            // que des requêtes valides qui n'ont pas pu être traitées.
+            if (!Enum.TryParse<DraftEditAction>(dto.Action, ignoreCase: true, out var action)
+                || !Enum.IsDefined(action))
+            {
+                return BadRequest(new { message = "Action inconnue. Utilisez « Rewrite » ou « Translate »." });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Text))
+                return BadRequest(new { message = "Le texte à reformuler est vide." });
+
+            if (action == DraftEditAction.Translate && !TranslateLanguage.IsSupported(dto.TargetLanguage))
+            {
+                return BadRequest(new
+                {
+                    message = "Langue non prise en charge. Valeurs autorisées : FR, EN, AR."
+                });
+            }
+
+            if (!_ai.IsAvailable)
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "L'assistance IA n'est pas configurée sur ce serveur (GROQ_API_KEY manquante)."
+                });
+
+            try
+            {
+                var text = await _ai.EditDraftTextAsync(action, dto.Text, dto.Instruction, dto.TargetLanguage);
+                return Ok(new EditDraftResponseDto
+                {
+                    Text = text,
+                    Action = action.ToString(),
+                    TargetLanguage = action == DraftEditAction.Translate ? dto.TargetLanguage!.Trim().ToUpperInvariant() : null
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Échec inattendu de l'édition IA du brouillon.");
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    message = "L'assistance IA n'a pas pu traiter ce texte. Réessayez dans un instant."
+                });
+            }
+        }
+
+        // POST: api/gmail/send — compose et envoie un email via la boîte Gmail connectée.
+        // Ne crée AUCUNE ligne en base : ni EmailAiReply, ni EmailAiAnalysis. La composition
+        // est un brouillon éphémère ; seul Gmail conserve l'envoi.
+        [HttpPost("send")]
+        [RequireModulePermission("courriels", requireWrite: true)]
+        public async Task<ActionResult<ComposeEmailResultDto>> Send([FromBody] ComposeEmailDto dto)
+        {
+            var connection = await GetActiveConnectionAsync();
+            if (connection == null) return BadRequest(new { message = "Aucun compte Gmail connecté." });
+
+            var to = NormalizeAddresses(dto.To);
+            if (to.Count == 0)
+                return BadRequest(new { message = "Au moins un destinataire est obligatoire." });
+
+            var cc = NormalizeAddresses(dto.Cc);
+            var bcc = NormalizeAddresses(dto.Bcc);
+
+            if (string.IsNullOrWhiteSpace(dto.BodyText) && string.IsNullOrWhiteSpace(dto.BodyHtml))
+                return BadRequest(new { message = "Le message est vide." });
+
+            var attachments = new List<(string FileName, string MimeType, byte[] Content)>();
+            long totalBytes = 0;
+
+            foreach (var attachment in dto.Attachments ?? new List<ComposeAttachmentDto>())
+            {
+                byte[] content;
+                try
+                {
+                    content = Convert.FromBase64String(attachment.ContentBase64);
+                }
+                catch (FormatException)
+                {
+                    return BadRequest(new { message = $"Le contenu de « {attachment.FileName} » n'est pas du Base64 valide." });
+                }
+
+                totalBytes += content.LongLength;
+
+                // Plafond appliqué AVANT l'envoi : c'est le serveur qui décide. Une
+                // validation uniquement côté navigateur laisserait passer un appel direct.
+                if (totalBytes > MaxComposeAttachmentBytes)
+                {
+                    return StatusCode(StatusCodes.Status413PayloadTooLarge, new
+                    {
+                        message = $"Les pièces jointes dépassent la limite de {MaxComposeAttachmentBytes / (1024 * 1024)} Mo ({totalBytes / (1024 * 1024.0):F1} Mo envoyés)."
+                    });
+                }
+
+                attachments.Add((
+                    string.IsNullOrWhiteSpace(attachment.FileName) ? "piece-jointe" : attachment.FileName,
+                    string.IsNullOrWhiteSpace(attachment.MimeType) ? "application/octet-stream" : attachment.MimeType,
+                    content));
+            }
+
+            // Le fil de réponse est résolu côté IMS : on n'accepte qu'un GmailMessageId
+            // appartenant à l'utilisateur, jamais un identifiant arbitraire fourni par le client.
+            string? threadId = null;
+            string? inReplyTo = null;
+            if (!string.IsNullOrWhiteSpace(dto.InReplyTo))
+            {
+                var parent = await _context.GmailMessages
+                    .Where(m => m.GmailConnectionId == connection.Id && m.GmailMessageId == dto.InReplyTo)
+                    .Select(m => new { m.GmailThreadId, m.Rfc822MessageId })
+                    .FirstOrDefaultAsync();
+
+                if (parent == null)
+                    return BadRequest(new { message = "Le message auquel vous répondez est introuvable." });
+
+                threadId = parent.GmailThreadId;
+                inReplyTo = parent.Rfc822MessageId;
+            }
+
+            try
+            {
+                var (messageId, sentThreadId) = await _gmailApi.SendMessageAsync(
+                    connection,
+                    string.Join(", ", to),
+                    cc.Count > 0 ? string.Join(", ", cc) : null,
+                    bcc.Count > 0 ? string.Join(", ", bcc) : null,
+                    dto.Subject ?? "(sans objet)",
+                    dto.BodyText,
+                    dto.BodyHtml,
+                    threadId,
+                    inReplyTo,
+                    attachments);
+
+                return Ok(new ComposeEmailResultDto
+                {
+                    GmailMessageId = messageId,
+                    GmailThreadId = sentThreadId,
+                    AttachmentCount = attachments.Count,
+                    TotalBytes = totalBytes
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Plafond IMS des pièces jointes d'un envoi : 20 Mo cumulés.
+        /// <para>
+        /// La limite Gmail API est de 35 Mo, mais on ne s'y colle pas : au-delà d'environ
+        /// 25 Mo, Gmail convertit le message en lien de téléchargement et l'historique du fil
+        /// devient pénible à lire. 20 Mo couvre largement un bon de commande ou un plan de
+        /// coupe, en laissant une marge confortable pour l'encodage Base64 (+33 %).
+        /// </para>
+        /// </summary>
+        public const int MaxComposeAttachmentBytes = 20 * 1024 * 1024;
+
+        /// <summary>Valide et normalise une liste d'adresses : une adresse invalide bloque tout l'envoi.</summary>
+        private static List<string> NormalizeAddresses(List<string>? addresses)
+        {
+            var result = new List<string>();
+            if (addresses == null) return result;
+
+            foreach (var raw in addresses)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+
+                foreach (var candidate in raw.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var trimmed = candidate.Trim();
+                    if (trimmed.Length == 0 || trimmed.Length > 320) continue;
+
+                    // Validation volontairement simple mais réelle : un point-virgule dans
+                    // une adresse injecterait un second destinataire non choisi par l'utilisateur.
+                    if (!System.Net.Mail.MailAddress.TryCreate(trimmed, out var parsed)) continue;
+                    if (!string.Equals(parsed!.Address, trimmed, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    result.Add(trimmed);
+                }
+            }
+
+            return result;
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────

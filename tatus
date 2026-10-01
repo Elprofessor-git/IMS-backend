@@ -1,0 +1,12 @@
+ Controllers/GmailController.cs                  | 736 [32m+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++[m[31m---[m
+ Data/ApplicationDbContext.cs                    |  15 [32m++++[m
+ Dtos/Gmail/GmailDtos.cs                         | 102 [32m+++++++++++++++++++++++++[m
+ Migrations/ApplicationDbContextModelSnapshot.cs |  61 [32m+++++++++++++++[m
+ Models/Gmail/GmailModels.cs                     |  51 [32m+++++++++++++[m
+ Program.cs                                      |  58 [32m++++++++++++++[m[31m-[m
+ Services/Gmail/GmailAiService.cs                | 174 [32m++++++++++++++++++++++++++++++++++++++[m[31m-----[m
+ Services/Gmail/GmailApiService.cs               | 402 [32m++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++[m[31m----[m
+ Services/Gmail/GmailSyncService.cs              | 150 [32m+++++++++++++++++++++++++++++[m[31m--------[m
+ appsettings.json                                |   8 [32m++[m
+ backend.Tests/TacheApiFactory.cs                |   9 [32m+++[m
+ 11 files changed, 1692 insertions(+), 74 deletions(-)

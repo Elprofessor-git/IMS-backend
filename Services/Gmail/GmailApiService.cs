@@ -8,6 +8,14 @@ using Backend_Gestion_Magasin_API.Models.Gmail;
 
 namespace Backend_Gestion_Magasin_API.Services.Gmail
 {
+    public record GmailApiAttachment(
+        string GmailAttachmentId,
+        string? FileName,
+        string? MimeType,
+        long SizeBytes,
+        bool IsInline,
+        string? ContentId);
+
     public record GmailApiMessage(
         string Id,
         string ThreadId,
@@ -17,12 +25,14 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         string? Subject,
         string? Rfc822MessageId,
         string? BodyText,
+        string? BodyHtml,
         string? Snippet,
         DateTime ReceivedAt,
         bool IsRead,
         bool IsStarred,
         bool HasAttachments,
-        List<string> LabelIds);
+        List<string> LabelIds,
+        List<GmailApiAttachment> Attachments);
 
     public interface IGmailApiService
     {
@@ -31,6 +41,41 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         Task<GmailApiMessage> GetMessageAsync(GmailConnection connection, string gmailMessageId);
         Task<string> CreateDraftAsync(GmailConnection connection, string to, string subject, string body, string? threadId, string? inReplyToRfc822MessageId);
         Task<string> SendDraftAsync(GmailConnection connection, string draftId);
+        Task DeleteDraftAsync(GmailConnection connection, string draftId);
+
+        /// <summary>
+        /// Ajoute et retire des étiquettes sur un message (users.messages.modify).
+        /// Sert aux actions lu/non-lu, étoile et archive : Gmail reste la source de vérité,
+        /// l'IMS ne fait que refléter l'état.
+        /// </summary>
+        Task ModifyMessageLabelsAsync(
+            GmailConnection connection,
+            string gmailMessageId,
+            IReadOnlyCollection<string> addLabelIds,
+            IReadOnlyCollection<string> removeLabelIds);
+
+        /// <summary>Met un message à la corbeille (users.messages.trash).</summary>
+        Task TrashMessageAsync(GmailConnection connection, string gmailMessageId);
+
+        /// <summary>
+        /// Variante au niveau du fil (users.threads.modify). Un seul appel pour toute la
+        /// conversation : marquer 12 messages lus ne doit pas coûter 12 requêtes Gmail, et
+        /// Gmail applique l'étiquette au fil entier, ce qui correspond à l'attente
+        /// « marquer cette conversation comme lue ».
+        /// </summary>
+        Task ModifyThreadLabelsAsync(
+            GmailConnection connection,
+            string gmailThreadId,
+            IReadOnlyCollection<string> addLabelIds,
+            IReadOnlyCollection<string> removeLabelIds);
+
+        /// <summary>Met un fil entier à la corbeille (users.threads.trash).</summary>
+        Task TrashThreadAsync(GmailConnection connection, string gmailThreadId);
+        Task<(string FileName, string MimeType, byte[] Content)> GetAttachmentAsync(GmailConnection connection, string gmailMessageId, string attachmentId);
+        Task<(string MessageId, string ThreadId)> SendMessageAsync(
+            GmailConnection connection, string to, string? cc, string? bcc, string? subject,
+            string? bodyText, string? bodyHtml, string? threadId, string? inReplyTo,
+            IReadOnlyList<(string FileName, string MimeType, byte[] Content)> attachments);
     }
 
     public class GmailApiService : IGmailApiService
@@ -159,6 +204,9 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
                 ? tEl.GetString()!
                 : gmailId;
 
+            var parts = new List<GmailApiAttachment>();
+            CollectAttachments(payload, parts);
+
             return new GmailApiMessage(
                 Id: gmailId,
                 ThreadId: threadId,
@@ -168,13 +216,75 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
                 Subject: GetHeader("Subject"),
                 Rfc822MessageId: string.IsNullOrEmpty(rfc822) ? null : rfc822,
                 BodyText: ExtractPlainTextBody(payload),
+                BodyHtml: ExtractHtmlBody(payload),
                 Snippet: root.TryGetProperty("snippet", out var sn) ? sn.GetString() : null,
                 ReceivedAt: receivedAt,
                 IsRead: !labelIds.Contains("UNREAD"),
                 IsStarred: labelIds.Contains("STARRED"),
-                HasAttachments: HasAttachments(payload),
-                LabelIds: labelIds
+                HasAttachments: parts.Any(a => !a.IsInline),
+                LabelIds: labelIds,
+                Attachments: parts
             );
+        }
+
+        /// <summary>Partie text/html du corps, ou null si l'email n'en a pas.</summary>
+        private static string? ExtractHtmlBody(JsonElement payload) =>
+            FindPartBody(payload, "text/html");
+
+        /// <summary>
+        /// Parcourt l'arbre MIME et relève les pièces jointes ET les images intégrées au corps.
+        /// <para>
+        /// Une partie est « inline » quand elle porte un en-tête <c>Content-ID</c> : c'est le
+        /// mécanisme utilisé par Gmail et Outlook pour les logos et signatures. Les deux
+        /// catégories alimentent la même table, avec <c>IsInline</c> pour les distinguer — la
+        /// liste de pièces jointes de l'interface ne montre que les premières.
+        /// </para>
+        /// </summary>
+        private static void CollectAttachments(JsonElement part, List<GmailApiAttachment> results)
+        {
+            var mimeType = part.TryGetProperty("mimeType", out var mt) ? mt.GetString() : null;
+            var fileName = part.TryGetProperty("filename", out var fn) ? fn.GetString() : null;
+            var contentId = ReadHeader(part, "Content-ID")?.Trim().Trim('<', '>');
+            var size = part.TryGetProperty("body", out var b)
+                       && b.TryGetProperty("size", out var sz)
+                       && long.TryParse(sz.GetString(), out var parsed) ? parsed : 0L;
+
+            if (part.TryGetProperty("body", out var body)
+                && body.TryGetProperty("attachmentId", out var attId)
+                && attId.GetString() is { Length: > 0 } attachmentId)
+            {
+                var isInline = !string.IsNullOrEmpty(contentId);
+                results.Add(new GmailApiAttachment(
+                    GmailAttachmentId: attachmentId,
+                    FileName: string.IsNullOrWhiteSpace(fileName) ? null : fileName,
+                    MimeType: string.IsNullOrEmpty(mimeType) ? "application/octet-stream" : mimeType,
+                    SizeBytes: size,
+                    IsInline: isInline,
+                    ContentId: isInline ? contentId : null));
+            }
+
+            if (part.TryGetProperty("parts", out var parts))
+            {
+                foreach (var child in parts.EnumerateArray())
+                    CollectAttachments(child, results);
+            }
+        }
+
+        /// <summary>Lit un en-tête MIME dans le tableau <c>headers</c> d'une partie.</summary>
+        private static string? ReadHeader(JsonElement part, string name)
+        {
+            if (!part.TryGetProperty("headers", out var headers) || headers.ValueKind != JsonValueKind.Array)
+                return null;
+
+            foreach (var h in headers.EnumerateArray())
+            {
+                if (h.TryGetProperty("name", out var n)
+                    && string.Equals(n.GetString(), name, StringComparison.OrdinalIgnoreCase)
+                    && h.TryGetProperty("value", out var v))
+                    return v.GetString();
+            }
+
+            return null;
         }
 
         // Parcourt récursivement l'arbre MIME (multipart/*) pour trouver la partie text/plain,
@@ -214,17 +324,6 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
             return null;
         }
 
-        private static bool HasAttachments(JsonElement part)
-        {
-            if (part.TryGetProperty("filename", out var fn) && !string.IsNullOrEmpty(fn.GetString()))
-                return true;
-
-            if (part.TryGetProperty("parts", out var parts))
-                return parts.EnumerateArray().Any(HasAttachments);
-
-            return false;
-        }
-
         private static string DecodeBase64Url(string base64Url)
         {
             var s = base64Url.Replace('-', '+').Replace('_', '/');
@@ -249,6 +348,193 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
             return System.Net.WebUtility.HtmlDecode(withoutTags)
                 .Replace("\r\n", "\n")
                 .Trim();
+        }
+
+        /// <summary>
+        /// Télécharge le contenu binaire d'une pièce jointe via Gmail. Relu à la demande
+        /// plutôt que stocké : la source de vérité reste Gmail, et l'IMS ne conserve pas
+        /// de mégaoctants d'archives.
+        /// </summary>
+        public async Task<(string FileName, string MimeType, byte[] Content)> GetAttachmentAsync(
+            GmailConnection connection, string gmailMessageId, string attachmentId)
+        {
+            using var request = await CreateRequestAsync(
+                HttpMethod.Get, $"{ApiBase}/messages/{Uri.EscapeDataString(gmailMessageId)}/attachments/{Uri.EscapeDataString(attachmentId)}", connection);
+            using var response = await _httpClient.SendAsync(request);
+            var body = await ReadBodyAsync(response, $"attachments.get({attachmentId})");
+
+            using var doc = JsonDocument.Parse(body);
+            var data = doc.RootElement.GetProperty("data").GetString();
+            if (string.IsNullOrEmpty(data)) return ("piece-jointe", "application/octet-stream", Array.Empty<byte>());
+
+            var bytes = Convert.FromBase64String(data.Replace('-', '+').Replace('_', '/').PadRight((data.Length + 3) / 4 * 4, '='));
+            return ("piece-jointe", "application/octet-stream", bytes);
+        }
+
+        /// <summary>
+        /// Envoie un message composé par l'utilisateur (texte + HTML + pièces jointes).
+        /// Construit un <c>multipart/mixed</c> : le texte brut est TOUJOURS présent, parce
+        /// qu'un email dont le HTML s'affiche mal doit rester lisible. Le HTML est
+        /// assaini avant envoi — il originates de la zone de saisie, on ne fait pas
+        /// confiance au client.
+        /// </summary>
+        public async Task<(string MessageId, string ThreadId)> SendMessageAsync(
+            GmailConnection connection, string to, string? cc, string? bcc, string? subject,
+            string? bodyText, string? bodyHtml, string? threadId, string? inReplyTo,
+            IReadOnlyList<(string FileName, string MimeType, byte[] Content)> attachments)
+        {
+            var rawMime = BuildMultipartMessage(
+                connection.GmailAddress, to, cc, bcc, subject, bodyText, bodyHtml, inReplyTo, attachments);
+            var raw = EncodeBase64Url(Encoding.UTF8.GetBytes(rawMime));
+
+            object payload = string.IsNullOrEmpty(threadId)
+                ? new { raw }
+                : new { raw, threadId };
+
+            using var request = await CreateRequestAsync(HttpMethod.Post, $"{ApiBase}/messages/send", connection, payload);
+            using var response = await _httpClient.SendAsync(request);
+            var responseBody = await ReadBodyAsync(response, "messages.send");
+
+            using var doc = JsonDocument.Parse(responseBody);
+            var messageId = doc.RootElement.GetProperty("id").GetString() ?? "";
+            var sentThreadId = doc.RootElement.TryGetProperty("threadId", out var t) && !string.IsNullOrEmpty(t.GetString())
+                ? t.GetString()!
+                : threadId ?? messageId;
+
+            return (messageId, sentThreadId);
+        }
+
+        private static string BuildMultipartMessage(
+            string from, string to, string? cc, string? bcc, string subject,
+            string? bodyText, string? bodyHtml, string? inReplyTo,
+            IReadOnlyList<(string FileName, string MimeType, byte[] Content)> attachments)
+        {
+            // MIME exige des fins de ligne CRLF ; un saut de ligne LF seul produit un
+            // message que certains clients refusent d'afficher.
+            const string crlf = "\r\n";
+            var boundary = "ims-" + Guid.NewGuid().ToString("N");
+            var altBoundary = "ims-alt-" + Guid.NewGuid().ToString("N");
+
+            var sb = new StringBuilder();
+            sb.Append("From: ").Append(from).Append(crlf);
+            sb.Append("To: ").Append(to).Append(crlf);
+            if (!string.IsNullOrWhiteSpace(cc)) sb.Append("Cc: ").Append(cc).Append(crlf);
+            if (!string.IsNullOrWhiteSpace(bcc)) sb.Append("Bcc: ").Append(bcc).Append(crlf);
+            sb.Append("Subject: ").Append(EncodeHeaderUtf8(subject)).Append(crlf);
+            sb.Append("Message-ID: <").Append(Guid.NewGuid().ToString("N")).Append("@ims.local>").Append(crlf);
+            if (!string.IsNullOrEmpty(inReplyTo))
+            {
+                sb.Append("In-Reply-To: <").Append(inReplyTo).Append(">").Append(crlf);
+                sb.Append("References: <").Append(inReplyTo).Append(">").Append(crlf);
+            }
+            sb.Append("MIME-Version: 1.0").Append(crlf);
+
+            var hasAttachments = attachments.Count > 0;
+
+            if (!hasAttachments)
+            {
+                // Sans pièce jointe, un corps unique suffit : on garde le format simple
+                // (text/plain) ou enrichi (multipart/alternative).
+                var sanitizedHtml = HtmlSanitizer.Sanitize(bodyHtml);
+                if (!string.IsNullOrWhiteSpace(sanitizedHtml) && !string.IsNullOrWhiteSpace(bodyText))
+                {
+                    sb.Append("Content-Type: multipart/alternative; boundary=\"").Append(altBoundary).Append('"').Append(crlf);
+                    sb.Append(crlf);
+                    AppendTextPart(sb, "text/plain; charset=\"UTF-8\"", bodyText, altBoundary, crlf);
+                    AppendHtmlPart(sb, sanitizedHtml, altBoundary, crlf);
+                    sb.Append("--").Append(altBoundary).Append("--").Append(crlf);
+                }
+                else if (!string.IsNullOrWhiteSpace(sanitizedHtml))
+                {
+                    AppendHtmlPart(sb, sanitizedHtml, null, crlf);
+                }
+                else
+                {
+                    AppendTextPart(sb, "text/plain; charset=\"UTF-8\"", bodyText ?? "", null, crlf);
+                }
+
+                return sb.ToString();
+            }
+
+            sb.Append("Content-Type: multipart/mixed; boundary=\"").Append(boundary).Append('"').Append(crlf);
+            sb.Append(crlf);
+
+            // Corps : multipart/alternative si les deux versions existent, sinon la seule disponible.
+            var sanitized = HtmlSanitizer.Sanitize(bodyHtml);
+            if (!string.IsNullOrWhiteSpace(sanitized) && !string.IsNullOrWhiteSpace(bodyText))
+            {
+                sb.Append("--").Append(boundary).Append(crlf);
+                sb.Append("Content-Type: multipart/alternative; boundary=\"").Append(altBoundary).Append('"').Append(crlf);
+                sb.Append(crlf);
+                AppendTextPart(sb, "text/plain; charset=\"UTF-8\"", bodyText, altBoundary, crlf);
+                AppendHtmlPart(sb, sanitized, altBoundary, crlf);
+                sb.Append("--").Append(altBoundary).Append("--").Append(crlf);
+            }
+            else if (!string.IsNullOrWhiteSpace(sanitized))
+            {
+                sb.Append("--").Append(boundary).Append(crlf);
+                AppendHtmlPart(sb, sanitized, null, crlf);
+            }
+            else
+            {
+                sb.Append("--").Append(boundary).Append(crlf);
+                AppendTextPart(sb, "text/plain; charset=\"UTF-8\"", bodyText ?? "", null, crlf);
+            }
+
+            foreach (var (fileName, mimeType, content) in attachments)
+            {
+                sb.Append("--").Append(boundary).Append(crlf);
+                sb.Append("Content-Type: ").Append(mimeType).Append("; name=\"").Append(EscapeMimeName(fileName)).Append('"').Append(crlf);
+                sb.Append("Content-Transfer-Encoding: base64").Append(crlf);
+
+                // Un nom de fichier contenant un guillemet ou un saut de ligne casserait
+                // l'en-tête MIME : c'est la porte d'entrée d'un injection d'en-tête.
+                sb.Append("Content-Disposition: attachment; filename=\"").Append(EscapeMimeName(fileName)).Append('"').Append(crlf);
+                sb.Append(crlf);
+                sb.Append(ToBase64BodyLines(content, crlf));
+            }
+
+            sb.Append("--").Append(boundary).Append("--").Append(crlf);
+            return sb.ToString();
+        }
+
+        private static void AppendTextPart(StringBuilder sb, string contentType, string body, string? boundary, string crlf)
+        {
+            if (boundary != null) sb.Append("--").Append(boundary).Append(crlf);
+            sb.Append("Content-Type: ").Append(contentType).Append(crlf);
+            sb.Append("Content-Transfer-Encoding: quoted-printable").Append(crlf);
+            sb.Append(crlf);
+            sb.Append(ToQuotedPrintable(body));
+            if (boundary != null) sb.Append(crlf);
+        }
+
+        private static void AppendHtmlPart(StringBuilder sb, string html, string? boundary, string crlf)
+        {
+            if (boundary != null) sb.Append("--").Append(boundary).Append(crlf);
+            sb.Append("Content-Type: text/html; charset=\"UTF-8\"").Append(crlf);
+            sb.Append("Content-Transfer-Encoding: quoted-printable").Append(crlf);
+            sb.Append(crlf);
+            sb.Append(ToQuotedPrintable(html));
+            if (boundary != null) sb.Append(crlf);
+        }
+
+        /// <summary>Base64 découpé en lignes de 76 caractères, comme l'exige le transfert MIME.</summary>
+        private static string ToBase64BodyLines(byte[] content, string crlf)
+        {
+            var base64 = Convert.ToBase64String(content);
+            var sb = new StringBuilder(base64.Length + (base64.Length / 76 + 1) * 2);
+            for (var i = 0; i < base64.Length; i += 76)
+            {
+                sb.Append(base64, i, Math.Min(76, base64.Length - i)).Append(crlf);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>Neutralise guillemets, CR et LF dans un nom de fichier destiné à un en-tête MIME.</summary>
+        private static string EscapeMimeName(string name)
+        {
+            var flat = (name ?? "").Replace("\r", "").Replace("\n", "").Replace("\"", "'").Trim();
+            return flat.Length == 0 ? "piece-jointe" : Truncate(flat, 200);
         }
 
         public async Task<string> CreateDraftAsync(
@@ -278,6 +564,94 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
 
             using var doc = JsonDocument.Parse(responseBody);
             return doc.RootElement.GetProperty("id").GetString()!;
+        }
+
+        /// <summary>
+        /// Supprime définitivement un brouillon Gmail. Un 404 n'est pas une erreur : le
+        /// brouillon a pu être supprimé à la main depuis l'interface Gmail, et l'on ne
+        /// veut pas bloquer le « Refuser » côté IMS pour autant.
+        /// </summary>
+        public async Task DeleteDraftAsync(GmailConnection connection, string draftId)
+        {
+            using var request = await CreateRequestAsync(HttpMethod.Delete, $"{ApiBase}/drafts/{Uri.EscapeDataString(draftId)}", connection);
+            using var response = await _httpClient.SendAsync(request);
+
+            if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return;
+
+            var body = await response.Content.ReadAsStringAsync();
+            _logger.LogWarning("Suppression du brouillon Gmail {DraftId} échouée : {Status} {Body}", draftId, response.StatusCode, TruncateForLog(body));
+            throw new InvalidOperationException("Gmail n'a pas pu supprimer le brouillon.");
+        }
+
+        private static string TruncateForLog(string value) =>
+            value.Length <= 500 ? value : value[..500] + "…";
+
+        public async Task ModifyMessageLabelsAsync(
+            GmailConnection connection,
+            string gmailMessageId,
+            IReadOnlyCollection<string> addLabelIds,
+            IReadOnlyCollection<string> removeLabelIds)
+        {
+            // Rien à faire : l'appel serait un aller-retour Gmail sans aucun effet.
+            if (addLabelIds.Count == 0 && removeLabelIds.Count == 0) return;
+
+            var body = new
+            {
+                addLabelIds = addLabelIds.ToArray(),
+                removeLabelIds = removeLabelIds.ToArray()
+            };
+
+            using var request = await CreateRequestAsync(
+                HttpMethod.Post,
+                $"{ApiBase}/messages/{Uri.EscapeDataString(gmailMessageId)}/modify",
+                connection,
+                body);
+            using var response = await _httpClient.SendAsync(request);
+            await ReadBodyAsync(response, $"messages.modify({gmailMessageId})");
+        }
+
+        public async Task TrashMessageAsync(GmailConnection connection, string gmailMessageId)
+        {
+            using var request = await CreateRequestAsync(
+                HttpMethod.Post,
+                $"{ApiBase}/messages/{Uri.EscapeDataString(gmailMessageId)}/trash",
+                connection);
+            using var response = await _httpClient.SendAsync(request);
+            await ReadBodyAsync(response, $"messages.trash({gmailMessageId})");
+        }
+
+        public async Task ModifyThreadLabelsAsync(
+            GmailConnection connection,
+            string gmailThreadId,
+            IReadOnlyCollection<string> addLabelIds,
+            IReadOnlyCollection<string> removeLabelIds)
+        {
+            if (addLabelIds.Count == 0 && removeLabelIds.Count == 0) return;
+
+            var body = new
+            {
+                addLabelIds = addLabelIds.ToArray(),
+                removeLabelIds = removeLabelIds.ToArray()
+            };
+
+            using var request = await CreateRequestAsync(
+                HttpMethod.Post,
+                $"{ApiBase}/threads/{Uri.EscapeDataString(gmailThreadId)}/modify",
+                connection,
+                body);
+            using var response = await _httpClient.SendAsync(request);
+            await ReadBodyAsync(response, $"threads.modify({gmailThreadId})");
+        }
+
+        public async Task TrashThreadAsync(GmailConnection connection, string gmailThreadId)
+        {
+            using var request = await CreateRequestAsync(
+                HttpMethod.Post,
+                $"{ApiBase}/threads/{Uri.EscapeDataString(gmailThreadId)}/trash",
+                connection);
+            using var response = await _httpClient.SendAsync(request);
+            await ReadBodyAsync(response, $"threads.trash({gmailThreadId})");
         }
 
         private static string BuildRfc822Message(string from, string to, string subject, string body, string? inReplyTo)

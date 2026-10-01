@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Backend_Gestion_Magasin_API.Models;
+using dotenv.net;
 using Microsoft.EntityFrameworkCore;
 using Backend_Gestion_Magasin_API.Services;
 using Backend_Gestion_Magasin_API.Data;
@@ -8,12 +9,44 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Backend_Gestion_Magasin_API.Services.Gmail;
+using Backend_Gestion_Magasin_API.Models.Gmail;
 
 // Fix Render (Bug 13) : désactiver le rechargement à chaud AVANT CreateBuilder.
 // C'est CreateBuilder qui charge appsettings.json en interne et crée le FileSystemWatcher
 // (crash « inotify instances limit (128) reached » sur Render) — le Sources.Clear() seul,
 // exécuté après, agissait trop tard : le watcher était déjà créé.
 Environment.SetEnvironmentVariable("DOTNET_hostBuilder:reloadConfigOnChange", "false");
+
+// Chargement du .env par le paquet déjà présent dans le projet (dotenv.net, référencé
+// dans le .csproj). L'appel n'existait nulle part dans le code : la dépendance était
+// déclarée mais jamais câblée, et le .env du backend n'était donc jamais lu — il fallait
+// exporter les variables à la main. Or `source .env` ne fonctionne pas ici : la chaîne de
+// connexion contient des points-virgules que le shell prend pour des séparateurs de
+// commandes, et la variable arrivait tronquée à « Host=localhost », sans base ni mot de
+// passe. Le paquet, lui, préserve les points-virgules.
+//
+// WithoutOverwriteExistingVars() n'est pas cosmétique : le défaut du paquet est
+// OverwriteExistingVars = True. Comme backend/Dockerfile fait « COPY . . » sans
+// .dockerignore, le backend/.env est recopié dans l'image ; sans cette option, il
+// écraserait les variables réellement injectées par le env_file de docker-compose, en
+// production compris. Les variables déjà présentes dans l'environnement gagnent donc
+// toujours, et le fichier ne sert qu'en développement local.
+try
+{
+    var envFile = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+    if (File.Exists(envFile))
+    {
+        DotEnv.Load(new DotEnvOptions()
+            .WithEnvFiles(envFile)
+            .WithoutOverwriteExistingVars());
+    }
+}
+catch (Exception ex)
+{
+    // Un .env illisible ne doit pas empêcher l'API de démarrer : en conteneur, la
+    // configuration arrive par l'environnement. On le signale et on continue.
+    Console.WriteLine($"Lecture du .env ignorée : {ex.Message}");
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,8 +99,10 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
-// Configure JWT Authentication
-var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET") ?? builder.Configuration["JwtSettings:Secret"];
+// Variable d'environnement en premier : c'est elle que le .env vient alimenter juste
+// au-dessus, et celle qu'injectent docker-compose et les plateformes de déploiement.
+var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
+    ?? builder.Configuration["JwtSettings:Secret"];
 var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "ims-app";
 var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "ims-users";
 
@@ -77,6 +112,17 @@ if (string.IsNullOrEmpty(jwtSecret))
 }
 
 var key = Encoding.UTF8.GetBytes(jwtSecret);
+
+// HMAC-SHA256 exige une clé d'au moins 256 bits. Sans ce contrôle, l'API démarre
+// normalement puis renvoie un 500 non géré à la PREMIÈRE connexion, sans que rien
+// n'indique que le secret est en cause : on perd du temps à chercher le problème
+// dans l'authentification ou la base. On échoue donc au démarrage, avec la cause.
+if (key.Length < 32)
+{
+    throw new InvalidOperationException(
+        $"JWT Secret is too short: {key.Length * 8} bits provided, but HMAC-SHA256 requires at least 256 bits (32 characters). " +
+        "Use a random value of at least 32 characters, e.g. `openssl rand -base64 32`.");
+}
 
 builder.Services.AddAuthentication(options =>
 {
@@ -170,6 +216,14 @@ builder.Services.AddScoped<IGmailOAuthService, GmailOAuthService>();
 builder.Services.AddScoped<IGmailApiService, GmailApiService>();
 builder.Services.AddScoped<IGmailSyncService, GmailSyncService>();
 builder.Services.AddScoped<IGmailAiService, GmailAiService>();
+// Verrou de synchronisation partagé entre le service de fond et les synchronisations
+// manuelles : le singleton est obligatoire, sinon les deux ne se verraient pas.
+builder.Services.AddSingleton<IGmailSyncGate, GmailSyncGate>();
+
+// Synchronisation automatique : options « Gmail:AutoSync » + service de fond.
+// Lisible par variable d'environnement : Gmail__AutoSync__IntervalMinutes=10.
+builder.Services.Configure<GmailAutoSyncOptions>(builder.Configuration.GetSection(GmailAutoSyncOptions.SectionName));
+builder.Services.AddHostedService<GmailAutoSyncService>();
 
 var app = builder.Build();
 

@@ -50,10 +50,26 @@ namespace Backend_Gestion_Magasin_API.Dtos.Gmail
         public string? Cc { get; set; }
         public string? Subject { get; set; }
         public string? BodyText { get; set; }
+        /// <summary>HTML ASSAINI, src="cid:" réécrit vers le proxy IMS. À afficher via dangerouslySetInnerHTML.</summary>
+        public string? BodyHtml { get; set; }
         public DateTime ReceivedAt { get; set; }
         public bool IsRead { get; set; }
         public bool IsStarred { get; set; }
+        public bool HasAttachments { get; set; }
+        public List<GmailAttachmentDto> Attachments { get; set; } = new();
         public int? CreatedTaskId { get; set; }
+    }
+
+    /// <summary>Métadonnées d'une pièce jointe (jamais le contenu binaire).</summary>
+    public class GmailAttachmentDto
+    {
+        public string GmailAttachmentId { get; set; } = null!;
+        public string? FileName { get; set; }
+        public string? MimeType { get; set; }
+        public long SizeBytes { get; set; }
+        public bool IsInline { get; set; }
+        /// <summary>Endpoint de téléchargement relayé par l'API, pour le propriétaire du message.</summary>
+        public string Url { get; set; } = null!;
     }
 
     // ── Suggestion de tâche par IA ────────────────────────────
@@ -105,6 +121,92 @@ namespace Backend_Gestion_Magasin_API.Dtos.Gmail
     {
         public required string Body { get; set; }
         public string? Subject { get; set; }
+    }
+
+    // ── Actions sur un message (lu, étoile, archive, corbeille) ─────────
+    /// <summary>
+    /// Champs nuls = action non demandée. Tous les indicateurs sont facultatifs pour
+    /// permettre un envoi partiel (« marquer comme lu » seul) sans à-coup.
+    /// </summary>
+    public class UpdateMessageFlagsDto
+    {
+        /// <summary>Marquer comme lu (true) ou non lu (false).</summary>
+        public bool? IsRead { get; set; }
+
+        /// <summary>Ajouter (true) ou retirer (false) l'étoile.</summary>
+        public bool? IsStarred { get; set; }
+
+        /// <summary>Archiver : retire le message de la boîte de réception (Gmail : retrait de INBOX).</summary>
+        public bool? Archive { get; set; }
+
+        /// <summary>Mettre à la corbeille Gmail.</summary>
+        public bool? Trash { get; set; }
+    }
+
+    public class GmailMessageFlagsDto
+    {
+        public int Id { get; set; }
+        public bool IsRead { get; set; }
+        public bool IsStarred { get; set; }
+        /// <summary>Présence de l'étiquette INBOX côté Gmail après l'action.</summary>
+        public bool IsArchived { get; set; }
+        /// <summary>Présence de l'étiquette TRASHED côté Gmail après l'action.</summary>
+        public bool IsTrashed { get; set; }
+    }
+
+    public class GmailThreadFlagsDto
+    {
+        public string GmailThreadId { get; set; } = null!;
+        /// <summary>Nombre de messages du fil sur lesquels l'action a été appliquée.</summary>
+        public int MessageCount { get; set; }
+        public bool IsRead { get; set; }
+        public bool IsStarred { get; set; }
+        public bool IsArchived { get; set; }
+        public bool IsTrashed { get; set; }
+    }
+
+    // ── Fils de discussion ───────────────────────────────────
+    // Une ligne = UN fil, positionnée sur son message le plus récent (comme Gmail).
+    public class GmailThreadListItemDto
+    {
+        /// <summary>Identifiant de fil Gmail (GmailThreadId) — clé de regroupement.</summary>
+        public string GmailThreadId { get; set; } = null!;
+        public string? Subject { get; set; }
+        public string? Snippet { get; set; }
+        /// <summary>Message servant de référence à la ligne (le plus récent du fil).</summary>
+        public int LastMessageId { get; set; }
+        /// <summary>
+        /// Identifiant Gmail (<c>messageId</c>) du message le plus récent, et non sa clé IMS.
+        /// <para>
+        /// ReplyPanel et la composition ont besoin de l'identifiant Gmail du parent, parce que
+        /// c'est ce dernier que l'API Gmail accepte dans <c>threadId</c>/<c>In-Reply-To</c>.
+        /// Envoyer <see cref="LastMessageId"/> (clé IMS) ferait échouer la résolution.
+        /// </para>
+        /// </summary>
+        public string LastGmailMessageId { get; set; } = null!;
+        public DateTime LastMessageAt { get; set; }
+        public int MessageCount { get; set; }
+        public int UnreadCount { get; set; }
+        public bool IsStarred { get; set; }
+        public bool HasAttachments { get; set; }
+        public bool HasTaskSuggestion { get; set; }
+        public List<string> Participants { get; set; } = new();
+    }
+
+    public class GmailThreadPageDto
+    {
+        public List<GmailThreadListItemDto> Items { get; set; } = new();
+        public int Total { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+    }
+
+    public class GmailThreadDetailDto
+    {
+        public string GmailThreadId { get; set; } = null!;
+        public string? Subject { get; set; }
+        /// <summary>Messages du fil, du plus ancien au plus récent (ordre de lecture).</summary>
+        public List<GmailMessageDetailDto> Messages { get; set; } = new();
     }
 
     // ── Liste paginée + résultat de synchronisation ────────────
