@@ -94,10 +94,18 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .Select(c => new { c.Id, c.NumeroCommande })
                 .ToListAsync();
 
+            // --- BATCH : soldes de tous les triplets en UNE passe (fin du N+1) ---
+            var boardTriplets = triplets
+                .Select(t => new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille))
+                .ToList();
+            var soldesBoard = await _qualite.CalculerSoldesAsync(boardTriplets);
+
             var cards = new List<BoardCard>();
             foreach (var t in triplets)
             {
-                var solde = await _qualite.CalculerSoldeAsync(new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille));
+                var solde = soldesBoard.TryGetValue(new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille), out var s)
+                    ? s
+                    : new QualiteService.SoldeTriplet();
                 t.NumeroCommande = commandes.FirstOrDefault(c => c.Id == t.CommandeId)?.NumeroCommande;
                 t.QuantiteControleeTotale = solde.QuantiteControleeTotale;
                 t.QuantiteAccepteeTotale = solde.QuantiteAccepteeTotale;
@@ -631,9 +639,17 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .Select(c => new { c.Id, c.Nom })
                 .ToListAsync();
 
+            // --- BATCH : soldes des triplets exportés en UNE passe (fin du N+1) ---
+            var exportTripletObjects = exportTriplets
+                .Select(t => new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille))
+                .ToList();
+            var soldesExport = await _qualite.CalculerSoldesAsync(exportTripletObjects);
+
             foreach (var t in exportTriplets)
             {
-                var solde = await _qualite.CalculerSoldeAsync(new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille));
+                var solde = soldesExport.TryGetValue(new QualiteService.Triplet(t.CommandeId, t.ChaineProductionId, t.Taille), out var s)
+                    ? s
+                    : new QualiteService.SoldeTriplet();
                 indicateurs.Soldes.Add(new SoldeTripletDto
                 {
                     NumeroCommande = numeroParCommande.FirstOrDefault(c => c.Id == t.CommandeId)?.NumeroCommande ?? t.CommandeId.ToString(),

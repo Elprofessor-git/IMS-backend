@@ -132,8 +132,8 @@ public class AuthApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     static AuthApiFactory()
     {
         Environment.SetEnvironmentVariable("JWT_SECRET", TestJwtSecret);
-        Environment.SetEnvironmentVariable("JwtSettings__Issuer", "Backend_Gestion_Magasin_API");
-        Environment.SetEnvironmentVariable("JwtSettings__Audience", "Backend_Gestion_Magasin_API_Users");
+        Environment.SetEnvironmentVariable("JwtSettings__Issuer", "SystemeGestionTextile");
+        Environment.SetEnvironmentVariable("JwtSettings__Audience", "SystemeGestionTextileUsers");
         // Aucune clé d'email en test : aucun appel réseau, quelle que soit la machine
         // qui exécute la suite.
         Environment.SetEnvironmentVariable("RESEND_API_KEY", null);

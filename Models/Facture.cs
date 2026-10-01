@@ -27,7 +27,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public int ClientId { get; set; }
 
         [StringLength(10)]
-        public string? Devise { get; set; } = "EUR";
+        public string? Devise { get; set; } = "TND";
 
         [StringLength(50)]
         public string? ModePaiement { get; set; }

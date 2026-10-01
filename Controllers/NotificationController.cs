@@ -33,29 +33,52 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
         private string? CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
 
-        /// <summary>GET api/notification/me : notifications de l'utilisateur + compteur des non livrées.</summary>
+        /// <summary>
+        /// GET api/notification/me : notifications de l'utilisateur + compteur des non
+        /// livrées. Paginé (page/pageSize, défauts 1/50, plafond 200) pour ne jamais
+        /// charger tout l'historique en mémoire. Rétro-compatible : les champs
+        /// `notifications` et `countNonLivrees` gardent exactement le même sens ; les
+        /// champs de pagination sont ADDITIFS. `countNonLivrees` reste le total (toutes
+        /// pages confondues), pour que le badge de la cloche soit exact.
+        /// </summary>
         [HttpGet("me")]
-        public async Task<ActionResult> GetMesNotifications()
+        public async Task<ActionResult> GetMesNotifications(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50)
         {
             var userId = CurrentUserId;
             if (userId == null) return Unauthorized();
 
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 50;
+            if (pageSize > 200) pageSize = 200;
+
             // Filtrage SQL sur le demandeur, puis mapping en mémoire : c'est ce mapping
             // qui transforme l'énumération Type en TEXTE pour le frontend.
-            var lignes = await _context.Notifications
+            var query = _context.Notifications
                 .AsNoTracking()
-                .Where(n => n.UtilisateurId == userId)
+                .Where(n => n.UtilisateurId == userId);
+
+            var totalCount = await query.CountAsync();
+            var countNonLivrees = await query.CountAsync(n => !n.EstLivree);
+
+            var lignes = await query
                 .OrderByDescending(n => n.DateNotification)
                 .ThenByDescending(n => n.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
-            var toutes = lignes.Select(Map).ToList();
-            var nonLivrees = toutes.Count(n => !n.EstLivree);
+            var pageData = lignes.Select(Map).ToList();
 
             return Ok(new
             {
-                notifications = toutes,
-                countNonLivrees = nonLivrees
+                notifications = pageData,
+                countNonLivrees,
+                pageNumber = page,
+                pageSize,
+                totalCount,
+                totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
             });
         }
 

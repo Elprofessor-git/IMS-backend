@@ -40,7 +40,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public decimal MontantTotalTND { get; set; } = 0; // Converti figé à l'écriture (devise de référence)
         
         [StringLength(10)]
-        public string? Devise { get; set; } = "EUR";
+        public string? Devise { get; set; } = "TND";
         
         [StringLength(500)]
         public string? ConditionsPaiement { get; set; }

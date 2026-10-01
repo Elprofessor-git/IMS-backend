@@ -1,4 +1,4 @@
-# IMS Backend — Système de Gestion d'Atelier Textile
+# Système de Gestion Textile — Backend
 
 API REST développée en **ASP.NET Core 9** pour la gestion complète d'un atelier de confection textile : stock multi-niveaux, achats, importations, commandes clients avec calcul automatique de faisabilité (BOM), production, et un assistant IA avec accès contrôlé aux données métier.
 

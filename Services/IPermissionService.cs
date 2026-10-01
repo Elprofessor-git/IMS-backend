@@ -15,7 +15,7 @@ namespace Backend_Gestion_Magasin_API.Services
         Task<bool> CanViewAllTachesAsync(string userId);
 
         /// <summary>
-        /// Droit d'affecter une tâche à un autre utilisateur IMS.
+        /// Droit d'affecter une tâche à un autre utilisateur du système.
         /// </summary>
         Task<bool> CanAssignerTachesAsync(string userId);
 

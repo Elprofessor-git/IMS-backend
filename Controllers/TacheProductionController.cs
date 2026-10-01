@@ -177,6 +177,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
         [RequireModulePermission("taches", requireWrite: false)]
         public async Task<ActionResult<IEnumerable<UtilisateurAssignableDto>>> GetUtilisateursAssignables()
         {
+            // Cet endpoint expose l'annuaire des comptes actifs. Il n'est utile qu'à
+            // l'assignation d'une tâche : un simple lecteur du module Tâches (peut voir
+            // ses tâches sans les attribuer) ne doit PAS recevoir toute la liste des
+            // utilisateurs. On exige donc le droit de ressource « assigner ».
+            var userId = _currentUser.UserId!;
+            if (!await _permissions.CanAssignerTachesAsync(userId))
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { message = "Droit d'assignation des tâches requis pour consulter la liste des utilisateurs." });
+
             var utilisateurs = await _context.Users
                 .Where(u => u.EstActif)
                 .OrderBy(u => u.Nom).ThenBy(u => u.Prenom)

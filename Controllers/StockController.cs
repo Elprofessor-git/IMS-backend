@@ -183,7 +183,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest(erreur);
             }
 
-            var devise = dto.Devise ?? "EUR";
+            var devise = dto.Devise ?? "TND";
             var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, devise, DateTime.Now);
 
             var stock = new Stock
@@ -240,7 +240,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 );
             }
 
-            var devise = dto.Devise ?? "EUR";
+            var devise = dto.Devise ?? "TND";
             var tauxTND = await TauxChangeService.ObtenirTauxAsync(_context, devise, DateTime.Now);
 
             stock.ArticleId = dto.ArticleId;

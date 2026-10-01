@@ -553,7 +553,7 @@ namespace Backend_Gestion_Magasin_API.Services
 
             var schema = new
             {
-                description = "Modèle de données de l'IMS (atelier textile tunisien). Utilisez ce schéma pour identifier l'entité et la relation concernées par la question, puis choisissez l'outil adapté.",
+                description = "Modèle de données du Système de Gestion Textile (atelier textile tunisien). Utilisez ce schéma pour identifier l'entité et la relation concernées par la question, puis choisissez l'outil adapté.",
                 entites,
                 guide,
                 regles

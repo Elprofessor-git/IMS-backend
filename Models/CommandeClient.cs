@@ -65,7 +65,7 @@ namespace Backend_Gestion_Magasin_API.Models
         public decimal MontantTotal { get; set; } = 0;
         
         [StringLength(10)]
-        public string? Devise { get; set; } = "EUR";
+        public string? Devise { get; set; } = "TND";
         
         public decimal PourcentageRessourcesCouvertes { get; set; } = 0;
 

@@ -27,7 +27,7 @@ namespace Backend_Gestion_Magasin_API.Services
 
         public byte[] ExportFacture(FactureDetailDto d)
         {
-            var devise = string.IsNullOrWhiteSpace(d.Devise) ? "EUR" : d.Devise;
+            var devise = string.IsNullOrWhiteSpace(d.Devise) ? "TND" : d.Devise;
 
             return Document.Create(container =>
             {

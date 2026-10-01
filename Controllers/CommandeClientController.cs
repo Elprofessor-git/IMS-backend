@@ -248,7 +248,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 DescriptionCommande = dto.DescriptionCommande,
                 DateCommande = DateTime.Now,
                 DateLivraisonSouhaitee = dto.DateLivraisonSouhaitee,
-                Devise = dto.Devise ?? "EUR",
+                Devise = dto.Devise ?? "TND",
                 NotesSpeciales = dto.NotesSpeciales,
                 SpecificationsClient = dto.SpecificationsClient,
                 CreePar = dto.CreePar,

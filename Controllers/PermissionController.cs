@@ -25,18 +25,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             var permissions = await _permissionService.GetAllPermissionsAsync(userId);
             var peutPartagerLiens = await _permissionService.CanPartagerLiensAsync(userId);
+            var peutAssignerTaches = await _permissionService.CanAssignerTachesAsync(userId);
 
             return Ok(permissions.Select(p => new
             {
                 module = p.Module,
                 canAccess = p.CanAccess,
                 canWrite = p.CanWrite,
-                // ADDITIF : la capacité « partager » est portée par le rôle, pas par un
-                // module. Répétée sur chaque entrée pour ne PAS changer la forme du
+                // ADDITIF : les capacités transversales sont portées par le rôle, pas par
+                // un module. Répétées sur chaque entrée pour ne PAS changer la forme du
                 // tableau (le frontend fait data.find(p => p.module === ...) et
-                // casserait sur un objet enveloppe). Le frontend la lit sur la première
-                // entrée via le hook dédié.
-                peutPartagerLiens
+                // casserait sur un objet enveloppe). Le frontend les lit sur la première
+                // entrée via les hooks dédiés.
+                peutPartagerLiens,
+                // « assigner » conditionne l'accès à l'annuaire des utilisateurs
+                // (TacheProduction/UtilisateursAssignables) : le frontend ne doit pas
+                // appeler cet endpoint s'il ne la possède pas.
+                peutAssignerTaches
             }));
         }
     }

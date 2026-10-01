@@ -152,7 +152,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 NumeroFacture = GenerateNumeroFacture(),
                 DateFacture = dto.DateFacture ?? DateTime.Now,
                 ClientId = dto.ClientId,
-                Devise = dto.Devise ?? "EUR",
+                Devise = dto.Devise ?? "TND",
                 ModePaiement = dto.ModePaiement,
                 Rib = dto.Rib,
                 Iban = dto.Iban,
@@ -224,7 +224,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToDictionaryAsync(c => c.Id);
 
             facture.DateFacture = dto.DateFacture;
-            facture.Devise = dto.Devise ?? "EUR";
+            facture.Devise = dto.Devise ?? "TND";
             facture.ModePaiement = dto.ModePaiement;
             facture.Rib = dto.Rib;
             facture.Iban = dto.Iban;

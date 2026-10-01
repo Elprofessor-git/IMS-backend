@@ -37,7 +37,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Stock
         public decimal PrixUnitaire { get; set; }
 
         [StringLength(10)]
-        public string? Devise { get; set; } = "EUR";
+        public string? Devise { get; set; } = "TND";
 
         public DateTime? DatePeremption { get; set; }
 

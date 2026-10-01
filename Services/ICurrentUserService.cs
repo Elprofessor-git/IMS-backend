@@ -15,7 +15,7 @@ namespace Backend_Gestion_Magasin_API.Services
     /// </summary>
     public interface ICurrentUserService
     {
-        /// <summary>Identifiant IMS (AspNetUsers.Id) porté par le claim NameIdentifier.</summary>
+        /// <summary>Identifiant système (AspNetUsers.Id) porté par le claim NameIdentifier.</summary>
         string? UserId { get; }
 
         /// <summary>Nom d'affichage, ou à défaut l'identifiant.</summary>

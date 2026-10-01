@@ -62,7 +62,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Facture
     {
         public DateTime? DateFacture { get; set; }
         public int ClientId { get; set; }
-        public string? Devise { get; set; } = "EUR";
+        public string? Devise { get; set; } = "TND";
         public string? ModePaiement { get; set; }
         public string? Rib { get; set; }
         public string? Iban { get; set; }
@@ -78,7 +78,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Facture
     public class UpdateFactureDto
     {
         public DateTime DateFacture { get; set; }
-        public string? Devise { get; set; } = "EUR";
+        public string? Devise { get; set; } = "TND";
         public string? ModePaiement { get; set; }
         public string? Rib { get; set; }
         public string? Iban { get; set; }

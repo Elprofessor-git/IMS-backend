@@ -132,8 +132,8 @@ builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
 // au-dessus, et celle qu'injectent docker-compose et les plateformes de déploiement.
 var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
     ?? builder.Configuration["JwtSettings:Secret"];
-var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "ims-app";
-var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "ims-users";
+var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "sgt-app";
+var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "sgt-users";
 
 if (string.IsNullOrEmpty(jwtSecret))
 {

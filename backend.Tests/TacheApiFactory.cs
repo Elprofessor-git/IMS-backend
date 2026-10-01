@@ -95,8 +95,8 @@ namespace Backend.Tests
         static TacheApiFactory()
         {
             Environment.SetEnvironmentVariable("JWT_SECRET", TestJwtSecret);
-            Environment.SetEnvironmentVariable("JwtSettings__Issuer", "Backend_Gestion_Magasin_API");
-            Environment.SetEnvironmentVariable("JwtSettings__Audience", "Backend_Gestion_Magasin_API_Users");
+            Environment.SetEnvironmentVariable("JwtSettings__Issuer", "SystemeGestionTextile");
+            Environment.SetEnvironmentVariable("JwtSettings__Audience", "SystemeGestionTextileUsers");
             Environment.SetEnvironmentVariable("GROQ_API_KEY", null);
         }
 

@@ -1,0 +1,30 @@
+# Secrets locaux — ne JAMAIS entrer dans l'image. Les variables réelles
+# (DB_CONNECTION, JWT_SECRET, Google__*, Email__*, …) arrivent au runtime par
+# docker-compose / Render, jamais par un fichier copié.
+.env
+.env.*
+*.env
+
+# Réglages de développement locaux (ignorés par git, mais `COPY . .` les copierait) :
+# ils peuvent contenir une chaîne de connexion ou un secret local.
+appsettings.Development.json
+appsettings.*.local.json
+
+# Artefacts de build : reconstruits dans l'image par `dotnet restore/build`.
+bin/
+obj/
+
+# Tests : inutiles à l'image de production (le Dockerfile ne construit que
+# Backend_Gestion_Magasin_API.csproj).
+backend.Tests/
+
+# Worktrees / outillage local résiduel
+.claude/
+.codegraph/
+.qodo/
+
+# Fichiers éditeurs / OS
+.vs/
+.vscode/
+*.user
+.DS_Store

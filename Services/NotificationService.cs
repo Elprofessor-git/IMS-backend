@@ -12,7 +12,7 @@ namespace Backend_Gestion_Magasin_API.Services
     /// Ce service n'est pas un second système : il écrit dans la table <c>Notifications</c>
     /// déjà consommée par <c>NotificationController</c> et par la cloche du frontend, avec
     /// les mêmes règles que l'émetteur historique (planning) :
-    ///   • un destinataire = un utilisateur IMS décidé côté serveur ;
+    ///   • un destinataire = un utilisateur du système décidé côté serveur ;
     ///   • aucune information sensible dans le message (jamais de corps d'email, de token
     ///     OAuth ni de donnée d'autrui) ;
     ///   • best effort : l'échec d'une notification ne fait jamais échouer l'opération métier.

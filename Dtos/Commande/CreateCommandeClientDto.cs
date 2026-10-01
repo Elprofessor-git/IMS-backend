@@ -17,7 +17,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public DateTime? DateLivraisonSouhaitee { get; set; }
 
         [StringLength(10)]
-        public string? Devise { get; set; } = "EUR";
+        public string? Devise { get; set; } = "TND";
 
         [StringLength(1000)]
         public string? NotesSpeciales { get; set; }
