@@ -42,6 +42,17 @@ namespace Backend_Gestion_Magasin_API.Models
         public bool PeutValiderImportations { get; set; } = false;
         public bool EstAdministrateur { get; set; } = false;
 
+        // ── Partage de liens (LOT « Partage Sécurisé ») ──────────────────────────
+        // Capacité TRANSVERSE, pas un module : elle autorise à créer un lien de
+        // consultation hors de l'application, donc à exposer des données à un tiers
+        // sans authentification. Elle n'accorde aucun droit de lecture supplémentaire
+        // dans l'API — elle permet seulement de rendre lisible ce que le porteur
+        // du rôle pouvait déjà voir.
+        //
+        // Séparée de « stock » / « commandes » / « importations » parce qu'un rôle
+        // peut légitimement lire le stock et ne jamais pouvoir le partager.
+        public bool PeutPartagerLiens { get; set; } = false;
+
         // ── Tâches : droits de RESSOURCE (LOT 16) ──────────────────────────────
         // Distincts de la permission de module « taches » (PeutVoirTaches /
         // PeutGererTaches) : ces deux indicateurs portent sur la propriété des données,

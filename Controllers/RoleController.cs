@@ -71,6 +71,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PeutValiderStock = dto.PeutValiderStock,
                 PeutConfirmerAchats = dto.PeutConfirmerAchats,
                 PeutValiderImportations = dto.PeutValiderImportations,
+                PeutPartagerLiens = dto.PeutPartagerLiens,
                 PeutVoirDashboard = dto.PeutVoirDashboard,
                 PeutVoirRapports = dto.PeutVoirRapports,
                 PeutVoirFactures = dto.PeutVoirFactures,
@@ -135,6 +136,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
             role.PeutValiderStock = dto.PeutValiderStock;
             role.PeutConfirmerAchats = dto.PeutConfirmerAchats;
             role.PeutValiderImportations = dto.PeutValiderImportations;
+            // Anti-révocation silencieuse. Le PUT est un REMPLACEMENT complet, pas un
+            // patch : tout booléen absent du DTO arrive à false. L'écran des rôles
+            // fait un GET puis un PUT ; si l'un des deux côtés de l'aller-retour omet
+            // PeutPartagerLiens, la première sauvegarde d'un rôle non lié enverrait
+            // false et révoquerait le droit sans que personne l'ait demandé. D'où le
+            // champ présent dans RoleDto ET CreateRoleDto, réaffecté ici, et un test
+            // qui verrouille le GET → PUT sans perte.
+            role.PeutPartagerLiens = dto.PeutPartagerLiens;
             role.PeutVoirDashboard = dto.PeutVoirDashboard;
             role.PeutVoirRapports = dto.PeutVoirRapports;
             role.PeutVoirFactures = dto.PeutVoirFactures;
@@ -204,6 +213,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             PeutValiderStock = r.PeutValiderStock,
             PeutConfirmerAchats = r.PeutConfirmerAchats,
             PeutValiderImportations = r.PeutValiderImportations,
+            PeutPartagerLiens = r.PeutPartagerLiens,
             PeutVoirDashboard = r.PeutVoirDashboard,
             PeutVoirRapports = r.PeutVoirRapports,
             PeutVoirFactures = r.PeutVoirFactures,

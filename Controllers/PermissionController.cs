@@ -24,12 +24,19 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (userId == null) return Unauthorized();
 
             var permissions = await _permissionService.GetAllPermissionsAsync(userId);
+            var peutPartagerLiens = await _permissionService.CanPartagerLiensAsync(userId);
 
             return Ok(permissions.Select(p => new
             {
                 module = p.Module,
                 canAccess = p.CanAccess,
-                canWrite = p.CanWrite
+                canWrite = p.CanWrite,
+                // ADDITIF : la capacité « partager » est portée par le rôle, pas par un
+                // module. Répétée sur chaque entrée pour ne PAS changer la forme du
+                // tableau (le frontend fait data.find(p => p.module === ...) et
+                // casserait sur un objet enveloppe). Le frontend la lit sur la première
+                // entrée via le hook dédié.
+                peutPartagerLiens
             }));
         }
     }

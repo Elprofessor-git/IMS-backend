@@ -12,6 +12,10 @@ using Backend_Gestion_Magasin_API.Services.Gmail;
 using Backend_Gestion_Magasin_API.Models.Gmail;
 using Backend_Gestion_Magasin_API.Services.Auth;
 using Backend_Gestion_Magasin_API.Services.Email;
+using Backend_Gestion_Magasin_API.Services.Partage;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 // Fix Render (Bug 13) : désactiver le rechargement à chaud AVANT CreateBuilder.
 // C'est CreateBuilder qui charge appsettings.json en interne et crée le FileSystemWatcher
@@ -212,6 +216,52 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// IP réel derrière un proxy (rate limiting du partage public)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Le backend est appelé par le proxy Next (Vercel) puis, en production, par le
+// répartiteur Render : sans lecture de X-Forwarded-For, Connection.RemoteIpAddress
+// vaut l'IP du proxy pour TOUT LE MONDE, et un limiteur par IP ne limiterait alors
+// qu'une seule partition partagée par tous les visiteurs.
+//
+// KnownProxies/KnownNetworks sont vidés volontairement : on ne connaît pas l'IP
+// exacte du proxy à l'avance (elle change chez Render). Le middleware prend donc la
+// valeur la plus à droite de X-Forwarded-For, censée être posée par le dernier
+// intermédiaire de confiance. Limite assumée : un appel DIRECT au backend (sans
+// proxy) permettrait de forger l'entête et de choisir sa partition — le limiteur est
+// une défense en profondeur, pas le contrôle d'accès (celui-ci reste l'empreinte du
+// token, imprévisible). Voir le rapport de lot.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// Limiteur dédié au point d'entrée public. Clé = IP réelle (après forwarded headers).
+// Le seuil est lu via l'IConfiguration de la requête (et non builder.Configuration) :
+// en test, la configuration ajoutée par la fabrique n'est visible qu'après Build, or
+// builder.Configuration est lu AVANT. Le défaut (30/min) est généreux pour un usage
+// humain (ouvrir un lien), serré pour une énumération de tokens.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("partage-public", httpContext =>
+    {
+        var limite = httpContext.RequestServices.GetRequiredService<IConfiguration>()
+            .GetValue<int?>("Partage:RateLimitParMinute") ?? 30;
+
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "inconnue";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = limite,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+});
+
 // Register custom services
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<ExcelExportService>();
@@ -252,6 +302,10 @@ builder.Services.AddScoped<ImportationService>();
 builder.Services.AddScoped<FournisseurClientService>();
 builder.Services.AddScoped<IArticleService, ArticleService>();
 builder.Services.AddScoped<QualiteService>();
+
+// Partage sécurisé — résolution de périmètre puis service de liens.
+builder.Services.AddScoped<ShareScopeResolver>();
+builder.Services.AddScoped<IShareLinkService, ShareLinkService>();
 
 // Identité de l'utilisateur courant (claims JWT) et règles d'ownership du module Tâches.
 // ICurrentUserService est la seule source d'identité serveur : le frontend ne fournit
@@ -306,6 +360,10 @@ builder.Services.AddHostedService<GmailAutoSyncService>();
 
 var app = builder.Build();
 
+// En PREMIER : réécrit Connection.RemoteIpAddress depuis X-Forwarded-For. Doit
+// précéder le limiteur et le redirigeur HTTPS, qui lisent tous deux l'IP/schéma.
+app.UseForwardedHeaders();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -325,6 +383,10 @@ if (!isInContainer)
 // ✅ AJOUTER CETTE LIGNE - Obligatoire pour que CORS fonctionne
 app.UseRouting();
 app.UseStaticFiles();
+
+// Après UseRouting (les politiques par endpoint sont résolues) et avant
+// l'autorisation : le point public est anonyme, mais reste limité par IP.
+app.UseRateLimiter();
 
 // Use CORS
 app.UseCors("AllowFrontend");

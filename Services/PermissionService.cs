@@ -56,6 +56,18 @@ namespace Backend_Gestion_Magasin_API.Services
             return user.Role?.PeutAssignerTaches == true;
         }
 
+        public async Task<bool> CanPartagerLiensAsync(string userId)
+        {
+            var user = await _db.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null) return false;
+            if (user.Role?.EstAdministrateur == true) return true;
+
+            return user.Role?.PeutPartagerLiens == true;
+        }
+
         public async Task<IEnumerable<ModulePermission>> GetAllPermissionsAsync(string userId)
         {
             var user = await _db.Users

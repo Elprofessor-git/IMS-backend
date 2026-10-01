@@ -102,17 +102,33 @@ namespace Backend.Tests
 
         private readonly TestDatabase _database = new();
 
+        /// <summary>
+        /// Seuil du limiteur du point public, surchargeable par une classe de tests.
+        /// </summary>
+        /// <remarks>
+        /// Renseigné depuis le constructeur de la classe de tests (avant le premier
+        /// <see cref="WebApplicationFactory{TEntryPoint}.CreateClient()"/>, donc avant que
+        /// l'hôte ne soit construit). Lu par Program.cs via l'IConfiguration de la
+        /// requête : la valeur arrive bien jusqu'au limiteur.
+        /// </remarks>
+        public int? RateLimitParMinute { get; set; }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");
 
             builder.ConfigureAppConfiguration((_, config) =>
             {
-                config.AddInMemoryCollection(new Dictionary<string, string?>
+                var surcharges = new Dictionary<string, string?>
                 {
                     ["ConnectionStrings:DefaultConnection"] = _database.ConnectionString,
                     ["JwtSettings:Secret"] = TacheApiFactory.TestJwtSecret,
-                });
+                };
+
+                if (RateLimitParMinute is { } limite)
+                    surcharges["Partage:RateLimitParMinute"] = limite.ToString();
+
+                config.AddInMemoryCollection(surcharges);
             });
 
             // Le démarrage de l'application (Program.cs) applique lui-même MigrateAsync

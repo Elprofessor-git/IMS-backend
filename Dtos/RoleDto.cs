@@ -36,6 +36,12 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutVoirFactures { get; set; }
         public bool PeutGererFactures { get; set; }
 
+        // Capacité transverse : autorise la création de liens de partage en lecture
+        // seule (LOT « Partage Sécurisé »). Présent dans RoleDto ET CreateRoleDto :
+        // un aller-retour GET puis PUT doit être sans perte, sinon enregistrer un
+        // rôle depuis l'écran suffirait à révoquer silencieusement le droit.
+        public bool PeutPartagerLiens { get; set; }
+
         // Parc machines à coudre
         public bool PeutVoirMachines { get; set; }
         public bool PeutGererMachines { get; set; }
@@ -98,6 +104,12 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutVoirRapports { get; set; }
         public bool PeutVoirFactures { get; set; }
         public bool PeutGererFactures { get; set; }
+
+        // Capacité transverse : autorise la création de liens de partage en lecture
+        // seule (LOT « Partage Sécurisé »). Présent dans RoleDto ET CreateRoleDto :
+        // un aller-retour GET puis PUT doit être sans perte, sinon enregistrer un
+        // rôle depuis l'écran suffirait à révoquer silencieusement le droit.
+        public bool PeutPartagerLiens { get; set; }
 
         // Parc machines à coudre
         public bool PeutVoirMachines { get; set; }

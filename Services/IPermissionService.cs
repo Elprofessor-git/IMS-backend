@@ -18,5 +18,12 @@ namespace Backend_Gestion_Magasin_API.Services
         /// Droit d'affecter une tâche à un autre utilisateur IMS.
         /// </summary>
         Task<bool> CanAssignerTachesAsync(string userId);
+
+        /// <summary>
+        /// Capacité transverse de créer des liens de partage en lecture seule.
+        /// Résolue depuis Role à CHAQUE appel, jamais depuis le jeton : la révocation
+        /// d'un droit doit être immédiate, sans réémission ni liste de révocation.
+        /// </summary>
+        Task<bool> CanPartagerLiensAsync(string userId);
     }
 }

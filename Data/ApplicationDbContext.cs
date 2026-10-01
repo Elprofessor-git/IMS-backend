@@ -75,6 +75,8 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<GmailAttachment> GmailAttachments { get; set; }
         public DbSet<EmailAiAnalysis> EmailAiAnalyses { get; set; }
         public DbSet<EmailAiReply> EmailAiReponses { get; set; }
+        public DbSet<ShareLink> ShareLinks { get; set; }
+        public DbSet<ShareLinkAccess> ShareLinkAccess { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1346,6 +1348,50 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<EmailAiReply>()
                 .HasIndex(r => new { r.GmailMessageId, r.GeneratedAt });
+
+            // ── Partage sécurisé (LOT « Partage Sécurisé ») ──────────────────────
+            // Toutes les configurations sont ADDITIVES : nouvelles tables, nouvelle
+            // colonne booléenne sur Role. Aucun DROP, aucune colonne existante modifiée.
+            modelBuilder.Entity<ShareLink>(b =>
+            {
+                b.HasIndex(l => l.TokenHash).IsUnique();
+
+                // Resolution du périmètre + purge des liens orphelins : l'index couvre
+                // le couple réellement interrogé (ScopeType + ScopeId).
+                b.HasIndex(l => new { l.ScopeType, l.ScopeId });
+
+                // Nettoyage périodique des liens expirés : index sur la date d'expiration.
+                b.HasIndex(l => l.ExpiresAtUtc);
+
+                // Le token n'est stocké que sous forme d'empreinte ; l'empreinte est
+                // donc la seule chose qu'une lecture de table puisse révéler.
+                b.Property(l => l.TokenHash).HasMaxLength(64).IsRequired();
+
+                b.HasOne(l => l.CreatedByUser)
+                    .WithMany()
+                    .HasForeignKey(l => l.CreatedByUserId)
+                    // Suppression d'un utilisateur : les liens qu'il a créés meurent
+                    // avec lui. Le secret ne survit pas à la personne qui l'a émis.
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ShareLinkAccess>(b =>
+            {
+                b.HasIndex(a => new { a.ShareLinkId, a.Date });
+
+                b.HasOne(a => a.ShareLink)
+                    .WithMany(l => l.Acces)
+                    .HasForeignKey(a => a.ShareLinkId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ADDITIF : une seule colonne booléenne, défaut false (ne pas accorder par
+            // omission). Les rôles existants perdent donc le droit de créer des liens
+            // tant qu'un administrateur ne l'a pas explicitement activé — c'est le
+            // seul sens sûr d'un défaut sur une capacité d'exposition de données.
+            modelBuilder.Entity<Role>()
+                .Property(r => r.PeutPartagerLiens)
+                .HasDefaultValue(false);
         }
     }
 }

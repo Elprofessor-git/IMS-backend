@@ -62,6 +62,12 @@ namespace Backend_Gestion_Magasin_API.Data
                 PeutValiderStock = true,
                 PeutConfirmerAchats = true,
                 PeutValiderImportations = true,
+                // L'administrateur peut créer des liens de partage. Sans cette ligne,
+                // le rôle Id=1 resterait à false et AUCUN utilisateur ne pourrait
+                // jamais créer un lien : EnsureAdminRole sort tôt (ligne 28-30) sur
+                // une base existante, donc la valeur devrait être corrigée à la main
+                // en SQL. On la pose explicitement à la création.
+                PeutPartagerLiens = true,
                 PeutVoirDashboard = true,
                 PeutVoirRapports = true,
                 PeutVoirFactures = true,
