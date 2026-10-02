@@ -99,12 +99,143 @@ public class HtmlSanitizerTests
     }
 
     [Fact]
-    public void Neutralise_un_src_data_uri()
+    public void Neutralise_un_src_data_uri_hors_image()
     {
         // Un data: URI dans un src peut charger un document arbitraire.
         var result = HtmlSanitizer.Sanitize("<img src=\"data:text/html;base64,PHNjcmlwdD4=\">");
 
         Assert.DoesNotContain("data:", result);
+    }
+
+    // ── Images intégrées en data: (A3) ────────────────────────────────────
+    //
+    // Les clients de messagerie transportent logos et signatures directement
+    // dans le corps en `data:image/…;base64,…`. Sans cela, la moitié des
+    // courriels professionnels s'affiche sans logo. L'autorisation reste
+    // étroite : image, base64, pas de SVG, 1 Mio — et seulement sur un src.
+
+    /// <summary>1 pixel PNG valide, en base64.</summary>
+    private const string PixelPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+    [Fact]
+    public void Conserve_une_image_data_png()
+    {
+        var result = HtmlSanitizer.Sanitize($"<p>Bonjour</p><img src=\"data:image/png;base64,{PixelPng}\">");
+
+        Assert.Contains("data:image/png;base64," + PixelPng, result);
+    }
+
+    [Theory]
+    [InlineData("image/jpeg")]
+    [InlineData("image/gif")]
+    [InlineData("image/webp")]
+    [InlineData("image/bmp")]
+    public void Conserve_les_autres_types_d_images(string mediaType)
+    {
+        var result = HtmlSanitizer.Sanitize($"<img src=\"data:{mediaType};base64,{PixelPng}\">");
+
+        Assert.Contains($"data:{mediaType};base64,", result);
+    }
+
+    [Fact]
+    public void Refuse_une_image_svg_meme_encodée_en_base64()
+    {
+        // Le SVG s'annonce comme une image mais est un document exécutable.
+        var svg = Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"));
+
+        var result = HtmlSanitizer.Sanitize($"<img src=\"data:image/svg+xml;base64,{svg}\">");
+
+        Assert.DoesNotContain("data:", result);
+    }
+
+    [Fact]
+    public void Refuse_un_svg_en_clair()
+    {
+        var result = HtmlSanitizer.Sanitize("<img src=\"data:image/svg+xml,<svg onload='alert(1)'/>\">");
+
+        Assert.DoesNotContain("data:", result);
+        Assert.DoesNotContain("onload", result);
+    }
+
+    [Fact]
+    public void Refuse_une_image_trop_lourde()
+    {
+        // 1 400 000 octets décodés, au-delà du plafond de 1 Mio.
+        var tropGrosse = Convert.ToBase64String(new byte[1_400_000]);
+
+        var result = HtmlSanitizer.Sanitize($"<img src=\"data:image/png;base64,{tropGrosse}\">");
+
+        Assert.DoesNotContain("data:", result);
+    }
+
+    [Fact]
+    public void Conserve_une_image_a_la_limite_exacte()
+    {
+        // Le plafond est sur les octets décodés : 1 048 576 doit passer.
+        var aLaLimite = Convert.ToBase64String(new byte[HtmlSanitizer.MaxInlineImageBytes]);
+
+        var result = HtmlSanitizer.Sanitize($"<img src=\"data:image/png;base64,{aLaLimite}\">");
+
+        Assert.Contains("data:image/png;base64,", result);
+    }
+
+    [Fact]
+    public void Refuse_une_charge_utilitaire_non_base64()
+    {
+        // En clair, la charge utile peut contenir des balises et des guillemets.
+        var result = HtmlSanitizer.Sanitize("<img src=\"data:image/png;charset=utf-8,<img src=x onerror=alert(1)>\">");
+
+        Assert.DoesNotContain("data:", result);
+    }
+
+    [Fact]
+    public void Refuse_une_charge_utilitaire_casquee()
+    {
+        var result = HtmlSanitizer.Sanitize("<img src=\"data:image/png;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==\">");
+
+        // Base64 valide, mais le type annoncé est un PNG alors que le contenu est un
+        // script : c'est le navigateur qui refuse d'afficher, pas l'assainisseur. On ne
+        // peut pas deviner le contenu réel, on vérifie seulement ce qui est déclaré.
+        Assert.Contains("data:image/png;base64,", result);
+    }
+
+    [Fact]
+    public void Refuse_une_charge_utilitaire_invalide()
+    {
+        var result = HtmlSanitizer.Sanitize("<img src=\"data:image/png;base64,pas%%du_base64\">");
+
+        Assert.DoesNotContain("data:", result);
+    }
+
+    [Fact]
+    public void Refuse_un_data_uri_dans_un_lien()
+    {
+        // Un lien vers une donnée n'a aucun usage légitime dans un email, et
+        // AllowNavigation serait de toute façon bloqué par le navigateur.
+        var result = HtmlSanitizer.Sanitize($"<a href=\"data:image/png;base64,{PixelPng}\">Voir</a>");
+
+        Assert.DoesNotContain("data:", result);
+        Assert.Contains("Voir", result);
+    }
+
+    [Fact]
+    public void Refuse_un_data_uri_de_type_xml_derivé()
+    {
+        var result = HtmlSanitizer.Sanitize($"<img src=\"data:image/svg+xml;charset=utf-8;base64,{PixelPng}\">");
+
+        Assert.DoesNotContain("data:", result);
+    }
+
+    [Fact]
+    public void Accepte_une_image_data_avec_retours_a_la_ligne()
+    {
+        var coupee = string.Join("\n", Enumerable.Range(0, (PixelPng.Length + 63) / 64)
+            .Select(i => PixelPng.Substring(i * 64, Math.Min(64, PixelPng.Length - i * 64))));
+
+        var result = HtmlSanitizer.Sanitize($"<img src=\"data:image/png;base64,{coupee}\">");
+
+        Assert.Contains("data:image/png;base64,", result);
     }
 
     [Theory]

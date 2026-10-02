@@ -46,6 +46,28 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
             "http", "https", "mailto", "tel", "cid"
         };
 
+        /// <summary>
+        /// Taille maximale d'une image intégrée en <c>data:</c> (A3) : 1 Mio.
+        /// <para>
+        /// Ce n'est pas un artisanat de sécurité — les images distantes ne sont
+        /// pas bloquées ici. C'est une limite de RESSOURCE : le HTML est stocké en base
+        /// et renvoyé à chaque ouverture du message ; une signature de 4 Mo ferait gonfler
+        /// la table et le temps de rendu pour rien. Au-delà, l'image est retirée et
+        /// l'expéditeur peut renvoyer la pièce jointe, qui est déjà gérée.
+        /// </para>
+        /// </summary>
+        public const int MaxInlineImageBytes = 1024 * 1024;
+
+        /// <summary>
+        /// Type MIME de données interdit même s'il est une image : le SVG est un document
+        /// XML qui peut porter du script, des <c>&lt;foreignObject&gt;</c> et des
+        /// <c>href</c> vers des ressources externes. Autorisé dans un attribut ordinaire, il
+        /// rouvrirait exactement la faille que l'assainissement ferme partout ailleurs.
+        /// </summary>
+        private static bool IsForbiddenInlineImageType(string mediaType) =>
+            mediaType.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase)
+            || mediaType.EndsWith("+xml", StringComparison.OrdinalIgnoreCase);
+
         // Nettoyage préalable des constructions que l'analyseur regex ne verrait pas
         // correctement (commentaires, CDATA) : sans cela, « <!-- <script> --> » peut
         // devenir un vrai script une fois resérialisé.
@@ -197,7 +219,17 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
                 var colon = compact.IndexOf(':');
                 var scheme = colon > 0 ? compact[..colon] : "";
 
-                // "data:" est exclu : il permet de charger un document arbitraire.
+                // « data: » n'est accepté que sur une image intégrée dans un <img> (A3) :
+                // c'est ainsi que les clients de messagerie transportent un logo ou une
+                // signature quand la pièce jointe est elle-même intégrée au corps. Partout
+                // ailleurs, un data: URI peut charger un document arbitraire — d'où le refus
+                // par défaut, y compris dans un href.
+                if (scheme is "data" or "DATA")
+                {
+                    if (tag != "img" || attribute != "src") return null;
+                    return SanitizeInlineDataImage(decoded);
+                }
+
                 if (!AllowedSchemes.Contains(scheme))
                     return null;
 
@@ -228,6 +260,53 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
 
         private static string EscapeAttribute(string value) =>
             value.Replace("&", "&amp;").Replace("\"", "&quot;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+        /// <summary>
+        /// Valide un <c>data:image/…;base64,…</c> destiné au <c>src</c> d'un <c>img</c>.
+        /// <para>
+        /// Quatre conditions, toutes nécessaires : le type doit être une image (sinon un
+        /// document HTML ou un script se glisse dans le message), le SVG est exclu même
+        /// s'il s'annonce comme une image, les données doivent être en base64 (une forme en
+        /// clair peut contenir des balises et des guillemets), et la taille décodée doit
+        /// tenir dans <see cref="MaxInlineImageBytes"/>. Une image refusée disparaît de
+        /// l'attribut : mieux vaut une image manquante qu'une page qui s'exécute.
+        /// </para>
+        /// </summary>
+        private static string? SanitizeInlineDataImage(string value)
+        {
+            var comma = value.IndexOf(',');
+            if (comma < 0) return null;
+
+            var meta = value["data:".Length..comma];
+            var payload = value[(comma + 1)..];
+
+            // Seul « base64 » est accepté : un paramètre supplémentaire (charset=…,
+            // filename=…) n'apporte rien ici et rouvrirait un chemin d'analyse de plus.
+            var parameters = meta.Split(';');
+            if (parameters.Length != 2
+                || !parameters[1].Trim().Equals("base64", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var mediaType = parameters[0].Trim();
+            if (!mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return null;
+            if (IsForbiddenInlineImageType(mediaType)) return null;
+
+            // Le HTML d'un email peut être coupé à un octet près : un retour à la ligne
+            // dans la charge utile est normal et sans effet sur les données décodées.
+            payload = Regex.Replace(payload, @"\s+", "");
+
+            if (payload.Length == 0 || payload.Length % 4 != 0) return null;
+            if (!Regex.IsMatch(payload, @"^[A-Za-z0-9+/]+={0,2}$")) return null;
+
+            // Taille décodée : 4 caractères base64 pour 3 octets, moins le remplissage final.
+            var padding = payload.EndsWith("==", StringComparison.Ordinal) ? 2
+                : payload.EndsWith("=", StringComparison.Ordinal) ? 1
+                : 0;
+            var decodedBytes = (payload.Length / 4) * 3 - padding;
+            if (decodedBytes > MaxInlineImageBytes) return null;
+
+            return EscapeAttribute(value);
+        }
 
         /// <summary>Découpe une chaîne d'attributs en paires (nom, valeur), tolérante aux guillemets absents.</summary>
         private static IEnumerable<(string Name, string? Value)> EnumerateAttributes(string raw)
