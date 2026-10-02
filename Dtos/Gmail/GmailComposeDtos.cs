@@ -59,6 +59,32 @@ namespace Backend_Gestion_Magasin_API.Dtos.Gmail
         public List<string> Messages { get; set; } = new();
     }
 
+    /// <summary>
+    /// Rapport du rattrapage des pièces jointes manquantes (A2b).
+    /// <para>
+    /// <see cref="Examines"/> compte les messages réellement relus auprès de Gmail et
+    /// <see cref="Creees"/> les lignes de pièces créées. Il n'y a pas de compteur de
+    /// reclassification ici : le rattrapage ne traite que des messages qui n'ont AUCUNE
+    /// ligne, donc la qualification issue du parseur s'applique à la création. Les lignes
+    /// déjà présentes sont le ressort du rapport de requalification (A2).
+    /// <see cref="Restants"/> indique le nombre de messages encore candidats APRÈS ce
+    /// passage : tant qu'il est positif, une relance reprend exactement où celle-ci s'est
+    /// arrêtée, sans curseur à transporter.
+    /// </para>
+    /// </summary>
+    public class AttachmentBackfillDto
+    {
+        public int Examines { get; set; }
+        public int Creees { get; set; }
+        public int Erreurs { get; set; }
+
+        /// <summary>Messages candidats non couverts par le budget de ce passage.</summary>
+        public int Restants { get; set; }
+
+        /// <summary>Détail par message — nécessaire pour un lancement à la demande supervisé.</summary>
+        public List<string> Messages { get; set; } = new();
+    }
+
     public class ComposeEmailResultDto
     {
         public string GmailMessageId { get; set; } = null!;

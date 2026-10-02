@@ -82,17 +82,53 @@ public sealed class RecordingGmailApiService : IGmailApiService
 
     public Task<List<string>> ListMessageIdsAsync(GmailConnection c, string? q, int m = 30, string? p = null) =>
         throw Unexpected();
-    public Task<(List<string> Ids, string? NextPageToken)> ListMessageIdsPageAsync(
-        GmailConnection c, string? q, int m = 30, string? p = null) => throw Unexpected();
-    // Qualification A2 : la maintenance relit le message ENTIER chez Gmail (c'est la
-    // seule façon de savoir quels cid: le corps référence). Le double sert donc des
-    // messages complets, déjà qualifiés, et compte les lectures pour prouver qu'un
+    // Qualification A2 et rattrapage A2b : la maintenance relit le message ENTIER chez
+    // Gmail (c'est la seule façon de savoir quels cid: le corps référence). Le double sert
+    // donc des messages complets, déjà qualifiés, et compte les lectures pour prouver qu'un
     // appel refusé ne consomme aucun quota.
     public ConcurrentDictionary<string, GmailApiMessage> MessageCatalog { get; } = new();
     public ConcurrentQueue<string> MessageListings { get; } = new();
 
+    // Rattrapage A2b : l'endpoint recense d'abord les messages que Gmail déclare porteurs
+    // d'une pièce jointe (« has:attachment »), parce que recenser coûte 5 unités pour 100
+    // identifiants quand une lecture complète en coûte 5 pour un seul message.
+    public ConcurrentDictionary<string, List<string>> ListedMessageIds { get; } = new();
+    public ConcurrentQueue<string> Searches { get; } = new();
+
+    /// <summary>Requêtes « messages.list » qui doivent échouer (quota, réseau).</summary>
+    public ConcurrentBag<string> FailingSearchQueries { get; } = new();
+
     /// <summary>Identifiants dont la lecture doit échouer (message supprimé, quota, réseau).</summary>
     public ConcurrentBag<string> FailingMessageIds { get; } = new();
+
+    public Task<(List<string> Ids, string? NextPageToken)> ListMessageIdsPageAsync(
+        GmailConnection c, string? q, int m = 30, string? p = null)
+    {
+        var query = string.IsNullOrWhiteSpace(q) ? "in:inbox" : q!;
+        Searches.Enqueue(query);
+        if (FailingSearchQueries.Contains(query))
+            throw new InvalidOperationException($"Erreur Gmail simulée sur messages.list({query}).");
+
+        // Une seule page : le double n'a pas besoin de simuler une boîte de plusieurs
+        // milliers de messages, et les tests n'ont jamais plus de quelques dizaines de messages.
+        var ids = ListedMessageIds.TryGetValue(query, out var known) ? known : new List<string>();
+        return Task.FromResult((ids, (string?)null));
+    }
+
+    /// <summary>Déclare les identifiants qu'une recherche Gmail doit renvoyer.</summary>
+    public void DeclareSearchResults(string query, params string[] ids) =>
+        ListedMessageIds[query] = ids.ToList();
+
+    /// <summary>
+    /// Oublie les pannes simulées. Les tests d'une classe partagent le même double : une
+    /// panne laissée active fausserait silencieusement le test suivant, qui lirait
+    /// « aucun candidat » alors qu'il a lui-même préparé son catalogue.
+    /// </summary>
+    public void ResetSimulatedFailures()
+    {
+        while (FailingSearchQueries.TryTake(out _)) { }
+        while (FailingMessageIds.TryTake(out _)) { }
+    }
 
     public Task<GmailApiMessage> GetMessageAsync(GmailConnection c, string id)
     {
@@ -142,6 +178,7 @@ public sealed class RecordingGmailApiService : IGmailApiService
         HasAttachments: pieces.Any(p => !p.IsInline),
         LabelIds: new List<string> { "INBOX" },
         Attachments: pieces);
+
     // Brouillons et envois : enregistrés pour que le test puisse asserter le texte
     // RÉELLEMENT transmis à Gmail. C'est ce que la régression A1 vérifie.
     public sealed record DraftCall(
@@ -208,6 +245,13 @@ public sealed class RecordingGmailApiService : IGmailApiService
 public class GmailActionApiFactory : TacheApiFactory
 {
     public RecordingGmailApiService Recorder { get; } = new();
+
+    /// <summary>
+    /// Remet le double à zéro pour les pannes simulées. Appelé en début de chaque test :
+    /// les tests d'une classe partagent la même instance, et une panne oubliée rendrait
+    /// le suivant vert ou rouge pour la mauvaise raison.
+    /// </summary>
+    public void ResetSimulatedFailures() => Recorder.ResetSimulatedFailures();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

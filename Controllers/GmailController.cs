@@ -259,7 +259,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     ReceivedAt = m.ReceivedAt,
                     IsRead = m.IsRead,
                     IsStarred = m.IsStarred,
-                    HasAttachments = m.HasAttachments,
+                    // Le drapeau stocké vaut ce que Gmail a répondu AU MOMENT de la
+                    // synchronisation : il est faux pour tous les messages importés avant
+                    // que le produit ne stocke les pièces. Le rattrapage A2b ne réécrit
+                    // aucun message (condition du cahier des charges), donc l'indicateur
+                    // est DÉDUIT des pièces réellement présentes. Un EXISTS par message
+                    // paginé, pas de jointure ni de double lecture.
+                    HasAttachments = m.HasAttachments
+                        || _context.GmailAttachments.Any(a => a.GmailMessageId == m.Id && !a.IsInline),
                     HasTaskSuggestion = m.Analyses.Any(a => a.IsTask),
                     CreatedTaskId = m.CreatedTaskId
                 })
@@ -698,6 +705,19 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 })
                 .ToListAsync();
 
+            // Trombone des fils : le drapeau stocké, MIS EN OR avec les pièces réellement
+            // présentes. Le drapeau vaut ce que Gmail a répondu au moment de la
+            // synchronisation — il est donc faux pour tout message importé avant que le
+            // produit ne stocke les pièces, y compris après le rattrapage A2b, qui ne
+            // réécrit aucun message. Une seule requête, bornée par les lignes déjà lues
+            // ci-dessus : ni jointure, ni seconde lecture de la table des messages.
+            var pageMessageIds = pageMessages.Select(m => m.Id).ToList();
+            var idsAvecPiece = (await _context.GmailAttachments
+                    .Where(a => !a.IsInline && pageMessageIds.Contains(a.GmailMessageId))
+                    .Select(a => a.GmailMessageId)
+                    .ToListAsync())
+                .ToHashSet();
+
             // Regroupement et comptage client-side : le dernier message du fil reste celui
             // dont (ReceivedAt, Id) est maximal, dragage des égalités de date.
             // Suivi et pièces jointes ne sont PAS lus sur ce dernier message : Gmail rattache
@@ -714,7 +734,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                         Count: g.Count(),
                         Unread: g.Count(m => !m.IsRead),
                         IsStarred: g.Any(m => m.IsStarred),
-                        HasAttachments: g.Any(m => m.HasAttachments),
+                        HasAttachments: g.Any(m => m.HasAttachments || idsAvecPiece.Contains(m.Id)),
                         HasSuggestion: g.Any(m => m.HasTaskSuggestion),
                         Participants: g.Select(m => m.From).Where(f => f != null).Select(f => f!).Distinct().ToList()));
 
@@ -1451,22 +1471,26 @@ namespace Backend_Gestion_Magasin_API.Controllers
         /// </summary>
         private const int AttachmentQualifierMinIntervalMs = 400;
 
+        /// <summary>
+        /// Nombre maximal de pages « messages.list » parcourues pour recenser les messages
+        /// porteurs d'une pièce jointe. Une page = 100 identifiants pour 5 unités de quota,
+        /// contre 5 unités par message relu : recenser est donc 20 fois moins cher que
+        /// vérifier. Le plafond évite qu'un dossier Gmail de plusieurs dizaines de milliers
+        /// de messages fasse tourner une page HTTP pendant des minutes.
+        /// </summary>
+        private const int AttachmentBackfillMaxListPages = 10;
+
+        /// <summary>Requête Gmail qui recense les messages porteurs d'une pièce jointe.</summary>
+        private const string GmailHasAttachmentQuery = "has:attachment";
+
         [HttpPost("maintenance/attachments/requalify")]
         [RequireModulePermission("courriels", requireWrite: true)]
         public async Task<IActionResult> RequalifyAttachments(
             [FromQuery] int? batchSize,
             [FromQuery] int? maxMessages)
         {
-            var userId = _userManager.GetUserId(User);
-            var demandeur = userId != null
-                ? await _userManager.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == userId)
-                : null;
-
-            if (demandeur?.Role?.EstAdministrateur != true)
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    message = "Réservé aux administrateurs : la requalification des pièces jointes consomme le quota Gmail du compte concerné."
-                });
+            var garde = await GardeMaintenanceAttachmentsAsync("la requalification des pièces jointes");
+            if (garde != null) return garde;
 
             var connection = await GetActiveConnectionAsync();
             if (connection == null)
@@ -1592,6 +1616,218 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Erreurs = erreurs,
                 Messages = details
             });
+        }
+
+        // Les messages antérieurs à l'import des pièces jointes n'ont AUCUNE ligne en base :
+        // le trombone n'apparaît donc pas, et rien dans le produit ne les rattrape tout seul.
+        // Cet endpoint crée ces lignes manquantes — la qualification A2
+        // (Content-Disposition / cid: référencé) est appliquée À LA CRÉATION, puisqu'elle
+        // sort du parseur : rien à reclasser sur une ligne qui n'existait pas. Les lignes
+        // DÉJÀ présentes, elles, sont traitées par la requalification ci-dessus.
+        // Mêmes garanties : administrateur seul, jamais automatique, idempotent, borné par
+        // lot avec pause entre deux lectures, et AUCUN message modifié.
+
+        [HttpPost("maintenance/attachments/rattrapage")]
+        [RequireModulePermission("courriels", requireWrite: true)]
+        public async Task<IActionResult> BackfillAttachments(
+            [FromQuery] int? batchSize,
+            [FromQuery] int? maxMessages)
+        {
+            var garde = await GardeMaintenanceAttachmentsAsync("le rattrapage des pièces jointes");
+            if (garde != null) return garde;
+
+            var connection = await GetActiveConnectionAsync();
+            if (connection == null) return BadRequest(new { message = "Aucun compte Gmail connecté." });
+
+            var batch = Math.Clamp(batchSize ?? AttachmentQualifierMaxBatch, 1, AttachmentQualifierMaxBatch);
+            var budget = Math.Clamp(
+                maxMessages ?? AttachmentQualifierDefaultBudget, 1, AttachmentQualifierMaxBudget);
+
+            // Recenser les messages que Gmail déclare porteurs d'une pièce jointe coûte
+            // 5 unités par tranche de 100 identifiants, quand une lecture complète en coûte
+            // 5 pour UN message. Sans ce filtre, il faudrait relire toute la boîte pour
+            // découvrir que la plupart des messages n'ont rien — et les messages réellement
+            // sans pièce resteraient candidats éternellement, à chaque relance.
+            // En cas d'échec du recensement, on continue sans filtre plutôt que de ne rien
+            // faire du tout : une maintenance déclenchée à la main ne doit pas rendre les
+            // bras écartés en silence, et le budget borne de toute façon la facture.
+            var idsAvecPieces = new HashSet<string>(StringComparer.Ordinal);
+            var recensementEchoue = false;
+            try
+            {
+                string? pageToken = null;
+                for (var page = 0; page < AttachmentBackfillMaxListPages; page++)
+                {
+                    var (ids, next) = await _gmailApi.ListMessageIdsPageAsync(
+                        connection, GmailHasAttachmentQuery, 100, pageToken);
+                    foreach (var id in ids) idsAvecPieces.Add(id);
+
+                    if (string.IsNullOrEmpty(next)) break;
+                    pageToken = next;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                recensementEchoue = true;
+                _logger.LogWarning(ex, "Rattrapage A2b : recensement « has:attachment » indisponible");
+            }
+
+            // Candidats : messages synchronisés de cette connexion, sans AUCUNE ligne de
+            // pièce jointe, et — si le recensement a abouti — déclarés porteurs d'une pièce
+            // par Gmail. Ordre stable par Id : la reprise est donc naturelle, un message
+            // rattrapé quittant la liste pour de bon.
+            IQueryable<GmailMessage> query = _context.GmailMessages
+                .Where(m => m.GmailConnectionId == connection.Id && m.IsSynchronized)
+                .Where(m => !_context.GmailAttachments.Any(a => a.GmailMessageId == m.Id));
+
+            if (!recensementEchoue)
+                query = query.Where(m => idsAvecPieces.Contains(m.GmailMessageId));
+
+            // Ordre stable par Id : la reprise est naturelle, un message rattrappé quittant
+            // la liste pour de bon.
+            query = query.OrderBy(m => m.Id);
+
+            var candidats = await query
+                .Select(m => new { m.Id, m.GmailMessageId })
+                .Take(budget + 1)
+                .ToListAsync(HttpContext.RequestAborted);
+
+            // Un message de plus que le budget : c'est la preuve qu'il reste du travail,
+            // et c'est ce qui permet à l'interface d'afficher « relancez ».
+            var restants = candidats.Count > budget ? candidats.Count - budget : 0;
+            if (restants > 0) candidats.RemoveAt(candidats.Count - 1);
+
+            if (candidats.Count == 0)
+                return Ok(new AttachmentBackfillDto
+                {
+                    Restants = 0,
+                    Messages = new List<string>()
+                });
+
+            var traites = 0;
+            var creees = 0;
+            var erreurs = 0;
+            var details = new List<string>();
+
+            for (var offset = 0; offset < candidats.Count; offset += batch)
+            {
+                foreach (var candidat in candidats.Skip(offset).Take(batch))
+                {
+                    if (HttpContext.RequestAborted.IsCancellationRequested)
+                        return Ok(BuildBackfillReport(traites, creees, erreurs, restants, details));
+
+                    if (traites > 0)
+                    {
+                        // Une lecture par message, comme en A2 : c'est le rythme qui protège
+                        // le quota, pas la taille du lot.
+                        await Task.Delay(AttachmentQualifierMinIntervalMs, HttpContext.RequestAborted);
+                    }
+
+                    traites++;
+                    try
+                    {
+                        // Lecture COMPLÈTE, pour la même raison qu'en A2 : la qualification
+                        // « inline » exige de savoir quels cid: le corps référence. C'est le
+                        // SEUL appel qui consomme du quota Gmail par message.
+                        var apiParts = (await _gmailApi.GetMessageAsync(connection, candidat.GmailMessageId))
+                            .Attachments;
+
+                        // Le candidat a été choisi SANS aucune ligne : tout ce que Gmail
+                        // renvoie est donc à créer. On relit la table avant d'écrire
+                        // malgré tout — une maintenance lancée en parallèle ne doit pas
+                        // violer l'unicité (GmailMessageId, GmailAttachmentId).
+                        var dejaEnBase = await _context.GmailAttachments
+                            .Where(a => a.GmailMessageId == candidat.Id)
+                            .Select(a => a.GmailAttachmentId)
+                            .ToListAsync(HttpContext.RequestAborted);
+                        var connues = dejaEnBase.ToHashSet(StringComparer.Ordinal);
+
+                        var creates = 0;
+
+                        foreach (var part in apiParts)
+                        {
+                            if (!connues.Add(part.GmailAttachmentId)) continue;
+
+                            // La ligne EST la seule chose qui manquait : le contenu n'a
+                            // jamais été téléchargé, il est relu à la demande depuis
+                            // Gmail quand l'utilisateur ouvre la pièce.
+                            _context.GmailAttachments.Add(new GmailAttachment
+                            {
+                                GmailMessageId = candidat.Id,
+                                GmailAttachmentId = part.GmailAttachmentId,
+                                FileName = part.FileName,
+                                MimeType = part.MimeType,
+                                SizeBytes = part.SizeBytes,
+                                IsInline = part.IsInline,
+                                ContentId = part.ContentId,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                            creates++;
+                        }
+
+                        if (creates > 0)
+                        {
+                            await _context.SaveChangesAsync(HttpContext.RequestAborted);
+                            creees += creates;
+                            details.Add($"Message {candidat.Id} : {creates} pièce(s) créée(s).");
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Un message en erreur (supprimé côté Gmail, quota, réseau) ne doit
+                        // pas interrompre le rattrapage : on le compte et on continue.
+                        erreurs++;
+                        _logger.LogWarning(
+                            ex, "Rattrapage A2b : message {MessageId} ignoré", candidat.Id);
+                        details.Add($"Message {candidat.Id} : ignoré ({ex.GetType().Name}).");
+                    }
+                }
+            }
+
+            return Ok(BuildBackfillReport(traites, creees, erreurs, restants, details));
+        }
+
+        private static AttachmentBackfillDto BuildBackfillReport(
+            int traites, int creees, int erreurs, int restants, List<string> details) =>
+            new()
+            {
+                Examines = traites,
+                Creees = creees,
+                Erreurs = erreurs,
+                Restants = restants,
+                Messages = details
+            };
+
+        /// <summary>
+        /// Garde commun des maintenances Gmail : administrateur de l'application, sinon 403.
+        /// <para>
+        /// Le rôle applicatif ne suffit pas — ces endpoints relancent une boîte Gmail et
+        /// consomment le quota du compte qui la porte, ce qui n'a rien à voir avec le
+        /// droit d'écrire dans le module « courriels ».
+        /// </para>
+        /// </summary>
+        private async Task<IActionResult?> GardeMaintenanceAttachmentsAsync(string operation)
+        {
+            var userId = _userManager.GetUserId(User);
+            var demandeur = userId != null
+                ? await _userManager.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == userId)
+                : null;
+
+            if (demandeur?.Role?.EstAdministrateur != true)
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    message = $"Réservé aux administrateurs : {operation} consomme le quota Gmail du compte concerné."
+                });
+
+            return null;
         }
 
         /// <summary>Valide et normalise une liste d'adresses : une adresse invalide bloque tout l'envoi.</summary>
