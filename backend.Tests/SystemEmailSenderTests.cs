@@ -234,8 +234,8 @@ internal sealed class RecordingSendGmailApi : IGmailApiService
     public Task<List<string>> ListMessageIdsAsync(GmailConnection c, string? q, int m = 30, string? p = null) => throw NonSimule();
     public Task<(List<string> Ids, string? NextPageToken)> ListMessageIdsPageAsync(GmailConnection c, string? q, int m = 30, string? p = null) => throw NonSimule();
     public Task<GmailApiMessage> GetMessageAsync(GmailConnection c, string id) => throw NonSimule();
-    public Task<string> CreateDraftAsync(GmailConnection c, string to, string subject, string body, string? threadId, string? inReplyTo) => throw NonSimule();
-    public Task UpdateDraftAsync(GmailConnection c, string draftId, string to, string subject, string body, string? threadId, string? inReplyTo) => throw NonSimule();
+    public Task<string> CreateDraftAsync(GmailConnection c, string to, string subject, string body, string? threadId, string? inReplyTo, IReadOnlyList<(string FileName, string MimeType, byte[] Content)>? attachments = null) => throw NonSimule();
+    public Task UpdateDraftAsync(GmailConnection c, string draftId, string to, string subject, string body, string? threadId, string? inReplyTo, IReadOnlyList<(string FileName, string MimeType, byte[] Content)>? attachments = null) => throw NonSimule();
     public Task<string> SendDraftAsync(GmailConnection c, string draftId) => throw NonSimule();
     public Task DeleteDraftAsync(GmailConnection c, string draftId) => throw NonSimule();
     public Task ModifyMessageLabelsAsync(GmailConnection c, string id, IReadOnlyCollection<string> a, IReadOnlyCollection<string> r) => throw NonSimule();

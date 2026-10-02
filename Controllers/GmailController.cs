@@ -1096,7 +1096,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // à l'envoi — perte silencieuse, l'API renvoyant un succès.
         [HttpPost("replies/{id:int}/send")]
         [RequireModulePermission("courriels", requireWrite: true)]
-        public async Task<ActionResult<EmailAiReplyDto>> SendReply(int id, [FromBody] UpdateReplyDto dto)
+        public async Task<ActionResult<EmailAiReplyDto>> SendReply(int id, [FromBody] SendReplyDto dto)
         {
             var reply = await GetOwnedReplyAsync(id);
             if (reply == null) return NotFound(new { message = "Brouillon introuvable." });
@@ -1106,6 +1106,17 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             if (string.IsNullOrWhiteSpace(dto.Body))
                 return BadRequest(new { message = "Le corps de la réponse est obligatoire." });
+
+            // Même validation et même plafond que la composition d'un nouveau message
+            // (DecodeAttachments, extrait commun) : une réponse ne doit pas pouvoir
+            // envoyer ce qu'un nouveau message refuse.
+            var decoded = DecodeAttachments(dto.Attachments);
+            if (!decoded.Ok)
+            {
+                return decoded.TropGros
+                    ? StatusCode(StatusCodes.Status413PayloadTooLarge, new { message = decoded.Erreur })
+                    : BadRequest(new { message = decoded.Erreur });
+            }
 
             var connection = await GetActiveConnectionAsync();
             if (connection == null) return BadRequest(new { message = "Aucun compte Gmail connecté." });
@@ -1129,11 +1140,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             try
             {
+                var pieces = (IReadOnlyList<(string FileName, string MimeType, byte[] Content)>)decoded.Pieces;
+
                 if (string.IsNullOrEmpty(reply.GmailDraftId))
                 {
                     reply.GmailDraftId = await _gmailApi.CreateDraftAsync(
                         connection, to, subject, reply.Body,
-                        message.GmailThreadId, message.Rfc822MessageId);
+                        message.GmailThreadId, message.Rfc822MessageId, pieces);
                 }
                 else
                 {
@@ -1141,7 +1154,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     // On le RÉÉCRIT avant d'envoyer, sinon c'est ce texte-là qui part.
                     await _gmailApi.UpdateDraftAsync(
                         connection, reply.GmailDraftId, to, subject, reply.Body,
-                        message.GmailThreadId, message.Rfc822MessageId);
+                        message.GmailThreadId, message.Rfc822MessageId, pieces);
                 }
 
                 reply.GmailSentMessageId = await _gmailApi.SendDraftAsync(connection, reply.GmailDraftId!);
@@ -1264,6 +1277,53 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
         }
 
+        /// <summary>
+        /// Valide et décode les pièces jointes d'un envoi. Partagé par la composition d'un
+        /// nouveau message et par la réponse à un email (A4) : les deux doivent appliquer
+        /// EXACTEMENT le même plafond, sinon la réponse autoriserait ce que la composition
+        /// refuse — et l'écart se découvrirait à l'envoi, sur le message le plus sensible.
+        /// </summary>
+        private (bool Ok, bool TropGros, string? Erreur,
+            List<(string FileName, string MimeType, byte[] Content)> Pieces, long TotalBytes)
+            DecodeAttachments(List<ComposeAttachmentDto>? incoming)
+        {
+            var pieces = new List<(string, string, byte[])>();
+            long totalBytes = 0;
+
+            foreach (var attachment in incoming ?? new List<ComposeAttachmentDto>())
+            {
+                byte[] content;
+                try
+                {
+                    content = Convert.FromBase64String(attachment.ContentBase64);
+                }
+                catch (FormatException)
+                {
+                    return (false, false,
+                        $"Le contenu de « {attachment.FileName} » n'est pas du Base64 valide.",
+                        pieces, totalBytes);
+                }
+
+                totalBytes += content.LongLength;
+
+                // Plafond appliqué AVANT l'envoi : c'est le serveur qui décide. Une
+                // validation uniquement côté navigateur laisserait passer un appel direct.
+                if (totalBytes > MaxComposeAttachmentBytes)
+                {
+                    return (false, true,
+                        $"Les pièces jointes dépassent la limite de {MaxComposeAttachmentBytes / (1024 * 1024)} Mo ({totalBytes / (1024 * 1024.0):F1} Mo envoyés).",
+                        pieces, totalBytes);
+                }
+
+                pieces.Add((
+                    string.IsNullOrWhiteSpace(attachment.FileName) ? "piece-jointe" : attachment.FileName,
+                    string.IsNullOrWhiteSpace(attachment.MimeType) ? "application/octet-stream" : attachment.MimeType,
+                    content));
+            }
+
+            return (true, false, null, pieces, totalBytes);
+        }
+
 
         // POST: api/gmail/send — compose et envoie un email via la boîte Gmail connectée.
         // Ne crée AUCUNE ligne en base : ni EmailAiReply, ni EmailAiAnalysis. La composition
@@ -1288,35 +1348,16 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var attachments = new List<(string FileName, string MimeType, byte[] Content)>();
             long totalBytes = 0;
 
-            foreach (var attachment in dto.Attachments ?? new List<ComposeAttachmentDto>())
+            var decoded = DecodeAttachments(dto.Attachments);
+            if (!decoded.Ok)
             {
-                byte[] content;
-                try
-                {
-                    content = Convert.FromBase64String(attachment.ContentBase64);
-                }
-                catch (FormatException)
-                {
-                    return BadRequest(new { message = $"Le contenu de « {attachment.FileName} » n'est pas du Base64 valide." });
-                }
-
-                totalBytes += content.LongLength;
-
-                // Plafond appliqué AVANT l'envoi : c'est le serveur qui décide. Une
-                // validation uniquement côté navigateur laisserait passer un appel direct.
-                if (totalBytes > MaxComposeAttachmentBytes)
-                {
-                    return StatusCode(StatusCodes.Status413PayloadTooLarge, new
-                    {
-                        message = $"Les pièces jointes dépassent la limite de {MaxComposeAttachmentBytes / (1024 * 1024)} Mo ({totalBytes / (1024 * 1024.0):F1} Mo envoyés)."
-                    });
-                }
-
-                attachments.Add((
-                    string.IsNullOrWhiteSpace(attachment.FileName) ? "piece-jointe" : attachment.FileName,
-                    string.IsNullOrWhiteSpace(attachment.MimeType) ? "application/octet-stream" : attachment.MimeType,
-                    content));
+                return decoded.TropGros
+                    ? StatusCode(StatusCodes.Status413PayloadTooLarge, new { message = decoded.Erreur })
+                    : BadRequest(new { message = decoded.Erreur });
             }
+
+            attachments.AddRange(decoded.Pieces);
+            totalBytes = decoded.TotalBytes;
 
             // Le fil de réponse est résolu côté IMS : on n'accepte qu'un GmailMessageId
             // appartenant à l'utilisateur, jamais un identifiant arbitraire fourni par le client.

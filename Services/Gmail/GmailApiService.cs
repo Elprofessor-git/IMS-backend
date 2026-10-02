@@ -40,8 +40,12 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         Task<(List<string> Ids, string? NextPageToken)> ListMessageIdsPageAsync(GmailConnection connection, string? query, int maxResults = 30, string? pageToken = null);
         Task<GmailApiMessage> GetMessageAsync(GmailConnection connection, string gmailMessageId);
 
-        /// <summary>Crée un brouillon et renvoie son identifiant.</summary>
-        Task<string> CreateDraftAsync(GmailConnection connection, string to, string subject, string body, string? threadId, string? inReplyToRfc822MessageId);
+        /// <summary>
+        /// Crée un brouillon, éventuellement porteur de pièces jointes (A4). Sans pièce
+        /// jointe, le message est construit en text/plain simple : c'est ce qu'attendent
+        /// les lecteurs qui n'affichent pas le HTML.
+        /// </summary>
+        Task<string> CreateDraftAsync(GmailConnection connection, string to, string subject, string body, string? threadId, string? inReplyToRfc822MessageId, IReadOnlyList<(string FileName, string MimeType, byte[] Content)>? attachments = null);
 
         /// <summary>
         /// Réécrit le contenu d'un brouillon Gmail existant (users.drafts.update).
@@ -51,7 +55,7 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         /// « CreateDraft + Send » produirait un doublon et laisserait le vieux brouillon.
         /// </para>
         /// </summary>
-        Task UpdateDraftAsync(GmailConnection connection, string draftId, string to, string subject, string body, string? threadId, string? inReplyToRfc822MessageId);
+        Task UpdateDraftAsync(GmailConnection connection, string draftId, string to, string subject, string body, string? threadId, string? inReplyToRfc822MessageId, IReadOnlyList<(string FileName, string MimeType, byte[] Content)>? attachments = null);
 
         Task<string> SendDraftAsync(GmailConnection connection, string draftId);
         Task DeleteDraftAsync(GmailConnection connection, string draftId);
@@ -257,17 +261,15 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         /// <summary>
         /// Parcourt l'arbre MIME et relève les pièces jointes ET les images intégrées au corps.
         /// <para>
-        /// Une partie est « inline » UNIQUEMENT si elle est une image, qu'aucun
-        /// <c>Content-Disposition: attachment</c> ne s'y oppose, et que le corps la
-        /// référence par <c>cid:</c>. Une pièce ordinaire qui porterait par hasard un
-        /// Content-ID reste donc une pièce jointe visible. Les deux catégories alimentent
-        /// la même table, avec <c>IsInline</c> pour les distinguer — la liste de pièces
-        /// jointes de l'interface ne montre que les premières.
+        /// Une partie est « inline » quand elle porte un en-tête <c>Content-ID</c> : c'est le
+        /// mécanisme utilisé par Gmail et Outlook pour les logos et signatures. Les deux
+        /// catégories alimentent la même table, avec <c>IsInline</c> pour les distinguer — la
+        /// liste de pièces jointes de l'interface ne montre que les premières.
         /// </para>
         /// </summary>
         /// <param name="referencedCids">
         /// Content-ID référencés par un cid: du corps HTML, ou <c>null</c> si le corps n'est
-        /// pas disponible : la double condition ne s'applique alors pas.
+        /// pas disponible (lecture « metadata ») : la double condition ne s'applique alors pas.
         /// </param>
         /// <param name="resolvableCids">Reçoit les Content-ID effectivement résolus, ou null.</param>
         private static void CollectAttachments(
@@ -666,9 +668,14 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
 
         public async Task<string> CreateDraftAsync(
             GmailConnection connection, string to, string subject, string body,
-            string? threadId, string? inReplyToRfc822MessageId)
+            string? threadId, string? inReplyToRfc822MessageId,
+            IReadOnlyList<(string FileName, string MimeType, byte[] Content)>? attachments = null)
         {
-            var rawMime = BuildRfc822Message(connection.GmailAddress, to, subject, body, inReplyToRfc822MessageId);
+            var rawMime = attachments is { Count: > 0 }
+                ? BuildMultipartMessage(
+                    connection.GmailAddress, to, null, null, subject,
+                    body, null, inReplyToRfc822MessageId, attachments)
+                : BuildRfc822Message(connection.GmailAddress, to, subject, body, inReplyToRfc822MessageId);
             var raw = EncodeBase64Url(Encoding.UTF8.GetBytes(rawMime));
 
             object payload = string.IsNullOrEmpty(threadId)
@@ -685,9 +692,14 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
 
         public async Task UpdateDraftAsync(
             GmailConnection connection, string draftId, string to, string subject, string body,
-            string? threadId, string? inReplyToRfc822MessageId)
+            string? threadId, string? inReplyToRfc822MessageId,
+            IReadOnlyList<(string FileName, string MimeType, byte[] Content)>? attachments = null)
         {
-            var rawMime = BuildRfc822Message(connection.GmailAddress, to, subject, body, inReplyToRfc822MessageId);
+            var rawMime = attachments is { Count: > 0 }
+                ? BuildMultipartMessage(
+                    connection.GmailAddress, to, null, null, subject,
+                    body, null, inReplyToRfc822MessageId, attachments)
+                : BuildRfc822Message(connection.GmailAddress, to, subject, body, inReplyToRfc822MessageId);
             var raw = EncodeBase64Url(Encoding.UTF8.GetBytes(rawMime));
 
             object payload = string.IsNullOrEmpty(threadId)

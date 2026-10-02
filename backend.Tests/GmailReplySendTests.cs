@@ -253,9 +253,11 @@ public class GmailReplySendTests : IClassFixture<GmailActionApiFactory>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
-        // Aucun appel Gmail ne doit avoir eu lieu.
-        Assert.DoesNotContain(_factory.Recorder.DraftCreates, c => c.Body == corps);
-        Assert.DoesNotContain(_factory.Recorder.DraftSends, d => d.Contains(replyId.ToString()));
+        // Aucun appel Gmail ne doit avoir eu lieu. Sans création ni réécriture, il n'y a
+        // rien à envoyer : l'assertion sur les envois serait vide par construction, on
+        // vérifie donc les deux seuls appels possibles à ce stade.
+        Assert.Empty(CreatesWithBody(corps));
+        Assert.Empty(UpdatesWithBody(corps));
 
         var stored = await ReadReplyAsync(replyId);
         Assert.Equal(StatutReponseIa.Generated, stored.Statut);
@@ -298,5 +300,176 @@ public class GmailReplySendTests : IClassFixture<GmailActionApiFactory>
             $"/api/gmail/replies/{replyId}/send", new { body = "Second envoi, doit échouer." });
 
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+    }
+
+    // ── A4 : pièces jointes sur une réponse ────────────────────────────────
+
+    private static object Piece(string nom, string mime, byte[] contenu) => new
+    {
+        fileName = nom,
+        mimeType = mime,
+        contentBase64 = Convert.ToBase64String(contenu)
+    };
+
+    [Fact]
+    public async Task Repondre_peut_porter_une_piece_jointe()
+    {
+        var user = await CreateUserAsync("a4-piece");
+        await EnsureConnectionAsync(user.Id, "a4piece");
+        var (replyId, _) = await SeedReplyAsync(user.Id, "a4piece");
+
+        const string relecture = "Voici le bon de coupe confirmé.";
+        var contenu = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+        _factory.Recorder.NextDraftId = "draft-a4-piece";
+
+        var response = await user.Client.PostAsJsonAsync(
+            $"/api/gmail/replies/{replyId}/send",
+            new
+            {
+                body = relecture,
+                subject = "Re: Commande a4piece",
+                attachments = new[] { Piece("bon-de-coupe.pdf", "application/pdf", contenu) }
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var created = CreatesWithBody(relecture);
+        var brouillon = Assert.Single(created);
+        var piece = Assert.Single(brouillon.Attachments);
+        Assert.Equal("bon-de-coupe.pdf", piece.FileName);
+        Assert.Equal("application/pdf", piece.MimeType);
+        Assert.Equal(contenu, piece.Content);
+    }
+
+    [Fact]
+    public async Task Repondre_peut_porter_plusieurs_pieces_jointes()
+    {
+        var user = await CreateUserAsync("a4-deux");
+        await EnsureConnectionAsync(user.Id, "a4deux");
+        var (replyId, _) = await SeedReplyAsync(user.Id, "a4deux");
+
+        const string relecture = "Deux documents joints.";
+        _factory.Recorder.NextDraftId = "draft-a4-deux";
+
+        var response = await user.Client.PostAsJsonAsync(
+            $"/api/gmail/replies/{replyId}/send",
+            new
+            {
+                body = relecture,
+                attachments = new[]
+                {
+                    Piece("plan.pdf", "application/pdf", new byte[] { 1, 2, 3 }),
+                    Piece("mesure.csv", "text/csv", new byte[] { 4, 5, 6 })
+                }
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var pieces = Assert.Single(CreatesWithBody(relecture)).Attachments;
+        Assert.Equal(2, pieces.Count);
+        Assert.Equal(new[] { "plan.pdf", "mesure.csv" }, pieces.Select(p => p.FileName).ToArray());
+    }
+
+    [Fact]
+    public async Task Repondre_sans_piece_jointe_envoie_un_brouillon_simple()
+    {
+        var user = await CreateUserAsync("a4-aucune");
+        await EnsureConnectionAsync(user.Id, "a4aucune");
+        var (replyId, _) = await SeedReplyAsync(user.Id, "a4aucune");
+
+        const string relecture = "Réponse simple, sans document.";
+        _factory.Recorder.NextDraftId = "draft-a4-aucune";
+
+        var response = await user.Client.PostAsJsonAsync(
+            $"/api/gmail/replies/{replyId}/send", new { body = relecture });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(Assert.Single(CreatesWithBody(relecture)).Attachments);
+    }
+
+    [Fact]
+    public async Task Repondre_avec_un_bom_invalide_est_refuse()
+    {
+        var user = await CreateUserAsync("a4-bom");
+        await EnsureConnectionAsync(user.Id, "a4bom");
+        var (replyId, _) = await SeedReplyAsync(user.Id, "a4bom");
+
+        const string corps = "Réponse avec pièce corrompue.";
+        var response = await user.Client.PostAsJsonAsync(
+            $"/api/gmail/replies/{replyId}/send",
+            new
+            {
+                body = corps,
+                attachments = new[]
+                {
+                    new { fileName = "casse.pdf", mimeType = "application/pdf", contentBase64 = "pas%%du-base64" }
+                }
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        // Aucun brouillon n'est créé ni réécrit : le Base64 est invalide, donc le
+        // contrôle arrête la requête avant le moindre appel à Gmail. On filtre sur le
+        // corps du test, les files d'appels étant partagées par les tests de la classe.
+        Assert.Empty(CreatesWithBody(corps));
+        Assert.Empty(UpdatesWithBody(corps));
+        Assert.NotEqual(StatutReponseIa.Sent, (await ReadReplyAsync(replyId)).Statut);
+    }
+
+    [Fact]
+    public async Task Repondre_au_dela_du_plafond_de_pieces_est_refuse()
+    {
+        var user = await CreateUserAsync("a4-plafond");
+        await EnsureConnectionAsync(user.Id, "a4plafond");
+        var (replyId, _) = await SeedReplyAsync(user.Id, "a4plafond");
+
+        // Le plafond est partagé avec la composition d'un nouveau message : 20 Mo.
+        var tropGrosse = new byte[(20 * 1024 * 1024) + 1];
+
+        var response = await user.Client.PostAsJsonAsync(
+            $"/api/gmail/replies/{replyId}/send",
+            new
+            {
+                body = "Réponse trop lourde.",
+                attachments = new[] { Piece("scan.tif", "image/tiff", tropGrosse) }
+            });
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        Assert.NotEqual(StatutReponseIa.Sent, (await ReadReplyAsync(replyId)).Statut);
+    }
+
+    [Fact]
+    public async Task Les_pieces_jointes_sont_transmises_a_un_brouillon_preexistant()
+    {
+        var user = await CreateUserAsync("a4-maj");
+        await EnsureConnectionAsync(user.Id, "a4maj");
+        var (replyId, _) = await SeedReplyAsync(user.Id, "a4maj");
+
+        await _factory.WithDbAsync(async db =>
+        {
+            var reply = await db.EmailAiReponses.FirstAsync(r => r.Id == replyId);
+            reply.GmailDraftId = "draft-ancien-a4-" + replyId;
+            await db.SaveChangesAsync();
+        });
+
+        const string relecture = "Version relue avec document.";
+        var contenu = new byte[] { 42, 43, 44 };
+
+        var response = await user.Client.PostAsJsonAsync(
+            $"/api/gmail/replies/{replyId}/send",
+            new
+            {
+                body = relecture,
+                attachments = new[] { Piece("contrat.pdf", "application/pdf", contenu) }
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // Le brouillon réécrit porte les pièces : sinon elles seraient perdues au profit
+        // de l'ancienne version figée dans Gmail.
+        var updated = Assert.Single(UpdatesWithBody(relecture));
+        var piece = Assert.Single(updated.Attachments);
+        Assert.Equal("contrat.pdf", piece.FileName);
+        Assert.Equal(contenu, piece.Content);
     }
 }

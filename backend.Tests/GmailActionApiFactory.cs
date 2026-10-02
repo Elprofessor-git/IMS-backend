@@ -146,7 +146,8 @@ public sealed class RecordingGmailApiService : IGmailApiService
     // RÉELLEMENT transmis à Gmail. C'est ce que la régression A1 vérifie.
     public sealed record DraftCall(
         string? DraftId, string To, string Subject, string Body,
-        string? ThreadId, string? InReplyTo);
+        string? ThreadId, string? InReplyTo,
+        IReadOnlyList<(string FileName, string MimeType, byte[] Content)> Attachments);
 
     public ConcurrentQueue<DraftCall> DraftCreates { get; } = new();
     public ConcurrentQueue<DraftCall> DraftUpdates { get; } = new();
@@ -159,22 +160,26 @@ public sealed class RecordingGmailApiService : IGmailApiService
     public string? FailingDraftId { get; set; }
 
     public Task<string> CreateDraftAsync(
-        GmailConnection c, string to, string subject, string body, string? threadId, string? inReplyTo)
+        GmailConnection c, string to, string subject, string body, string? threadId, string? inReplyTo,
+        IReadOnlyList<(string FileName, string MimeType, byte[] Content)>? attachments = null)
     {
         var id = NextDraftId;
         if (id == null) throw Unexpected();
-        DraftCreates.Enqueue(new DraftCall(null, to, subject, body, threadId, inReplyTo));
+        DraftCreates.Enqueue(new DraftCall(null, to, subject, body, threadId, inReplyTo,
+            attachments ?? Array.Empty<(string, string, byte[])>()));
         return Task.FromResult(id);
     }
 
     public Task UpdateDraftAsync(
         GmailConnection c, string draftId, string to, string subject, string body,
-        string? threadId, string? inReplyTo)
+        string? threadId, string? inReplyTo,
+        IReadOnlyList<(string FileName, string MimeType, byte[] Content)>? attachments = null)
     {
         if (draftId == FailingDraftId)
             throw new InvalidOperationException("Erreur Gmail simulée sur drafts.update.");
 
-        DraftUpdates.Enqueue(new DraftCall(draftId, to, subject, body, threadId, inReplyTo));
+        DraftUpdates.Enqueue(new DraftCall(draftId, to, subject, body, threadId, inReplyTo,
+            attachments ?? Array.Empty<(string, string, byte[])>()));
         return Task.CompletedTask;
     }
 

@@ -123,6 +123,16 @@ namespace Backend_Gestion_Magasin_API.Dtos.Gmail
         public string? Subject { get; set; }
     }
 
+    /// <summary>
+    /// Envoi d'une réponse relue. Le corps et l'objet font foi (A1), et les pièces
+    /// jointes sont optionnelles (A4) — la réponse s'attache au fil par le couple
+    /// threadId / In-Reply-To, ce qui évite toute pièce jointe automatique.
+    /// </summary>
+    public class SendReplyDto : UpdateReplyDto
+    {
+        public List<ComposeAttachmentDto> Attachments { get; set; } = new();
+    }
+
     // ── Actions sur un message (lu, étoile, archive, corbeille) ─────────
     /// <summary>
     /// Champs nuls = action non demandée. Tous les indicateurs sont facultatifs pour
