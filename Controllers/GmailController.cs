@@ -1084,9 +1084,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         // POST: api/gmail/replies/7/send — envoie le brouillon Gmail (validation humaine explicite)
+        // Le corps et l'objet reçus font foi : c'est le texte affiché à l'écran, pas
+        // l'entité relue en base. Sans cela, une modification non enregistrée disparaissait
+        // à l'envoi — perte silencieuse, l'API renvoyant un succès.
         [HttpPost("replies/{id:int}/send")]
         [RequireModulePermission("courriels", requireWrite: true)]
-        public async Task<ActionResult<EmailAiReplyDto>> SendReply(int id)
+        public async Task<ActionResult<EmailAiReplyDto>> SendReply(int id, [FromBody] UpdateReplyDto dto)
         {
             var reply = await GetOwnedReplyAsync(id);
             if (reply == null) return NotFound(new { message = "Brouillon introuvable." });
@@ -1094,28 +1097,56 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (reply.Statut == StatutReponseIa.Sent)
                 return StatusCode(StatusCodes.Status409Conflict, new { message = "Cette réponse a déjà été envoyée." });
 
-            if (string.IsNullOrEmpty(reply.GmailDraftId))
-            {
-                // Envoi en un seul geste : on fige d'abord le brouillon Gmail, puis on l'envoie.
-                var created = await CreateDraft(id);
-                if (created.Result is not OkObjectResult ok || ok.Value is not EmailAiReplyDto draftDto)
-                    return created.Result ?? StatusCode(502, new { message = "Création du brouillon Gmail impossible." });
-
-                reply.GmailDraftId = draftDto.GmailDraftId;
-            }
+            if (string.IsNullOrWhiteSpace(dto.Body))
+                return BadRequest(new { message = "Le corps de la réponse est obligatoire." });
 
             var connection = await GetActiveConnectionAsync();
             if (connection == null) return BadRequest(new { message = "Aucun compte Gmail connecté." });
 
+            var message = await _context.GmailMessages.FirstAsync(m => m.Id == reply.GmailMessageId);
+            var to = ExtractEmailAddress(message.From);
+            if (string.IsNullOrEmpty(to))
+                return BadRequest(new { message = "Impossible de déterminer l'adresse du destinataire à partir de l'en-tête From." });
+
+            var subject = string.IsNullOrWhiteSpace(dto.Subject)
+                ? reply.Subject ?? BuildReplySubject(message.Subject)
+                : dto.Subject;
+
+            // PERSISTANCE AVANT toute action Gmail. L'historique du brouillon doit refléter
+            // ce qui a été envoyé : si l'envoi échoue, l'utilisateur a bien modifié sa réponse,
+            // et repartir d'un texte périmé au second essai serait une seconde perte.
+            reply.Body = dto.Body;
+            reply.Subject = subject;
+            reply.Statut = reply.Statut == StatutReponseIa.Approved ? StatutReponseIa.Approved : StatutReponseIa.Edited;
+            await _context.SaveChangesAsync();
+
             try
             {
+                if (string.IsNullOrEmpty(reply.GmailDraftId))
+                {
+                    reply.GmailDraftId = await _gmailApi.CreateDraftAsync(
+                        connection, to, subject, reply.Body,
+                        message.GmailThreadId, message.Rfc822MessageId);
+                }
+                else
+                {
+                    // Un brouillon existe déjà : il porte le texte d'une version antérieure.
+                    // On le RÉÉCRIT avant d'envoyer, sinon c'est ce texte-là qui part.
+                    await _gmailApi.UpdateDraftAsync(
+                        connection, reply.GmailDraftId, to, subject, reply.Body,
+                        message.GmailThreadId, message.Rfc822MessageId);
+                }
+
                 reply.GmailSentMessageId = await _gmailApi.SendDraftAsync(connection, reply.GmailDraftId!);
             }
             catch (InvalidOperationException ex)
             {
+                await _context.SaveChangesAsync();
                 return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
             }
 
+            // Le statut « envoyé » n'est positionné qu'après le succès de Gmail : le
+            // brouillon reste alors rejouable si l'appel a échoué.
             reply.Statut = StatutReponseIa.Sent;
             reply.SentAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();

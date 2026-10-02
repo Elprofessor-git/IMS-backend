@@ -85,9 +85,50 @@ public sealed class RecordingGmailApiService : IGmailApiService
     public Task<(List<string> Ids, string? NextPageToken)> ListMessageIdsPageAsync(
         GmailConnection c, string? q, int m = 30, string? p = null) => throw Unexpected();
     public Task<GmailApiMessage> GetMessageAsync(GmailConnection c, string id) => throw Unexpected();
-    public Task<string> CreateDraftAsync(GmailConnection c, string to, string subject, string body, string? threadId, string? inReplyTo) =>
-        throw Unexpected();
-    public Task<string> SendDraftAsync(GmailConnection c, string draftId) => throw Unexpected();
+    // Brouillons et envois : enregistrés pour que le test puisse asserter le texte
+    // RÉELLEMENT transmis à Gmail. C'est ce que la régression A1 vérifie.
+    public sealed record DraftCall(
+        string? DraftId, string To, string Subject, string Body,
+        string? ThreadId, string? InReplyTo);
+
+    public ConcurrentQueue<DraftCall> DraftCreates { get; } = new();
+    public ConcurrentQueue<DraftCall> DraftUpdates { get; } = new();
+    public ConcurrentQueue<string> DraftSends { get; } = new();
+
+    /// <summary>Identifiant renvoyé par CreateDraftAsync (null = ne pas simuler de création).</summary>
+    public string? NextDraftId { get; set; } = "draft-cree-1";
+
+    /// <summary>Message (drafts.update / drafts.send) qui doit faire échouer l'appel, pour tester le 502.</summary>
+    public string? FailingDraftId { get; set; }
+
+    public Task<string> CreateDraftAsync(
+        GmailConnection c, string to, string subject, string body, string? threadId, string? inReplyTo)
+    {
+        var id = NextDraftId;
+        if (id == null) throw Unexpected();
+        DraftCreates.Enqueue(new DraftCall(null, to, subject, body, threadId, inReplyTo));
+        return Task.FromResult(id);
+    }
+
+    public Task UpdateDraftAsync(
+        GmailConnection c, string draftId, string to, string subject, string body,
+        string? threadId, string? inReplyTo)
+    {
+        if (draftId == FailingDraftId)
+            throw new InvalidOperationException("Erreur Gmail simulée sur drafts.update.");
+
+        DraftUpdates.Enqueue(new DraftCall(draftId, to, subject, body, threadId, inReplyTo));
+        return Task.CompletedTask;
+    }
+
+    public Task<string> SendDraftAsync(GmailConnection c, string draftId)
+    {
+        if (draftId == FailingDraftId)
+            throw new InvalidOperationException("Erreur Gmail simulée sur drafts.send.");
+
+        DraftSends.Enqueue(draftId);
+        return Task.FromResult("sent-" + draftId);
+    }
     public Task DeleteDraftAsync(GmailConnection c, string draftId) => throw Unexpected();
     public Task<(string FileName, string MimeType, byte[] Content)> GetAttachmentAsync(
         GmailConnection c, string messageId, string attachmentId) => throw Unexpected();

@@ -40,6 +40,17 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         Task<(List<string> Ids, string? NextPageToken)> ListMessageIdsPageAsync(GmailConnection connection, string? query, int maxResults = 30, string? pageToken = null);
         Task<GmailApiMessage> GetMessageAsync(GmailConnection connection, string gmailMessageId);
         Task<string> CreateDraftAsync(GmailConnection connection, string to, string subject, string body, string? threadId, string? inReplyToRfc822MessageId);
+
+        /// <summary>
+        /// Réécrit le contenu d'un brouillon Gmail existant (users.drafts.update).
+        /// <para>
+        /// Indispensable avant tout envoi : un brouillon figé depuis une version
+        /// antérieure du texte CONTINUERAIT d'envoyer cette version périmée. Un simple
+        /// « CreateDraft + Send » produirait un doublon et laisserait le vieux brouillon.
+        /// </para>
+        /// </summary>
+        Task UpdateDraftAsync(GmailConnection connection, string draftId, string to, string subject, string body, string? threadId, string? inReplyToRfc822MessageId);
+
         Task<string> SendDraftAsync(GmailConnection connection, string draftId);
         Task DeleteDraftAsync(GmailConnection connection, string draftId);
 
@@ -554,6 +565,26 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
 
             using var doc = JsonDocument.Parse(responseBody);
             return doc.RootElement.GetProperty("id").GetString()!;
+        }
+
+        public async Task UpdateDraftAsync(
+            GmailConnection connection, string draftId, string to, string subject, string body,
+            string? threadId, string? inReplyToRfc822MessageId)
+        {
+            var rawMime = BuildRfc822Message(connection.GmailAddress, to, subject, body, inReplyToRfc822MessageId);
+            var raw = EncodeBase64Url(Encoding.UTF8.GetBytes(rawMime));
+
+            object payload = string.IsNullOrEmpty(threadId)
+                ? new { message = new { raw } }
+                : new { message = new { raw, threadId } };
+
+            using var request = await CreateRequestAsync(
+                HttpMethod.Put,
+                $"{ApiBase}/drafts/{Uri.EscapeDataString(draftId)}",
+                connection,
+                payload);
+            using var response = await _httpClient.SendAsync(request);
+            await ReadBodyAsync(response, "drafts.update");
         }
 
         public async Task<string> SendDraftAsync(GmailConnection connection, string draftId)
