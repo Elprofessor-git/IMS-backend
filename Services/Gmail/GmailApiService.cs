@@ -39,6 +39,8 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         Task<List<string>> ListMessageIdsAsync(GmailConnection connection, string? query, int maxResults = 30, string? pageToken = null);
         Task<(List<string> Ids, string? NextPageToken)> ListMessageIdsPageAsync(GmailConnection connection, string? query, int maxResults = 30, string? pageToken = null);
         Task<GmailApiMessage> GetMessageAsync(GmailConnection connection, string gmailMessageId);
+
+        /// <summary>Crée un brouillon et renvoie son identifiant.</summary>
         Task<string> CreateDraftAsync(GmailConnection connection, string to, string subject, string body, string? threadId, string? inReplyToRfc822MessageId);
 
         /// <summary>
@@ -215,8 +217,18 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
                 ? tEl.GetString()!
                 : gmailId;
 
+            var html = ExtractHtmlBody(payload);
+
+            // Le corps est lu AVANT les pièces : la qualification « inline » dépend des
+            // Content-ID que le corps référence réellement, pas de leur seule présence.
             var parts = new List<GmailApiAttachment>();
-            CollectAttachments(payload, parts);
+            var resolvableCids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectAttachments(
+                payload, parts, CollectReferencedContentIds(html), resolvableCids);
+
+            // Les cid: pointant vers une partie absente sont retirés : l'image n'existe pas,
+            // mieux vaut ne rien afficher qu'afficher une icône cassée.
+            html = DropUnresolvedCidReferences(html, resolvableCids);
 
             return new GmailApiMessage(
                 Id: gmailId,
@@ -227,7 +239,7 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
                 Subject: GetHeader("Subject"),
                 Rfc822MessageId: string.IsNullOrEmpty(rfc822) ? null : rfc822,
                 BodyText: ExtractPlainTextBody(payload),
-                BodyHtml: ExtractHtmlBody(payload),
+                BodyHtml: html,
                 Snippet: root.TryGetProperty("snippet", out var sn) ? sn.GetString() : null,
                 ReceivedAt: receivedAt,
                 IsRead: !labelIds.Contains("UNREAD"),
@@ -245,26 +257,49 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         /// <summary>
         /// Parcourt l'arbre MIME et relève les pièces jointes ET les images intégrées au corps.
         /// <para>
-        /// Une partie est « inline » quand elle porte un en-tête <c>Content-ID</c> : c'est le
-        /// mécanisme utilisé par Gmail et Outlook pour les logos et signatures. Les deux
-        /// catégories alimentent la même table, avec <c>IsInline</c> pour les distinguer — la
-        /// liste de pièces jointes de l'interface ne montre que les premières.
+        /// Une partie est « inline » UNIQUEMENT si elle est une image, qu'aucun
+        /// <c>Content-Disposition: attachment</c> ne s'y oppose, et que le corps la
+        /// référence par <c>cid:</c>. Une pièce ordinaire qui porterait par hasard un
+        /// Content-ID reste donc une pièce jointe visible. Les deux catégories alimentent
+        /// la même table, avec <c>IsInline</c> pour les distinguer — la liste de pièces
+        /// jointes de l'interface ne montre que les premières.
         /// </para>
         /// </summary>
-        private static void CollectAttachments(JsonElement part, List<GmailApiAttachment> results)
+        /// <param name="referencedCids">
+        /// Content-ID référencés par un cid: du corps HTML, ou <c>null</c> si le corps n'est
+        /// pas disponible : la double condition ne s'applique alors pas.
+        /// </param>
+        /// <param name="resolvableCids">Reçoit les Content-ID effectivement résolus, ou null.</param>
+        private static void CollectAttachments(
+            JsonElement part, List<GmailApiAttachment> results,
+            IReadOnlySet<string>? referencedCids, ISet<string>? resolvableCids)
         {
             var mimeType = part.TryGetProperty("mimeType", out var mt) ? mt.GetString() : null;
             var fileName = part.TryGetProperty("filename", out var fn) ? fn.GetString() : null;
             var contentId = ReadHeader(part, "Content-ID")?.Trim().Trim('<', '>');
-            var size = part.TryGetProperty("body", out var b)
-                       && b.TryGetProperty("size", out var sz)
-                       && long.TryParse(sz.GetString(), out var parsed) ? parsed : 0L;
+            var size = ReadPartSize(part);
 
             if (part.TryGetProperty("body", out var body)
                 && body.TryGetProperty("attachmentId", out var attId)
                 && attId.GetString() is { Length: > 0 } attachmentId)
             {
-                var isInline = !string.IsNullOrEmpty(contentId);
+                // Content-Disposition est le critère MIME de référence. La présence d'un
+                // Content-ID ne prouve RIEN : beaucoup de clients en mettent un sur des
+                // pièces jointes ordinaires, qui se retrouvaient alors classées « inline »
+                // et donc invisibles dans la liste — et le Content-ID était alors
+                // réinjecté dans le corps par la réécriture, pour rien.
+                var disposition = ReadHeader(part, "Content-Disposition")?.Trim();
+                var isAttachment = IsExplicitAttachment(disposition);
+
+                // « inline » n'a de sens que si le corps RÉFÉRENCE réellement cet
+                // identifiant par cid:. Un Content-ID orphelin ne rend aucune image.
+                var isInline = !isAttachment
+                               && !string.IsNullOrEmpty(contentId)
+                               && mimeType != null
+                               && mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                               && (referencedCids == null || referencedCids.Contains(contentId!));
+                if (isInline) resolvableCids?.Add(contentId!);
+
                 results.Add(new GmailApiAttachment(
                     GmailAttachmentId: attachmentId,
                     FileName: string.IsNullOrWhiteSpace(fileName) ? null : fileName,
@@ -277,8 +312,89 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
             if (part.TryGetProperty("parts", out var parts))
             {
                 foreach (var child in parts.EnumerateArray())
-                    CollectAttachments(child, results);
+                    CollectAttachments(child, results, referencedCids, resolvableCids);
+
             }
+        }
+
+        /// <summary>
+        /// Taille en octets annoncée par Gmail pour une partie MIME, ou 0 si absente.
+        /// <para>
+        /// Le champ <c>body.size</c> est un NOMBRE en JSON, mais Google l'a déjà renvoyé
+        /// entre guillemets sur certaines requêtes. Un <c>GetString()</c> direct lève alors
+        /// une InvalidOperationException sur toute la lecture du message — c'est-à-dire que
+        /// la simple présence d'une pièce jointe faisait échouer la synchronisation. On
+        /// accepte donc les deux formes plutôt que de parier sur l'humeur de l'API.
+        /// </para>
+        /// </summary>
+        private static long ReadPartSize(JsonElement part)
+        {
+            if (!part.TryGetProperty("body", out var body)
+                || !body.TryGetProperty("size", out var size)) return 0;
+
+            return size.ValueKind switch
+            {
+                JsonValueKind.Number when size.TryGetInt64(out var n) => n,
+                JsonValueKind.String when long.TryParse(size.GetString(), out var s) => s,
+                _ => 0
+            };
+        }
+
+        /// <summary>Content-Disposition explicite en « attachment ». Un en-tête absent, vide ou
+        /// valant « inline » ne l'emporte pas.
+        /// </summary>
+        private static bool IsExplicitAttachment(string? disposition)
+        {
+            if (string.IsNullOrWhiteSpace(disposition)) return false;
+
+            var value = disposition.ToLowerInvariant();
+            var semi = value.IndexOf(';');
+            if (semi >= 0) value = value[..semi];
+
+            return value.Trim() == "attachment";
+        }
+
+        /// <summary>
+        /// Ensemble des Content-ID réellement référencés par un <c>src="cid:…"</c> dans le
+        /// corps HTML. Les identifiants sont comparés sans les chevrons, comme le veut la RFC.
+        /// </summary>
+        internal static HashSet<string> CollectReferencedContentIds(string? html)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(html)) return result;
+
+            foreach (Match m in CidReference.Matches(html))
+            {
+                var cid = m.Groups["cid"].Value.Trim();
+                if (cid.Length > 0) result.Add(cid);
+            }
+
+            return result;
+        }
+
+        private static readonly Regex CidReference = new(
+            """cid:(?<cid>[^"'>\s)]+)""",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// Retire d'un corps HTML les images dont le cid: ne correspond à aucune partie
+        /// réellement présente (pièce supprimée, expurgée, ou jamais reçue).
+        /// <para>
+        /// Indispensable avec la qualification stricte : une image inline est classée
+        /// inline SI ET SEULEMENT SI son cid: est référencé ET qu'une partie correspondante
+        /// existe. Sans ce nettoyage, une référence orpheline produirait une icône
+        /// cassée dans le message au lieu d'une image tout simplement absente.
+        /// </para>
+        /// </summary>
+        public static string DropUnresolvedCidReferences(string? html, IReadOnlySet<string> resolvableCids)
+        {
+            if (string.IsNullOrWhiteSpace(html)) return html ?? "";
+
+            return CidReference.Replace(html, m =>
+            {
+                var cid = m.Groups["cid"].Value.Trim();
+                return resolvableCids.Contains(cid) ? m.Value : "";
+            });
         }
 
         /// <summary>Lit un en-tête MIME dans le tableau <c>headers</c> d'une partie.</summary>

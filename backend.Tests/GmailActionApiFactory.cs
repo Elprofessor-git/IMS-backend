@@ -84,7 +84,64 @@ public sealed class RecordingGmailApiService : IGmailApiService
         throw Unexpected();
     public Task<(List<string> Ids, string? NextPageToken)> ListMessageIdsPageAsync(
         GmailConnection c, string? q, int m = 30, string? p = null) => throw Unexpected();
-    public Task<GmailApiMessage> GetMessageAsync(GmailConnection c, string id) => throw Unexpected();
+    // Qualification A2 : la maintenance relit le message ENTIER chez Gmail (c'est la
+    // seule façon de savoir quels cid: le corps référence). Le double sert donc des
+    // messages complets, déjà qualifiés, et compte les lectures pour prouver qu'un
+    // appel refusé ne consomme aucun quota.
+    public ConcurrentDictionary<string, GmailApiMessage> MessageCatalog { get; } = new();
+    public ConcurrentQueue<string> MessageListings { get; } = new();
+
+    /// <summary>Identifiants dont la lecture doit échouer (message supprimé, quota, réseau).</summary>
+    public ConcurrentBag<string> FailingMessageIds { get; } = new();
+
+    public Task<GmailApiMessage> GetMessageAsync(GmailConnection c, string id)
+    {
+        MessageListings.Enqueue(id);
+        if (FailingMessageIds.Contains(id))
+            throw new InvalidOperationException($"Erreur Gmail simulée sur messages.get({id}).");
+
+        return Task.FromResult(
+            MessageCatalog.TryGetValue(id, out var message) ? message : MessageSansPiece(id));
+    }
+
+    /// <summary>Message sans corps ni pièce : le cas par défaut d'un identifiant non préparé.</summary>
+    public static GmailApiMessage MessageSansPiece(string id) => new(
+        Id: id,
+        ThreadId: "thread-" + id,
+        From: "client@exemple.fr",
+        To: "destinataire@ims.test",
+        Cc: null,
+        Subject: "Sans pièce",
+        Rfc822MessageId: id + "@exemple.fr",
+        BodyText: "Contenu",
+        BodyHtml: "<p>Contenu</p>",
+        Snippet: "Contenu",
+        ReceivedAt: DateTime.UtcNow,
+        IsRead: true,
+        IsStarred: false,
+        HasAttachments: false,
+        LabelIds: new List<string> { "INBOX" },
+        Attachments: new List<GmailApiAttachment>());
+
+    /// <summary>Construit un message simulé dont la qualification est celle que Gmail renverrait.</summary>
+    public static GmailApiMessage Message(
+        string id, List<GmailApiAttachment> pieces, string? html = null) => new(
+        Id: id,
+        ThreadId: "thread-" + id,
+        From: "client@exemple.fr",
+        To: "destinataire@ims.test",
+        Cc: null,
+        Subject: "Avec pièces",
+        Rfc822MessageId: id + "@exemple.fr",
+        BodyText: "Contenu",
+        BodyHtml: html,
+        Snippet: "Contenu",
+        ReceivedAt: DateTime.UtcNow,
+        IsRead: true,
+        IsStarred: false,
+        HasAttachments: pieces.Any(p => !p.IsInline),
+        LabelIds: new List<string> { "INBOX" },
+        Attachments: pieces);
     // Brouillons et envois : enregistrés pour que le test puisse asserter le texte
     // RÉELLEMENT transmis à Gmail. C'est ce que la régression A1 vérifie.
     public sealed record DraftCall(

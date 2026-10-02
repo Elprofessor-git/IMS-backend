@@ -10,6 +10,7 @@ using Backend_Gestion_Magasin_API.Models.Gmail;
 using Backend_Gestion_Magasin_API.Services;
 using Backend_Gestion_Magasin_API.Services.Gmail;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,6 +36,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // LOT 17 — la cloche : une tâche née d'un email prévient son responsable. Même table
         // et mêmes endpoints que les notifications de planning.
         private readonly INotificationService _notifications;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public GmailController(
             ApplicationDbContext context,
@@ -46,8 +48,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
             ITacheOwnershipService tacheOwnership,
             IPermissionService permissions,
             INotificationService notifications,
+            UserManager<ApplicationUser> userManager,
             ILogger<GmailController> logger)
         {
+            // Réservé à la maintenance administrateur (requalification des pièces jointes,
+            // A2) : Testé sur le RÔLE DU DEMANDEUR, pas sur le simple module « courriels »,
+            // qui est détenu par des rôles non-administrateurs.
+            _userManager = userManager;
             _tokens = tokens;
             _context = context;
             _oauth = oauth;
@@ -1257,6 +1264,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
         }
 
+
         // POST: api/gmail/send — compose et envoie un email via la boîte Gmail connectée.
         // Ne crée AUCUNE ligne en base : ni EmailAiReply, ni EmailAiAnalysis. La composition
         // est un brouillon éphémère ; seul Gmail conserve l'envoi.
@@ -1366,6 +1374,184 @@ namespace Backend_Gestion_Magasin_API.Controllers
         /// </para>
         /// </summary>
         public const int MaxComposeAttachmentBytes = 20 * 1024 * 1024;
+
+        // ── Maintenance A2 : reclasser les pièces jointes déjà stockées ──────────
+        //
+        // Les messages synchronisés AVANT la correction « inline vs attachment » ont
+        // leurs pièces classées avec l'ancien critère (présence d'un Content-ID). Ce
+        // endpoint les re-qualifie à partir de Gmail. Il est :
+        //   - réservé aux administrateurs (relance enlot sur un compte client) ;
+        //   - JAMAIS automatique (aucun appel au démarrage ni à la synchronisation) ;
+        //   - idempotent (relancer ne change plus rien) ;
+        //   - borné par lot, avec une pause entre deux lots pour respecter les quotas ;
+        //   - strictement limité aux PIÈCES JOINTES : aucun message n'est modifié.
+
+        /// <summary>Taille maximale d'un lot : borne la durée HTTP et la mémoire.</summary>
+        public const int AttachmentQualifierMaxBatch = 50;
+
+        /// <summary>
+        /// Budget de messages relus par défaut. Volontairement bas : l'endpoint est
+        /// idempotent, donc l'administrateur le relance autant de fois qu'il faut plutôt
+        /// que de faire tenir 2 000 lectures dans une seule requête HTTP.
+        /// </summary>
+        public const int AttachmentQualifierDefaultBudget = 50;
+
+        /// <summary>
+        /// Budget maximal par exécution. L'API Gmail recommande au plus 250 requêtes par
+        /// utilisateur et par fenêtre glissante ; on reste sous ce plafond au lieu de
+        /// découvrir un 429 en plein traitement.
+        /// </summary>
+        public const int AttachmentQualifierMaxBudget = 250;
+
+        /// <summary>
+        /// Intervalle minimal entre deux lectures. 250 requêtes / 100 s = 400 ms : c'est
+        /// la seule façon de tenir le plafond sans dépendre d'un 429, chaque appel
+        /// consommant 5 unités de quota.
+        /// </summary>
+        private const int AttachmentQualifierMinIntervalMs = 400;
+
+        [HttpPost("maintenance/attachments/requalify")]
+        [RequireModulePermission("courriels", requireWrite: true)]
+        public async Task<IActionResult> RequalifyAttachments(
+            [FromQuery] int? batchSize,
+            [FromQuery] int? maxMessages)
+        {
+            var userId = _userManager.GetUserId(User);
+            var demandeur = userId != null
+                ? await _userManager.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == userId)
+                : null;
+
+            if (demandeur?.Role?.EstAdministrateur != true)
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    message = "Réservé aux administrateurs : la requalification des pièces jointes consomme le quota Gmail du compte concerné."
+                });
+
+            var connection = await GetActiveConnectionAsync();
+            if (connection == null)
+                return BadRequest(new { message = "Aucun compte Gmail connecté." });
+
+            var batch = Math.Clamp(batchSize ?? AttachmentQualifierMaxBatch, 1, AttachmentQualifierMaxBatch);
+            var budget = Math.Clamp(
+                maxMessages ?? AttachmentQualifierDefaultBudget, 1, AttachmentQualifierMaxBudget);
+
+            // Seuls les messages ayant au moins une pièce peuvent être concernés, et
+            // l'ordre est stable : une relance avec le même budget relit les mêmes
+            // messages, ce qui rend l'opération vérifiable (et sans effet de bord).
+            var candidats = await _context.GmailMessages
+                .Where(m => m.GmailConnectionId == connection.Id)
+                .Where(m => _context.GmailAttachments.Any(a => a.GmailMessageId == m.Id))
+                .OrderBy(m => m.Id)
+                .Select(m => m.Id)
+                .Take(budget)
+                .ToListAsync();
+
+            if (candidats.Count == 0)
+                return Ok(new AttachmentRequalificationDto
+                {
+                    Examines = 0,
+                    Reclasses = 0,
+                    Erreurs = 0,
+                    Messages = new List<string>()
+                });
+
+            var traites = 0;
+            var reclasses = 0;
+            var erreurs = 0;
+            var details = new List<string>();
+
+            for (var offset = 0; offset < candidats.Count; offset += batch)
+            {
+                foreach (var messageId in candidats.Skip(offset).Take(batch))
+                {
+                    if (HttpContext.RequestAborted.IsCancellationRequested)
+                        return Ok(new AttachmentRequalificationDto
+                        {
+                            Examines = traites,
+                            Reclasses = reclasses,
+                            Erreurs = erreurs,
+                            Messages = details
+                        });
+
+                    if (traites > 0)
+                    {
+                        // Une lecture par message, quel que soit le découpage en lots :
+                        // c'est le rythme qui protège le quota, pas la taille du lot. Le délai
+                        // est entre chaque appel (et non entre deux lots) pour qu'un
+                        // budget de 250 ne parte pas en 5 rafales de 50.
+                        await Task.Delay(AttachmentQualifierMinIntervalMs, HttpContext.RequestAborted);
+                    }
+
+                    traites++;
+                    try
+                    {
+                        var message = await _context.GmailMessages
+                            .FirstAsync(m => m.Id == messageId, HttpContext.RequestAborted);
+
+                        // Lecture COMPLÈTE, volontairement : la qualification « inline »
+                        // exige de savoir quels cid: le corps référence. Une lecture
+                        // « metadata » coûterait le MÊME quota (5 unités) tout en étant
+                        // incapable d'appliquer la règle : elle ne voit ni le corps, ni
+                        // de façon fiable les en-têtes de chaque partie.
+                        var apiParts = (await _gmailApi.GetMessageAsync(connection, message.GmailMessageId)).Attachments;
+                        var existantes = await _context.GmailAttachments
+                            .Where(a => a.GmailMessageId == messageId)
+                            .ToListAsync();
+
+                        var parId = apiParts.ToDictionary(p => p.GmailAttachmentId, StringComparer.Ordinal);
+                        var changes = 0;
+
+                        foreach (var existante in existantes)
+                        {
+                            if (!parId.TryGetValue(existante.GmailAttachmentId, out var api))
+                            {
+                                // La pièce a disparu de Gmail (ou l'identifiant a changé) :
+                                // on ne la supprime pas, la métadonnée reste un historique
+                                // de ce qui a été reçu. Seule la qualification est dans le
+                                // périmètre de cette maintenance.
+                                continue;
+                            }
+
+                            if (existante.IsInline == api.IsInline
+                                && existante.ContentId == api.ContentId)
+                                continue;
+
+                            existante.IsInline = api.IsInline;
+                            existante.ContentId = api.ContentId;
+                            changes++;
+                        }
+
+                        if (changes > 0)
+                        {
+                            await _context.SaveChangesAsync(HttpContext.RequestAborted);
+                            reclasses += changes;
+                            details.Add($"Message {messageId} : {changes} pièce(s) reclassée(s).");
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Un message en erreur (supprimé côté Gmail, quota, réseau) ne doit
+                        // pas interrompre la requalification : on le compte et on continue.
+                        erreurs++;
+                        _logger.LogWarning(
+                            ex, "Requalification A2 : message {MessageId} ignoré", messageId);
+                        details.Add($"Message {messageId} : ignoré ({ex.GetType().Name}).");
+                    }
+                }
+            }
+
+            return Ok(new AttachmentRequalificationDto
+            {
+                Examines = traites,
+                Reclasses = reclasses,
+                Erreurs = erreurs,
+                Messages = details
+            });
+        }
 
         /// <summary>Valide et normalise une liste d'adresses : une adresse invalide bloque tout l'envoi.</summary>
         private static List<string> NormalizeAddresses(List<string>? addresses)

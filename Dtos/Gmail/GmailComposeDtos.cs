@@ -40,6 +40,25 @@ namespace Backend_Gestion_Magasin_API.Dtos.Gmail
         public string ContentBase64 { get; set; } = null!;
     }
 
+    /// <summary>
+    /// Rapport de la maintenance de requalification des pièces jointes (A2).
+    /// <para>
+    /// <see cref="Examines"/> compte les messages réellement relus auprès de Gmail ;
+    /// <see cref="Reclasses"/> compte les PIÈCES dont la qualification a changé (une
+    /// pièce déjà correcte n'est pas comptée). Relancer l'endpoint est sans effet : c'est
+    /// ce qui le rend idempotent et donc sûr à rejouer.
+    /// </para>
+    /// </summary>
+    public class AttachmentRequalificationDto
+    {
+        public int Examines { get; set; }
+        public int Reclasses { get; set; }
+        public int Erreurs { get; set; }
+
+        /// <summary>Détail par message — nécessaire pour un lancement à la demande supervisé.</summary>
+        public List<string> Messages { get; set; } = new();
+    }
+
     public class ComposeEmailResultDto
     {
         public string GmailMessageId { get; set; } = null!;
