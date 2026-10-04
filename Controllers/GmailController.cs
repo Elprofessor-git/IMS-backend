@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -1021,22 +1022,42 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var connection = await GetActiveConnectionAsync();
             if (connection == null) return BadRequest(new { message = "Aucun compte Gmail connecté." });
 
+            // Le mode est validé AVANT l'appel : une valeur inconnue ne doit pas coûter
+            // une génération IA pour être refusée ensuite.
+            var mode = ParseComposeMode(dto?.Mode);
+            if (mode == null)
+                return BadRequest(new { message = $"Mode de composition inconnu : « {dto?.Mode} »." });
+
             string body;
             try
             {
                 body = await _ai.GenerateReplyAsync(
-                    message.From ?? "", message.Subject, message.BodyText, dto?.Instruction);
+                    message.From ?? "", message.Subject, message.BodyText, dto?.Instruction, mode.Value);
             }
             catch (InvalidOperationException ex)
             {
                 return StatusCode(StatusCodes.Status502BadGateway, new { message = ex.Message });
             }
 
+            // Une réponse sans texte devient le « Cordialement, » d'usage, comme toujours.
+            // Une note de transfert, elle, n'a pas d'équivalent : y mettre cette formule
+            // produirait une note absurde. On refuse donc l'enregistrement plutôt que de
+            // conserver une proposition vide, qu'aucun écran ne saurait expliquer.
+            if (string.IsNullOrWhiteSpace(body) && mode == ComposeMode.Forward)
+                return StatusCode(StatusCodes.Status502BadGateway, new
+                {
+                    message = "L'assistance IA n'a renvoyé aucune note de transfert. Reformulez la consigne."
+                });
+
+            var corps = string.IsNullOrWhiteSpace(body) ? "Cordialement," : body;
+
             var reply = new EmailAiReply
             {
                 GmailMessageId = message.Id,
-                Subject = BuildReplySubject(message.Subject),
-                Body = string.IsNullOrWhiteSpace(body) ? "Cordialement," : body,
+                Subject = mode == ComposeMode.Forward
+                    ? BuildForwardSubject(message.Subject)
+                    : BuildReplySubject(message.Subject),
+                Body = corps,
                 Statut = StatutReponseIa.Generated,
                 GeneratedAt = DateTime.UtcNow
             };
@@ -1249,10 +1270,22 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (!Enum.TryParse<DraftEditAction>(dto.Action, ignoreCase: true, out var action)
                 || !Enum.IsDefined(action))
             {
-                return BadRequest(new { message = "Action inconnue. Utilisez « Rewrite » ou « Translate »." });
+                return BadRequest(new
+                {
+                    message = "Action inconnue. Utilisez « Generate », « Rewrite » ou « Translate »."
+                });
             }
 
-            if (string.IsNullOrWhiteSpace(dto.Text))
+            // « Générer » part d'une zone de rédaction vide : c'est même le principe. C'est
+            // donc la consigne qui est obligatoire, pas le texte. Réformatter ou traduire un
+            // texte vide, en revanche, n'a rien à reformuler et serait une requête sans effet.
+            if (action == DraftEditAction.Generate && string.IsNullOrWhiteSpace(dto.Instruction))
+                return BadRequest(new
+                {
+                    message = "Précisez ce que vous voulez écrire : sans consigne, il n'y a rien à générer."
+                });
+
+            if (action != DraftEditAction.Generate && string.IsNullOrWhiteSpace(dto.Text))
                 return BadRequest(new { message = "Le texte à reformuler est vide." });
 
             if (action == DraftEditAction.Translate && !TranslateLanguage.IsSupported(dto.TargetLanguage))
@@ -1348,12 +1381,120 @@ namespace Backend_Gestion_Magasin_API.Controllers
         // POST: api/gmail/send — compose et envoie un email via la boîte Gmail connectée.
         // Ne crée AUCUNE ligne en base : ni EmailAiReply, ni EmailAiAnalysis. La composition
         // est un brouillon éphémère ; seul Gmail conserve l'envoi.
+        // GET: api/gmail/compose/prefill?messageId=42&mode=ReplyAll
+        //
+        // Préremplissage du composeur pour « Répondre », « Répondre à tous » et
+        // « Transférer ». Tout ce qui engage l'utilisateur est calculé ICI, jamais dans le
+        // client : « répondre à tous » omettrait la discussion entière si les participants
+        // étaient lus côté navigateur, et un objet « Re: » fabriqué à la main disparaît ou
+        // s'empile selon le client de courriel utilisé.
+        //
+        // La citation du message d'origine est renvoyée POUR AFFICHAGE SEULE : elle ne
+        // rejoint jamais la zone de rédaction, sinon « Reformuler » ou « Traduire » la
+        // réécrivrait. À l'envoi, le serveur reconstruit sa propre citation.
+        //
+        // Ce endpoint ne modifie rien : sans danger à appeler aussi souvent que
+        // l'interface le souhaite.
+        [HttpGet("compose/prefill")]
+        [RequireModulePermission("courriels", requireWrite: false)]
+        public async Task<ActionResult<ComposePrefillDto>> ComposePrefill(
+            [FromQuery] int messageId,
+            [FromQuery] string mode = "Reply")
+        {
+            var modeCompose = ParseComposeMode(mode);
+            if (modeCompose == null)
+                return BadRequest(new { message = $"Mode de composition inconnu : « {mode} »." });
+
+            if (modeCompose == ComposeMode.New)
+                return BadRequest(new { message = "Un nouveau message n'a pas de message de référence." });
+
+            var connection = await GetActiveConnectionAsync();
+            if (connection == null) return BadRequest(new { message = "Aucun compte Gmail connecté." });
+
+            var message = await GetOwnedMessageAsync(messageId);
+            if (message == null) return NotFound(new { message = "Message introuvable." });
+
+            var result = new ComposePrefillDto
+            {
+                Mode = modeCompose.Value.ToString(),
+                ReplyToMessageId = message.Id
+            };
+
+            // Participants de la discussion : expéditeur, puis To et Cc du message reçu.
+            // On retire l'adresse du compte connecté — se mettre soi-même en copie de sa
+            // propre réponse n'aide personne — et les doublons, sans distinction de casse.
+            var dejaVus = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(connection.GmailAddress))
+                dejaVus.Add(connection.GmailAddress.Trim());
+
+            var participants = new List<string>();
+            void AjouterParticipant(string? adresse)
+            {
+                if (string.IsNullOrWhiteSpace(adresse)) return;
+                var propre = adresse.Trim();
+                if (!dejaVus.Add(propre)) return;
+                participants.Add(propre);
+            }
+
+            if (modeCompose == ComposeMode.Forward)
+            {
+                // Le destinataire d'un transfert EST un choix de l'utilisateur : on ne
+                // pré-remplit personne, sinon un transfert se transforme en « répondre à
+                // tous » par un simple appui sur le mauvais bouton.
+                result.Subject = BuildForwardSubject(message.Subject);
+                result.QuotedText = BuildForwardedBlock(message);
+                return Ok(result);
+            }
+
+            AjouterParticipant(ExtractEmailAddress(message.From));
+
+            if (modeCompose == ComposeMode.ReplyAll)
+            {
+                foreach (var adresse in SplitAddressHeader(message.To)) AjouterParticipant(adresse);
+                foreach (var adresse in SplitAddressHeader(message.Cc)) AjouterParticipant(adresse);
+
+                // L'expéditeur reste seul en destinataire : c'est lui qui a écrit. Tous
+                // les autres participants vont en copie. Mettre tout le monde en To *et*
+                // en Cc gonflerait l'en-tête sans rien ajouter, et ferait de chaque copie
+                // un destinataire à part entière.
+                result.To.AddRange(participants.Take(1));
+                result.Cc.AddRange(participants.Skip(1));
+            }
+            else
+            {
+                result.To.AddRange(participants);
+            }
+
+            if (result.To.Count == 0)
+                return BadRequest(new { message = "L'expéditeur de ce message est illisible : saisissez le destinataire." });
+
+
+            result.Subject = BuildReplySubject(message.Subject);
+            result.QuotedText = BuildQuotedBody(message);
+
+            // Une proposition IA encore exploitable sur ce message est proposée au
+            // composeur plutôt que d'en regénérer une payante pour rien.
+            var proposition = await _context.EmailAiReponses
+                .Where(r => r.GmailMessageId == message.Id && r.Statut == StatutReponseIa.Generated)
+                .OrderByDescending(r => r.GeneratedAt)
+                .Select(r => (int?)r.Id)
+                .FirstOrDefaultAsync();
+
+            result.AiReplyId = proposition;
+
+            return Ok(result);
+        }
+
         [HttpPost("send")]
         [RequireModulePermission("courriels", requireWrite: true)]
         public async Task<ActionResult<ComposeEmailResultDto>> Send([FromBody] ComposeEmailDto dto)
         {
             var connection = await GetActiveConnectionAsync();
             if (connection == null) return BadRequest(new { message = "Aucun compte Gmail connecté." });
+
+            var mode = ParseComposeMode(dto.Mode);
+            if (mode == null)
+                return BadRequest(new { message = $"Mode de composition inconnu : « {dto.Mode} »." });
 
             var to = NormalizeAddresses(dto.To);
             if (to.Count == 0)
@@ -1362,7 +1503,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var cc = NormalizeAddresses(dto.Cc);
             var bcc = NormalizeAddresses(dto.Bcc);
 
-            if (string.IsNullOrWhiteSpace(dto.BodyText) && string.IsNullOrWhiteSpace(dto.BodyHtml))
+            // Un corps vide n'est un envoi vide que pour un message NEUF : répondre ou
+            // transférer sans une ligne de sa part est un usage normal, et le serveur y
+            // ajoute de toute façon la citation du message d'origine. Refuser ici
+            // interdirait le transfert le plus banal — « je te transfère, tu en fais ce
+            // que tu veux » — pour un corps que le serveur complète dans la seconde.
+            if (mode == ComposeMode.New &&
+                string.IsNullOrWhiteSpace(dto.BodyText) &&
+                string.IsNullOrWhiteSpace(dto.BodyHtml))
                 return BadRequest(new { message = "Le message est vide." });
 
             var attachments = new List<(string FileName, string MimeType, byte[] Content)>();
@@ -1379,14 +1527,21 @@ namespace Backend_Gestion_Magasin_API.Controllers
             attachments.AddRange(decoded.Pieces);
             totalBytes = decoded.TotalBytes;
 
-            // Le fil de réponse est résolu côté IMS : on n'accepte qu'un GmailMessageId
-            // appartenant à l'utilisateur, jamais un identifiant arbitraire fourni par le client.
+            // Le fil de réponse est résolu côté IMS à partir d'un identifiant de message
+            // appartenant à l'utilisateur : le client ne fournit ni le fil, ni
+            // l'In-Reply-To, ni les References. Sans message de référence, un mode autre
+            // que « nouveau message » n'a pas de sens et serait envoyé sans rattachement —
+            // la réponse arriverait dans la boîte comme un message orphelin.
             string? threadId = null;
             string? inReplyTo = null;
-            if (!string.IsNullOrWhiteSpace(dto.InReplyTo))
+
+            if (mode != ComposeMode.New || dto.ReplyToMessageId.HasValue)
             {
+                if (!dto.ReplyToMessageId.HasValue)
+                    return BadRequest(new { message = "Le message auquel vous répondez est obligatoire." });
+
                 var parent = await _context.GmailMessages
-                    .Where(m => m.GmailConnectionId == connection.Id && m.GmailMessageId == dto.InReplyTo)
+                    .Where(m => m.GmailConnectionId == connection.Id && m.Id == dto.ReplyToMessageId.Value)
                     .Select(m => new { m.GmailThreadId, m.Rfc822MessageId })
                     .FirstOrDefaultAsync();
 
@@ -1397,6 +1552,48 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 inReplyTo = parent.Rfc822MessageId;
             }
 
+            // Trace IA facultative : la proposition n'est soldée qu'APRÈS l'envoi réussi,
+            // pour qu'un échec Gmail laisse la proposition réutilisable. Le corps réellement
+            // envoyé est conservé en plus du texte généré, sinon la trace ne dirait rien de
+            // ce que l'utilisateur a finalement envoyé.
+            EmailAiReply? trace = null;
+            if (dto.AiReplyId.HasValue)
+            {
+                trace = await GetOwnedReplyAsync(dto.AiReplyId.Value);
+                if (trace == null)
+                    return BadRequest(new { message = "La proposition IA à solder est introuvable." });
+
+                if (trace.Statut == StatutReponseIa.Sent)
+                    return StatusCode(StatusCodes.Status409Conflict, new { message = "Cette proposition a déjà été envoyée." });
+
+                if (trace.GmailMessageId != dto.ReplyToMessageId)
+                    return BadRequest(new { message = "La proposition IA ne porte pas sur le message auquel vous répondez." });
+            }
+
+            // Le corps part de la zone de rédaction telle qu'affichée, puis le serveur AJOUTE sa
+            // propre citation du message de référence. La citation n'est jamais acceptée
+            // depuis le client : c'est la seule façon de garantir qu'elle reste la citation
+            // d'origine, et non un texte que l'IA aurait réécrit ou traduit au passage.
+            var corps = dto.BodyText ?? string.Empty;
+            string? corpsHtml = dto.BodyHtml;
+
+            if (mode != ComposeMode.New)
+            {
+                var reference = await _context.GmailMessages
+                    .FirstAsync(m => m.Id == dto.ReplyToMessageId!.Value, HttpContext.RequestAborted);
+
+                var citation = mode == ComposeMode.Forward
+                    ? BuildForwardedBlock(reference)
+                    : BuildQuotedBody(reference);
+
+                // Un transfert sans note de l'utilisateur reste un transfert complet :
+                // la citation seule est déjà un message valide.
+                if (corps.Trim().Length > 0)
+                    corps = corps.TrimEnd() + "\n\n" + citation;
+                else
+                    corps = citation;
+            }
+
             try
             {
                 var (messageId, sentThreadId) = await _gmailApi.SendMessageAsync(
@@ -1405,11 +1602,28 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     cc.Count > 0 ? string.Join(", ", cc) : null,
                     bcc.Count > 0 ? string.Join(", ", bcc) : null,
                     dto.Subject ?? "(sans objet)",
-                    dto.BodyText,
-                    dto.BodyHtml,
+                    corps,
+                    corpsHtml,
                     threadId,
                     inReplyTo,
                     attachments);
+
+                if (trace != null)
+                {
+                    trace.Statut = StatutReponseIa.Sent;
+                    trace.SentAt = DateTime.UtcNow;
+                    trace.GmailSentMessageId = messageId;
+                    // Ce qui est tracé est le texte de l'utilisateur, citation mise à part :
+                    // c'est sa rédaction qui intéresse la relecture, pas la citation qu'il
+                    // n'a pas écrite.
+                    trace.SentBody = (dto.BodyText ?? string.Empty).Trim();
+                    trace.SentSubject = dto.Subject;
+                }
+
+                // Le statut « envoyé » n'est écrit qu'ici. Si Gmail a échoué, la proposition
+                // reste Generated : l'utilisateur peut la renvoyer, et rien ne prétend qu'un
+                // message est parti alors qu'il est resté dans la boîte de rédaction.
+                if (trace != null) await _context.SaveChangesAsync();
 
                 return Ok(new ComposeEmailResultDto
                 {
@@ -1912,8 +2126,33 @@ namespace Backend_Gestion_Magasin_API.Controllers
             Statut = r.Statut.ToString(),
             GeneratedAt = r.GeneratedAt,
             SentAt = r.SentAt,
-            GmailDraftId = r.GmailDraftId
+            GmailDraftId = r.GmailDraftId,
+            SentSubject = r.SentSubject,
+            SentBody = r.SentBody
         };
+
+        /// <summary>
+        /// Lit un mode de composition reçu sous forme de chaîne.
+        /// <para>
+        /// Renvoie <c>null</c> pour une valeur INCONNUE, et l'appelant la refuse. Retomber
+        /// sur « nouveau message » serait dangereux : une faute de frappe sur
+        /// « Reponder » ferait partir une réponse sans fil ni In-Reply-To, donc hors du
+        /// fil de discussion, sans le moindre signe visible.
+        /// </para>
+        /// </summary>
+        private static ComposeMode? ParseComposeMode(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return ComposeMode.New;
+
+            return value.Trim().ToLowerInvariant() switch
+            {
+                "new" or "nouveau" => ComposeMode.New,
+                "reply" or "repondre" => ComposeMode.Reply,
+                "replyall" or "repondreatous" => ComposeMode.ReplyAll,
+                "forward" or "transferer" => ComposeMode.Forward,
+                _ => null
+            };
+        }
 
         private static PrioriteTache ParsePriority(string? value) => value?.Trim().ToLowerInvariant() switch
         {
@@ -1929,15 +2168,125 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return baseSubject.StartsWith("Re:", StringComparison.OrdinalIgnoreCase) ? baseSubject : $"Re: {baseSubject}";
         }
 
+        /// <summary>Idem <see cref="BuildReplySubject"/> pour un transfert (« Fwd: », « Tr: »).</summary>
+        private static string BuildForwardSubject(string? subject)
+        {
+            var baseSubject = string.IsNullOrWhiteSpace(subject) ? "Sans objet" : subject.Trim();
+            var alreadyForwarded =
+                baseSubject.StartsWith("Fwd:", StringComparison.OrdinalIgnoreCase) ||
+                baseSubject.StartsWith("Tr:", StringComparison.OrdinalIgnoreCase) ||
+                baseSubject.StartsWith("Transfert:", StringComparison.OrdinalIgnoreCase);
+            return alreadyForwarded ? baseSubject : $"Fwd: {baseSubject}";
+        }
+
+        /// <summary>
+        /// Découpe un en-tête d'adresses Gmail (« A &lt;a@x.fr&gt;, b@y.fr ») en adresses.
+        /// </summary>
+        private static List<string> SplitAddressHeader(string? header)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(header)) return result;
+
+            foreach (var part in header.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var address = ExtractEmailAddress(part);
+                if (address != null) result.Add(address);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Texte à citer dans le composeur : le texte brut si le message en a un, sinon
+        /// le HTML dépouillé de ses balises.
+        /// <para>
+        /// Un mail « HTML uniquement » (newsletters, signatures) n'a pas toujours de partie
+        /// texte : sans ce repli, la citation arriverait vide et l'utilisateur repartirait
+        /// d'un corps sans contexte. Le dépouillage est volontairement grossier et ne sert
+        /// qu'au préremplissage — le texte reste modifiable, et l'envoi reste en texte brut.
+        /// </para>
+        /// </summary>
+        private static string ToQuotableText(string? bodyText, string? bodyHtml)
+        {
+            if (!string.IsNullOrWhiteSpace(bodyText)) return bodyText!.Trim();
+
+            if (string.IsNullOrWhiteSpace(bodyHtml)) return string.Empty;
+
+            var texte = Regex.Replace(bodyHtml, "<(script|style)\\b[^>]*>.*?</\\1>",
+                string.Empty, RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            texte = Regex.Replace(texte, "<br\\s*/?>|</p>|</div>|</tr>", "\n", RegexOptions.IgnoreCase);
+            texte = Regex.Replace(texte, "<[^>]+>", string.Empty);
+            texte = WebUtility.HtmlDecode(texte);
+            texte = Regex.Replace(texte, "[ \t]+\n", "\n");
+            texte = Regex.Replace(texte, "\n{3,}", "\n\n");
+            return texte.Trim();
+        }
+
+        /// <summary>
+        /// Citation d'une réponse, à la convention des clients de messagerie :
+        /// « Le 12/06/2026 à 09:15, x@y.fr a écrit : » suivi du message cité, chaque ligne
+        /// préfixée par « &gt; ». La date est facultative : un message sans date reste citable.
+        /// </summary>
+        private static string BuildQuotedBody(GmailMessage message)
+        {
+            var expediteur = string.IsNullOrWhiteSpace(message.From) ? "l'expéditeur" : message.From.Trim();
+            var destinataire = ExtractEmailAddress(expediteur) ?? expediteur;
+            var date = message.ReceivedAt == default
+                ? string.Empty
+                : message.ReceivedAt.ToLocalTime().ToString("dd/MM/yyyy 'à' HH:mm");
+
+            var enTete = date.Length > 0
+                ? $"Le {date}, {destinataire} a écrit :"
+                : $"{destinataire} a écrit :";
+
+            var texte = ToQuotableText(message.BodyText, message.BodyHtml);
+            if (texte.Length == 0) return enTete;
+
+            var cite = string.Join("\n", texte.Split('\n').Select(l => "> " + l.TrimEnd()));
+            return $"{enTete}\n{cite}";
+        }
+
+        /// <summary>
+        /// En-tête de transfert, à la convention des clients de messagerie : le message
+        /// d'origine est identifié (expéditeur, date, objet, destinataires) puis repris
+        /// intégralement, pour que le destinataire du transfert sache ce qu'il reçoit.
+        /// </summary>
+        private static string BuildForwardedBlock(GmailMessage message)
+        {
+            var expediteur = string.IsNullOrWhiteSpace(message.From) ? "(expéditeur inconnu)" : message.From.Trim();
+            var date = message.ReceivedAt == default
+                ? string.Empty
+                : message.ReceivedAt.ToLocalTime().ToString("dd/MM/yyyy 'à' HH:mm");
+
+            var lignes = new List<string>
+            {
+                "---------- Message transféré ----------",
+                $"De : {expediteur}",
+                $"Date : {date}",
+                $"Objet : {message.Subject ?? "(sans objet)"}",
+                $"À : {message.To?.Trim()}",
+                $"Cc : {message.Cc?.Trim()}"
+            };
+
+            return string.Join("\n", lignes.Where(l => !l.EndsWith(" :", StringComparison.Ordinal)))
+                + "\n\n"
+                + ToQuotableText(message.BodyText, message.BodyHtml);
+        }
+
         // « Jean Dupont <jean.dupont@x.com> » -> « jean.dupont@x.com »
         private static string? ExtractEmailAddress(string? from)
         {
             if (string.IsNullOrWhiteSpace(from)) return null;
 
-            var match = Regex.Match(from, "<(?<email>[^>]+)>");
+            // La coupure d'un en-tête laisse une espace devant chaque adresse
+            // (« a@b.fr, c@d.fr ») : sans cette coupe préalable, l'expression régulière
+            // échouait sur la espace et l'on perdait tous les destinataire d'un coup.
+            var valeur = from.Trim();
+
+            var match = Regex.Match(valeur, "<(?<email>[^>]+)>");
             if (match.Success) return match.Groups["email"].Value.Trim();
 
-            return Regex.IsMatch(from, @"^[^@\s]+@[^@\s]+\.[^@\s]+$") ? from.Trim() : null;
+            return Regex.IsMatch(valeur, @"^[^@\s]+@[^@\s]+\.[^@\s]+$") ? valeur : null;
         }
 
         private static string AppendSource(string? description, string? from, string? subject, DateTime receivedAt)

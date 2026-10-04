@@ -1,3 +1,5 @@
+using Backend_Gestion_Magasin_API.Models.Gmail;
+
 namespace Backend_Gestion_Magasin_API.Dtos.Gmail
 {
     // ── Connexion ─────────────────────────────────────────────
@@ -103,6 +105,13 @@ namespace Backend_Gestion_Magasin_API.Dtos.Gmail
     {
         // instruction libre optionnelle donnée par l'utilisateur ("réponds que le tissu arrive vendredi")
         public string? Instruction { get; set; }
+
+        /// <summary>
+        /// Mode de composition pour lequel le texte est généré, en toutes lettres.
+        /// « Forward » demande une note d'accompagnement plutôt qu'une réponse à
+        /// l'expéditeur ; « Reply » et « ReplyAll » demandent la même chose.
+        /// </summary>
+        public string? Mode { get; set; }
     }
 
     public class EmailAiReplyDto
@@ -115,6 +124,17 @@ namespace Backend_Gestion_Magasin_API.Dtos.Gmail
         public DateTime GeneratedAt { get; set; }
         public DateTime? SentAt { get; set; }
         public string? GmailDraftId { get; set; }
+
+        /// <summary>Objet réellement parti. Renseigne seulement après un envoi réussi.</summary>
+        public string? SentSubject { get; set; }
+
+        /// <summary>
+        /// Texte réellement parti. Distinct de <see cref="Body"/> : entre la génération et
+        /// l'envoi, l'utilisateur relit, corrige, reformule ou traduit. C'est cette version
+        /// qui est envoyée, donc c'est elle qu'il faut garder pour vérifier ce qui est
+        /// réellement arrivé au destinataire.
+        /// </summary>
+        public string? SentBody { get; set; }
     }
 
     public class UpdateReplyDto

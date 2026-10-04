@@ -1,4 +1,5 @@
 using System.Globalization;
+using Backend_Gestion_Magasin_API.Models.Gmail;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -44,7 +45,13 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         Rewrite,
 
         /// <summary>Traduction vers une des trois langues autorisées.</summary>
-        Translate
+        Translate,
+
+        /// <summary>
+        /// Rédaction à partir d'une consigne seule, zone de rédaction vide — c'est le cas
+        /// du bouton « Générer par IA » sur un message NEUF, où aucun fil n'existe encore.
+        /// </summary>
+        Generate
     }
 
     public interface IGmailAiService
@@ -52,7 +59,13 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         /// <summary>False si GROQ_API_KEY n'est pas configurée : permet un message clair côté UI.</summary>
         bool IsAvailable { get; }
         Task<TaskSuggestionResult> AnalyzeForTaskAsync(string emailFrom, string? subject, string? body);
-        Task<string> GenerateReplyAsync(string emailFrom, string? subject, string? body, string? instruction);
+        /// <summary>
+        /// Rédaction d'un texte à partir du fil reçu. <paramref name="mode"/> change la
+        /// consigne donnée au modèle : un transfert demande une note d'accompagnement, pas
+        /// une réponse à l'expéditeur.
+        /// </summary>
+        Task<string> GenerateReplyAsync(
+            string emailFrom, string? subject, string? body, string? instruction, ComposeMode mode);
 
         /// <summary>
         /// Reformule ou traduit le texte SAISSI par l'utilisateur dans la zone de composition.
@@ -137,20 +150,38 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
         public const int MaxTitleLength = 255;
         public const int MaxPriorityLength = 50;
 
-        public async Task<string> GenerateReplyAsync(string emailFrom, string? subject, string? body, string? instruction)
+        public async Task<string> GenerateReplyAsync(
+            string emailFrom, string? subject, string? body, string? instruction, ComposeMode mode)
         {
-            const string systemPrompt = """
-                Tu rédiges, en français, un brouillon de réponse professionnelle et concise à un email reçu
-                dans un atelier de confection textile. Ton poli, direct, pas de formules creuses excessives.
-                Ne signe pas avec un nom précis (laisse "Cordialement," seul en fin de message — l'utilisateur signera).
-                Réponds UNIQUEMENT avec le corps du message (pas d'objet, pas de JSON, pas de balises).
-                """;
+            // Le mode change la nature du texte attendu : répondre et répondre à tous
+            // demandent une réponse, un transfert demande une NOTE qui accompagne le
+            // message recopié — l'expéditeur du message d'origine ne sera pas le
+            // destinataire. Demander une « réponse » en mode transfert produirait un
+            // texte qui répond à quelqu'un qui le recevrait de travers.
+            var systemPrompt = mode == ComposeMode.Forward
+                ? """
+                    Tu rédiges, en français, une courte note d'accompagnement pour un TRANSFERT
+                    d'email reçu dans un atelier de confection textile. La note explique au
+                    destinataire ce qu'il doit savoir ou faire avec le message transmis ci-dessous.
+                    Ton professionnel et direct, deux à quatre phrases, pas de formules creuses.
+                    Ne cite pas le contenu du message, ne le résume pas ligne à ligne, ne signe pas
+                    avec un nom précis. Réponds UNIQUEMENT avec la note (pas d'objet, pas de JSON,
+                    pas de balises).
+                    """
+                : """
+                    Tu rédiges, en français, un brouillon de réponse professionnelle et concise à un email reçu
+                    dans un atelier de confection textile. Ton poli, direct, pas de formules creuses excessives.
+                    Ne signe pas avec un nom précis (laisse "Cordialement," seul en fin de message — l'utilisateur signera).
+                    Réponds UNIQUEMENT avec le corps du message (pas d'objet, pas de JSON, pas de balises).
+                    """;
 
             var instructionLine = string.IsNullOrWhiteSpace(instruction)
                 ? ""
-                : $"\n\nConsigne de l'utilisateur pour cette réponse : {instruction}";
+                : $"\n\nConsigne de l'utilisateur pour ce texte : {instruction}";
 
-            var userPrompt = $"Email reçu de {emailFrom}, objet « {subject} » :\n\n{Truncate(body, 4000)}{instructionLine}";
+            var userPrompt = mode == ComposeMode.Forward
+                ? $"Message à transférer, reçu de {emailFrom}, objet « {subject} » :\n\n{Truncate(body, 4000)}{instructionLine}"
+                : $"Email reçu de {emailFrom}, objet « {subject} » :\n\n{Truncate(body, 4000)}{instructionLine}";
 
             return (await CallGroqTextAsync(systemPrompt, userPrompt)).Trim();
         }
@@ -164,6 +195,37 @@ namespace Backend_Gestion_Magasin_API.Services.Gmail
                 throw new ArgumentException("Langue de traduction non prise en charge.", nameof(targetLanguage));
 
             var source = (text ?? "").Trim();
+
+            // « Générer par IA » sur un message NEUF part d'une zone vide : c'est la seule
+            // action qui accepte un texte source absent, et elle exige alors une consigne —
+            // sans consigne ni texte, il n'y a rien à demander au modèle. Les autres actions
+            // gardent leur refus : reformuler ou traduire un vide ne veut rien dire.
+            if (action == DraftEditAction.Generate && source.Length == 0)
+            {
+                if (string.IsNullOrWhiteSpace(instruction))
+                    throw new ArgumentException(
+                        "Indiquez ce que le message doit contenir : une consigne est nécessaire pour rédiger.",
+                        nameof(instruction));
+
+                var generated = (await CallGroqTextAsync(
+                        """
+                        Tu rédiges, en français, un email professionnel et concis pour un atelier de confection
+                        textile, à partir de la consigne de l'utilisateur. Ton poli et direct, pas de formules
+                        creuses. Ne signe pas avec un nom précis (laisse "Cordialement," seul en fin de message).
+                        Sers-toi uniquement des informations de la consigne : n'invente ni montant, ni date, ni
+                        référence produit qui n'y figure pas. Réponds UNIQUEMENT avec le corps du message
+                        (pas d'objet, pas de JSON, pas de balises).
+                        """,
+                        $"Consigne de l'utilisateur : {instruction.Trim()}",
+                        context: "rédaction d'un email"))
+                    .Trim();
+
+                if (generated.Length == 0)
+                    throw new InvalidOperationException("L'assistance IA n'a renvoyé aucun texte.");
+
+                return generated;
+            }
+
             if (source.Length == 0)
                 throw new ArgumentException("Le texte à reformuler est vide.", nameof(text));
 

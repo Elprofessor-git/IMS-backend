@@ -3,6 +3,26 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Backend_Gestion_Magasin_API.Models.Gmail
 {
+    /// <summary>
+    /// Mode de composition. Les quatre modes partagent le MÊME composeur et le MÊME
+    /// chemin d'envoi : ils ne diffèrent que par le préremplissage, les participants
+    /// proposés et les en-têtes que le serveur résout seul.
+    /// </summary>
+    public enum ComposeMode
+    {
+        /// <summary>Message neuf, sans rattachement à un fil.</summary>
+        New = 0,
+
+        /// <summary>Réponse à l'expéditeur du message de référence.</summary>
+        Reply = 1,
+
+        /// <summary>Réponse à l'expéditeur, tous les participants du fil en copie.</summary>
+        ReplyAll = 2,
+
+        /// <summary>Transfert : le destinataire est choisi par l'utilisateur.</summary>
+        Forward = 3
+    }
+
     // ── Connexion Gmail d'un utilisateur IMS ─────────────────────────────
     // 1 utilisateur IMS -> 0..N comptes Gmail connectés (unicité UserId+GoogleUserId).
     // Le RefreshToken n'est JAMAIS stocké en clair : voir TokenEncryptionService.
@@ -217,8 +237,28 @@ namespace Backend_Gestion_Magasin_API.Models.Gmail
 
         [StringLength(100)]
         public string? GmailDraftId { get; set; }
+
         [StringLength(100)]
         public string? GmailSentMessageId { get; set; }
+
+        /// <summary>
+        /// Texte RÉELLEMENT envoyé, quand il diffère de <see cref="Body"/>.
+        /// <para>
+        /// <see cref="Body"/> garde ce que l'IA a écrit, intact et définitif : c'est la
+        /// mémoire de la proposition. Ce champ garde la version relue et corrigée par
+        /// l'utilisateur. Sans lui, une trace ne dirait rien de ce qu'est parti, alors
+        /// que l'écart entre une proposition et son envoi est précisément ce qu'on veut
+        /// pouvoir relire.
+        /// </para>
+        /// <para>
+        /// Ajouté en migration additive : <c>null</c> sur les propositions historiques, qui
+        /// restent lisibles telles quelles.
+        /// </para>
+        /// </summary>
+        public string? SentBody { get; set; }
+
+        /// <summary>Objet réellement envoyé, pour la même raison que <see cref="SentBody"/>.</summary>
+        public string? SentSubject { get; set; }
 
         public virtual GmailMessage GmailMessage { get; set; } = null!;
     }
