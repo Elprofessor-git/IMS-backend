@@ -430,6 +430,32 @@ namespace Backend_Gestion_Magasin_API.Services.Partage
                 query = query.Where(s => s.Taille != null && s.Taille.ToLower().Contains(t));
             }
 
+            // Sélection d'articles. Liste déjà validée à la création (existence,
+            // activité, unicité, plafond) : on ne la réinterprète pas ici. Le
+            // Contains sur une liste figée est traduit en SQL par PostgreSQL.
+            if (f.ArticleIds is { Count: > 0 })
+            {
+                var ids = f.ArticleIds.Distinct().ToArray();
+                query = query.Where(s => ids.Contains(s.ArticleId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(f.Categorie))
+            {
+                var categorie = f.Categorie.Trim();
+                query = query.Where(s => s.Article != null && s.Article.Categorie == categorie);
+            }
+
+            if (!string.IsNullOrWhiteSpace(f.TypeStock))
+            {
+                if (!Enum.TryParse<TypeStock>(f.TypeStock.Trim(), ignoreCase: true, out var typeStock))
+                {
+                    // Valeur invalide : on ne restreint pas le périmètre, mais elle
+                    // a déjà été rejetée à la création. Défensif uniquement.
+                    return query;
+                }
+                query = query.Where(s => s.TypeStock == typeStock);
+            }
+
             return query;
         }
 
@@ -449,10 +475,17 @@ namespace Backend_Gestion_Magasin_API.Services.Partage
                 Statut = Nettoyer(f.Statut),
                 DateDebut = f.DateDebut,
                 DateFin = f.DateFin,
+                Categorie = Nettoyer(f.Categorie),
+                TypeStock = Nettoyer(f.TypeStock)?.ToLowerInvariant(),
+                ArticleIds = f.ArticleIds is { Count: > 0 }
+                    ? f.ArticleIds.Distinct().OrderBy(i => i).ToList()
+                    : null,
             };
 
             var vide = propre.Article == null && propre.Couleur == null && propre.Taille == null
-                    && propre.Statut == null && propre.DateDebut == null && propre.DateFin == null;
+                    && propre.Statut == null && propre.DateDebut == null && propre.DateFin == null
+                    && propre.Categorie == null && propre.TypeStock == null
+                    && (propre.ArticleIds == null || propre.ArticleIds.Count == 0);
             if (vide) return null;
 
             return JsonSerializer.Serialize(propre, JsonOptions);

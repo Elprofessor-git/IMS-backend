@@ -19,6 +19,24 @@ namespace Backend_Gestion_Magasin_API.Dtos.Partage
         public string? Statut { get; set; }
         public DateTime? DateDebut { get; set; }
         public DateTime? DateFin { get; set; }
+
+        /// <summary>
+        /// Restriction par articles, en ET avec les autres filtres. Sert à
+        /// « partager ce que j'ai sélectionné », pas à charger une désignation :
+        /// c'est <see cref="Article"/> qui joue ce rôle.
+        /// </summary>
+        /// <remarks>
+        /// Validé à la création (existence, activité, unicité, plafond). La
+        /// validation vit dans le contrôleur, pas ici : ce DTO décrit ce qui est
+        /// stocké, pas ce qui est acceptable.
+        /// </remarks>
+        public List<int>? ArticleIds { get; set; }
+
+        /// <summary>Catégorie d'article, correspondance exacte.</summary>
+        public string? Categorie { get; set; }
+
+        /// <summary>Nom de <c>TypeStock</c> : Libre, Reserve ou Importe.</summary>
+        public string? TypeStock { get; set; }
     }
 
     public class CreateShareLinkDto

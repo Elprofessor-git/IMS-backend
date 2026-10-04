@@ -30,6 +30,125 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// GET /api/Stock/Liste — liste paginée, filtrée et PROJETÉE, destinée à
+        /// l'écran stock et aux liens partagés.
+        /// </summary>
+        /// <remarks>
+        /// Volontairement distincte de GET /api/Stock : celle-ci renvoie l'entité
+        /// complète, prix et notes compris, et n'est pas filtrable. On ne la modifie
+        /// pas ici — changer sa forme casserait les clients existants — mais on ne
+        /// s'appuie pas dessus non plus. Les filtres sont appliqués CÔTÉ SERVEUR :
+        /// filtrer dans le navigateur ne verrait qu'une page de lignes et
+        /// donnerait un décompte faux.
+        /// </remarks>
+        [HttpGet("Liste")]
+        [RequireModulePermission("stock", requireWrite: false)]
+        public async Task<ActionResult<StockListeReponseDto>> GetListe([FromQuery] StockListeFiltresDto filtres)
+        {
+            if (!TryParseTypeStock(filtres.TypeStock, out var typeStock))
+            {
+                return BadRequest("TypeStock doit valoir Libre, Reserve ou Importe.");
+            }
+
+            // IQueryable explicite : Include renvoie un IIncludableQueryable, qui
+            // ne se réassigne pas implicitement quand on y enchaîne des Where.
+            IQueryable<Stock> query = _context.Stocks.AsNoTracking()
+                .Include(s => s.Article)
+                .Include(s => s.CommandeClient)
+                .Include(s => s.Client)
+                .Include(s => s.Plateforme);
+
+            if (filtres.CommandeClientId.HasValue)
+                query = query.Where(s => s.CommandeClientId == filtres.CommandeClientId);
+            if (filtres.ClientId.HasValue)
+                query = query.Where(s => s.ClientId == filtres.ClientId);
+            if (filtres.PlateformeId.HasValue)
+                query = query.Where(s => s.PlateformeId == filtres.PlateformeId);
+            if (typeStock.HasValue)
+                query = query.Where(s => s.TypeStock == typeStock.Value);
+            if (!string.IsNullOrWhiteSpace(filtres.Categorie))
+            {
+                var categorie = filtres.Categorie.Trim();
+                query = query.Where(s => s.Article.Categorie == categorie);
+            }
+            if (!string.IsNullOrWhiteSpace(filtres.Q))
+            {
+                var q = filtres.Q.Trim().ToLower();
+                query = query.Where(s =>
+                    (s.Article.Designation != null && s.Article.Designation.ToLower().Contains(q))
+                    || (s.Article.Reference != null && s.Article.Reference.ToLower().Contains(q)));
+            }
+            if (filtres.AlertesOnly)
+            {
+                query = query.Where(s => s.Quantite <= s.Article.SeuilAlerte);
+            }
+
+            var total = await query.CountAsync();
+
+            // Page bornée : au-delà de la dernière page, on rend une page vide
+            // plutôt qu'une erreur — un filtre qui rétrécit le résultat sous la
+            // page courante ne doit pas casser l'écran.
+            var page = Math.Max(filtres.Page, 1);
+            var taille = Math.Clamp(filtres.Taille, 1, 200);
+
+            // Matérialisation de la SEULE page, puis projection en mémoire :
+            // TypeStock est un enum converti en texte, et le cast "TypeStock"::int
+            // que produirait une projection SQL fait échouer la requête chez
+            // PostgreSQL. On ne récupère donc qu'une page, pas toute la table.
+            var pageLignes = await query
+                .OrderBy(s => s.Id)
+                .Skip((page - 1) * taille)
+                .Take(taille)
+                .ToListAsync();
+
+            var lignes = pageLignes.Select(s => new StockListeDto
+            {
+                Id = s.Id,
+                ArticleId = s.ArticleId,
+                ArticleDesignation = s.Article.Designation,
+                ArticleReference = s.Article.Reference,
+                ArticleCategorie = s.Article.Categorie,
+                SeuilAlerte = s.Article.SeuilAlerte,
+                Couleur = s.Couleur,
+                CodeCouleur = s.CodeCouleur,
+                Taille = s.Taille,
+                Dimension = s.Dimension,
+                EmplacementPhysique = s.EmplacementPhysique,
+                NumeroLot = s.NumeroLot,
+                Quantite = s.Quantite,
+                QuantiteReservee = s.QuantiteReservee,
+                QuantiteDisponible = s.Quantite - s.QuantiteReservee,
+                TypeStock = s.TypeStock.ToString(),
+                EstValide = s.EstValide,
+                EnAlerte = s.Quantite <= s.Article.SeuilAlerte,
+                EstCritique = s.Quantite <= s.Article.SeuilCritique,
+                DateEntree = s.DateEntree,
+                DatePeremption = s.DatePeremption,
+                CommandeClientId = s.CommandeClientId,
+                CommandeLibelle = s.CommandeClient == null
+                    ? null
+                    : s.CommandeClient.NumeroCommande
+                      + (string.IsNullOrEmpty(s.CommandeClient.TitreCommande)
+                          ? ""
+                          : " — " + s.CommandeClient.TitreCommande),
+                ClientId = s.ClientId,
+                ClientLibelle = s.Client == null
+                    ? null
+                    : s.Client.Nom + (string.IsNullOrEmpty(s.Client.Prenom) ? "" : " " + s.Client.Prenom),
+                PlateformeId = s.PlateformeId,
+                PlateformeLibelle = s.Plateforme != null ? s.Plateforme.Nom : null,
+            }).ToList();
+
+            return Ok(new StockListeReponseDto
+            {
+                Items = lignes,
+                Total = total,
+                Page = page,
+                Taille = taille,
+            });
+        }
+
         [HttpGet("{id}")]
         [RequireModulePermission("stock", requireWrite: false)]
         public async Task<ActionResult<Stock>> GetStock(int id)
@@ -340,6 +459,32 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private bool StockExists(int id)
         {
             return _context.Stocks.Any(e => e.Id == id);
+        }
+
+        /// <summary>
+        /// Parse un nom de type de stock. Une valeur absente laisse le filtre
+        /// désactivé ; une valeur inconnue est une erreur de saisie, pas un
+        /// « aucun résultat » silencieux.
+        /// </summary>
+        private static bool TryParseTypeStock(string? valeur, out TypeStock? typeStock)
+        {
+            typeStock = null;
+            if (string.IsNullOrWhiteSpace(valeur)) return true;
+
+            switch (valeur.Trim().ToLowerInvariant())
+            {
+                case "libre":
+                    typeStock = TypeStock.Libre;
+                    return true;
+                case "reserve":
+                    typeStock = TypeStock.Reserve;
+                    return true;
+                case "importe":
+                    typeStock = TypeStock.Importe;
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private static string? GetScope(Stock s)

@@ -33,9 +33,12 @@ namespace Backend.Tests
                 "partage-admin", "Admin", "Partage",
                 r => r.EstAdministrateur = true);
 
+            // PeutGererStock est nécessaire : ces liens exposent la section Stock
+            // (sections = 1), qui exige désormais le droit Stock en plus du
+            // droit de partage.
             _partageur = await _factory.CreateUserAsync(
                 "partage-porteur", "Porteur", "Liens",
-                r => r.PeutPartagerLiens = true);
+                r => { r.PeutPartagerLiens = true; r.PeutGererStock = true; });
 
             _sansDroit = await _factory.CreateUserAsync("partage-sansdroit", "Sans", "Droit");
         }
