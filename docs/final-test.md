@@ -332,3 +332,71 @@ Protocole: git diff --stat → AUCUNE méthode protégée modifiée
 - `e2e/lot-courriels.spec.ts` (scénario préexistant) exige la stack réelle et la base amorcée (`e2e/README-courriels.md`) : **non exécuté**, le composeur n'a donc pas été vérifié de bout en bout contre un vrai Gmail.
 - **Aucun envoi réel** vérifié (nécessite un compte Gmail connecté) : le comportement repose sur le double enregistreur.
 - Limites Gmail ~500 messages/jour sur un compte gratuit, non applicable au composeur mais rappelées ici.
+
+---
+
+# LOTS CALCULATRICE + STOCK + COUPE
+
+**Date** : 2026-10-04
+**Commits** : Backend `db22888` (stock) + `46e0d53` (coupe C1) — Frontend `0e19dd9` (calculatrice) + `bc1d18a` (stock)
+**Lot précédent** : composeur unifié (backend `15aa5aa`, `df4b084` ; frontend `2ede42a`, `50513a5`)
+
+## Résumé
+
+| # | Élément | Mise en œuvre | Preuve |
+|---|---------|---------------|--------|
+| 1 | **Calculatrice : `%` au sens Windows** | `200+10%` = 220, `200*10%` = 20, `%` seul = division par 100 ; chaque `%` se rattache au total courant | `src/lib/calculatrice.test.ts` |
+| 2 | **Calculatrice : dérive des flottants** | Virgule fixe sur `bigint`, échelle `10^18`. `0.1+0.2` = 0.3 exactement ; `16960,4-(4717*0,9)` = 12715,1 là où le flottant ressort `12715.100000000002`. Seules les divisions restent approximatives (tronquées à 18 décimales, affichage arrondi à 12) | `calculatrice.test.ts`, `horsEchelle()` |
+| 3 | **Calculatrice : `eval` interdit** | Analyse écrite à la main : tokenizer → shunting-yard → RPN. Expression invalide → erreur dédiée, division par zéro comprise, jamais `Infinity` ni `NaN` | `src/lib/calculatrice.ts` |
+| 4 | **Calculatrice : widget** | Chargé en `ssr: false`, ne persiste rien | `calculator-loader.tsx` |
+| 5 | **Stock : liste chargée en mémoire** | Toute la liste partie en JSON, ce qui cassait le cast PostgreSQL de `TypeStock` (enum stocké en texte) | `StockController` : projection après filtrage, `TypeStock = s.TypeStock.ToString()` |
+| 6 | **Stock : `TypeStock` affiché en clair** | `Libre` / `Reserve` / `Importe` | `TYPE_STOCK_LABEL` |
+| 7 | **Stock : filtres et pagination serveur** | Tabulations, recherche différée, filtres et pagination déplacés côté API au lieu de filtrer le client | `useGetStockListe`, `PaginationBar` |
+| 8 | **Partage : filtres croisés incohérents** | `ArticleIds`, `Categorie` et `TypeStock` sont croisés : le lien ne partage que ce qui satisfait **tous** les filtres, pas seulement le premier | `ValiderFiltres` (strict), `PartageShareLinkTests` |
+| 9 | **Partage : permission trop large** | Règle A : `PeutPartagerLiens` **et** `PeutGererStock`. Un rôle avec le premier seulement ne partage plus rien | `PeutGererStock` |
+| 10 | **Coupe : moteur d'échelle** | Fonction pure : `reste(t,g) = reste(t-1,g) - plis(t) × occ(t,g)`, restes négatifs conservés, invariant `total = commande + surplus - manque` | `Services/Coupe/MoteurCoupe.cs` |
+| 11 | **Coupe : grain de l'ordre de coupe** | Un ordre par commande, un par couple modèle/couleur. Index unique sur `(CommandeClientId, ArticleId, Couleur)`, couleur normalisée. Le `manque` n'est **pas stocké** | `Models/BesoinCoupe.cs` |
+| 12 | **Coupe : la quantité commandée n'est pas la cellule « QT »** | Le moteur lit la somme des quantités par gabarit. Sur `PDR98 D649-BEIGE` et `PDR98 D649-BLEU GRISE`, la cellule « QT » saisie à la main (76, 294) ne vaut pas la somme que le classeur calcule lui-même (75, 291) | `QuantiteCommandee_LitLaSommeDesQuantites_PasLaCelluleQT` |
+| 13 | **Coupe : couverture alignée sur le BOM existant** | `TypeStock.Importe` sur les mêmes quatre portées (commande, client, plateforme, groupe). Corrigé au passage : le filtre de type de stock manquait, et le métrage annoncé comptait tout le stock importé non rattaché | `BesoinCoupeService.CouvertureAsync` |
+
+## Trois contradictions trouvées dans les données du dossier
+
+| # | Constat | Vérification | Traitement retenu |
+|---|---------|--------------|-------------------|
+| 1 | **OVITA : le classeur se contredit avec lui-même** | `QT COUPE` (J4) = 4717, car le nombre de pièces de la 7ᵉ passe n'y est pas renseigné (0). L'échelle REPARTITION lui affecte pourtant 4 m de T44. En revanche `U4` = 4721 alimente la chaîne tissu : `MT UT` = 4248,9 → `J17` = 12711,5, et `U5` = 127 | **4721** est la seule valeur que le classeur utilise lui-même pour le tissu. La cellule QT COUPE est celle qui est incomplète |
+| 2 | **Le test de la calculatrice affirmait l'inverse** | `calculatrice.test.ts` portait le commentaire « 12711,5, qui correspondait au total 4721 **erroné** repris du classeur » | Commentaire **corrigé**. Le test de dérive flottante est conservé (il est vrai), mais ancré sur 4721 → 12711,5 |
+| 3 | **Deux cellules « QT » contredisent leur propre somme** | `PDR98 D649-BEIGE` : QT 76 vs somme 75. `PDR98 D649-BLEU GRISE` : QT 294 vs somme 291 | Le moteur lit la somme. L'écart est figé par un test pour rester visible plutôt que corrigé en silence |
+
+## Deux limites assumées, figées par les tests
+
+- **`surplus` et `manque` sont globaux**, pas calculés gabarit par gabarit. Un surplus global masque donc un gabarit non couvert, et un manque global peut coexister avec un gabarit intact. Les restes par gabarit restent visibles dans le résultat.
+- **L'ordre des passes n'a aucun effet** sur le total ni sur les restes finaux : ce sont des sommes de retraits. Seules les lignes intermédiaires de l'échelle changent. Un test qui affirmait l'inverse a été corrigé.
+
+## Vérifications
+
+```
+Backend:  dotnet build ✅ 0 erreur
+          suite complète ✅ 322 / 322  (284 avant ces lots, +38)
+          AddBesoinCoupe : migration additive (1 table, 2 index, 2 FK), aucun backfill
+Frontend: pnpm typecheck ✅ | pnpm lint ✅
+          pnpm test ✅ 29 / 29  (dont 20 calculatrice)
+          pnpm build ✅ 45 / 45 pages
+Réseau:   aucun appel externe — base PostgreSQL jetable sur ims-test-net
+```
+
+**Contournement d'environnement** : le runtime .NET 9 est absent de l'hôte (seul `Microsoft.NETCore.App` est présent, pas `Microsoft.AspNetCore.App`), donc `dotnet build`, `dotnet test` **et `dotnet ef`** ne peuvent pas y démarrer. Tout passe en conteneur `sdk:9.0`, avec le projet **et** le cache NuGet montés sur leurs chemins absolus d'origine : `backend.Tests/obj/project.assets.json` contient des chemins absolus et `--no-restore` échoue en `NETSDK1064` si le conteneur ne les reproduit pas. `dotnet test` se coinçait en outre indéfiniment dans la cible VSTest après le build (aucun `testhost` dans `/proc`) : le build et `dotnet vstest` sont donc lancés séparément, ce qui supprime toute évaluation MSBuild pendant les tests.
+
+## Décisions retenues
+
+- **Le classeur n'est pas importé.** Les 54 feuilles ne servent que de cas de test du moteur, extraites une fois dans un JSON versionné. Un « rapport d'import » n'a donc rien à faire en production : `RapportDivergence` vit dans le projet de test.
+- **`enTeteClasseur` est informatif** et n'est jamais comparé au moteur. Le rapport de divergence est le seul endroit où il apparaît ; sur les 54 feuilles, **OVITA est la seule divergence**.
+- **Les tests ne lisent jamais le `.xlsx`** : un test qui lirait le classeur serait vert chez moi et rouge ailleurs, et lierait la suite à un binaire difficile à relire en diff.
+- **Le `manque` n'est pas stocké** : recalculé à la lecture, il ne peut pas devenir faux. Idem pour la couverture, recalculée sur le périmètre du BOM existant pour que les deux chiffres ne se contredisent pas.
+- **Migration additive uniquement**, sans backfill historique.
+
+## Points laissés ouverts
+
+- **L'écran d'ordre de coupe n'existe pas.** Le grain C1 et le moteur sont livrés, mais la création/édition préremplie depuis la commande, un par couple modèle/couleur, reste à faire — c'est le prochain lot.
+- **27 des 54 feuilles ont des libellés de taille positionnels** (`'0','1','2','3'`) dans le classeur : ce ne sont pas des tailles de tissu. Les quantités extraites sont bonnes (la somme correspond au QT pour 25 d'entre elles), mais **le test « le moteur reproduit le classeur sur 54 feuilles » est partiellement circulaire** — seul OVITA est vérifié cellule par cellule.
+- **La couverture `BesoinCoupe` n'est pas couverte par un test de base** : les tests C1 portent sur le moteur, qui est pur. Le service et la migration sont validés par la suite complète (322 tests, `MigrateAsync` réel), pas par des tests dédiés.
+- La chaîne de 7ᵉ passe d'OVITA repose sur le nombre de pièces laissé vide dans le classeur : si l'opérateur le renseigne, `QT COUPE` passera à 4721 et la divergence disparaîtra. Les tests le signaleront.
