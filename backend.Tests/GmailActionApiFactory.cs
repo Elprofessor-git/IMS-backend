@@ -128,6 +128,9 @@ public sealed class RecordingGmailApiService : IGmailApiService
     {
         while (FailingSearchQueries.TryTake(out _)) { }
         while (FailingMessageIds.TryTake(out _)) { }
+
+        FailingDraftDeletionId = null;
+        FailingSend = false;
     }
 
     public Task<GmailApiMessage> GetMessageAsync(GmailConnection c, string id)
@@ -228,13 +231,105 @@ public sealed class RecordingGmailApiService : IGmailApiService
         DraftSends.Enqueue(draftId);
         return Task.FromResult("sent-" + draftId);
     }
-    public Task DeleteDraftAsync(GmailConnection c, string draftId) => throw Unexpected();
+    // Suppressions de brouillon : enregistrées pour vérifier qu'un abandon de proposition
+    // IA ne laisse pas de brouillon orphelin dans Gmail.
+    public ConcurrentQueue<string> DraftDeletions { get; } = new();
+
+    /// <summary>Brouillon dont la suppression doit échouer, pour tester le 502 du refus.</summary>
+    public string? FailingDraftDeletionId { get; set; }
+
+    public Task DeleteDraftAsync(GmailConnection c, string draftId)
+    {
+        if (FailingDraftDeletionId != null && draftId == FailingDraftDeletionId)
+            throw new InvalidOperationException("Erreur Gmail simulée sur drafts.delete.");
+
+        DraftDeletions.Enqueue(draftId);
+        return Task.CompletedTask;
+    }
+
     public Task<(string FileName, string MimeType, byte[] Content)> GetAttachmentAsync(
         GmailConnection c, string messageId, string attachmentId) => throw Unexpected();
+
+    /// <summary>
+    /// Envoi direct (composeur unifié). Enregistré comme un brouillon : c'est ce que la
+    /// régression A1 vérifie sur le nouveau chemin — le texte RÉELLEMENT transmis, et pas
+    /// seulement celui qu'un test déclare avoir envoyé.
+    /// </summary>
     public Task<(string MessageId, string ThreadId)> SendMessageAsync(
         GmailConnection c, string to, string? cc, string? bcc, string? subject, string? bodyText,
         string? bodyHtml, string? threadId, string? inReplyTo,
-        IReadOnlyList<(string FileName, string MimeType, byte[] Content)> attachments) => throw Unexpected();
+        IReadOnlyList<(string FileName, string MimeType, byte[] Content)> attachments)
+    {
+        if (FailingSend)
+            throw new InvalidOperationException("Erreur Gmail simulée sur messages.send.");
+
+        DirectSends.Enqueue(new SendCall(to, cc, bcc, subject ?? "", bodyText ?? "", bodyHtml,
+            threadId, inReplyTo, attachments));
+
+        return Task.FromResult(("envoye-" + (DirectSends.Count), threadId ?? "thread-neuve"));
+    }
+
+    /// <summary>Envoi direct observé par le double.</summary>
+    public sealed record SendCall(
+        string To, string? Cc, string? Bcc, string Subject, string BodyText, string? BodyHtml,
+        string? ThreadId, string? InReplyTo,
+        IReadOnlyList<(string FileName, string MimeType, byte[] Content)> Attachments);
+
+    public ConcurrentQueue<SendCall> DirectSends { get; } = new();
+
+    /// <summary>Envoi direct qui doit échouer, pour vérifier qu'aucune trace n'est soldée.</summary>
+    public bool FailingSend { get; set; }
+}
+
+/// <summary>
+/// Faux service IA : enregistre les demandes et renvoie un texte scripté. Aucun appel à
+/// Groq n'est fait, et surtout aucun texte n'est « inventé » par un modèle — les tests
+/// assertent donc des faits (le texte transmis, la consigne reçue), pas le style d'un modèle.
+/// </summary>
+public sealed class RecordingGmailAiService : IGmailAiService
+{
+    public bool IsAvailable { get; set; } = true;
+
+    /// <summary>Texte renvoyé par la prochaine génération depuis un fil.</summary>
+    public string GeneratedText { get; set; } = "Texte propose par l'assistance.";
+
+    /// <summary>Texte renvoyé par la prochaine reformulation ou traduction.</summary>
+    public string EditedText { get; set; } = "Texte renvoye par l'assistance.";
+
+    public sealed record GenerateCall(
+        string EmailFrom, string? Subject, string? Body, string? Instruction, ComposeMode Mode);
+
+    public sealed record EditCall(
+        DraftEditAction Action, string Text, string? Instruction, string? TargetLanguage);
+
+    public ConcurrentQueue<GenerateCall> Generates { get; } = new();
+    public ConcurrentQueue<EditCall> Edits { get; } = new();
+
+    public Task<string> GenerateReplyAsync(
+        string emailFrom, string? subject, string? body, string? instruction, ComposeMode mode)
+    {
+        Generates.Enqueue(new GenerateCall(emailFrom, subject, body, instruction, mode));
+        return Task.FromResult(GeneratedText);
+    }
+
+    public Task<string> EditDraftTextAsync(
+        DraftEditAction action, string text, string? instruction, string? targetLanguage)
+    {
+        Edits.Enqueue(new EditCall(action, text, instruction, targetLanguage));
+        return Task.FromResult(EditedText);
+    }
+
+    public Task<TaskSuggestionResult> AnalyzeForTaskAsync(string emailFrom, string? subject, string? body) =>
+        Task.FromResult(new TaskSuggestionResult { IsTask = false, Confidence = 0 });
+
+    // Les DEUX journaux sont vidés : n'oublier que « Generates » laissait dans « Edits »
+    // l'appel d'un test précédent, et le test suivant lisait un appel qui n'était pas
+    // le sien.
+    public void Reset()
+    {
+        Generates.Clear();
+        Edits.Clear();
+    }
 }
 
 /// <summary>
@@ -242,6 +337,27 @@ public sealed class RecordingGmailApiService : IGmailApiService
 /// Utilisé par les tests d'actions (lu, étoile, archive, corbeille) qui ont besoin de
 /// savoir ce qui a été demandé à Gmail sans l'appeler.
 /// </summary>
+/// <summary>
+/// Hôte de test du composeur unifié : double Gmail (enregistreur) ET fausse IA. Isolé de
+/// <see cref="GmailActionApiFactory"/> pour que les autres suites continuent de voir l'IA
+/// comme indisponible, qui est l'état réel d'un serveur sans GROQ_API_KEY.
+/// </summary>
+public class GmailComposeApiFactory : GmailActionApiFactory
+{
+    public RecordingGmailAiService Ai { get; } = new();
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IGmailAiService>();
+            services.AddSingleton<IGmailAiService>(Ai);
+        });
+    }
+}
+
 public class GmailActionApiFactory : TacheApiFactory
 {
     public RecordingGmailApiService Recorder { get; } = new();
