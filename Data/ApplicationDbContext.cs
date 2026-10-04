@@ -25,6 +25,7 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<MouvementStock> MouvementsStock { get; set; }
         public DbSet<CommandeClient> CommandesClients { get; set; }
         public DbSet<BesoinCommande> BesoinsCommandes { get; set; }
+        public DbSet<BesoinCoupe> BesoinsCoupe { get; set; }
         public DbSet<TacheProduction> TachesProduction { get; set; }
         public DbSet<Achat> Achats { get; set; }
         public DbSet<LigneAchat> LignesAchat { get; set; }
@@ -892,6 +893,25 @@ namespace Backend_Gestion_Magasin_API.Data
             // L'index composite couvre aussi les recherches par MatelasId seul.
             modelBuilder.Entity<PlanDeCoupeLigne>()
                 .HasIndex(p => new { p.MatelasId, p.Taille })
+                .IsUnique();
+
+            // BesoinCoupe — grain (commande, article, couleur). Unicité stricte :
+            // deux saisies de la même couleur ne doivent pas doubler la ligne, donc
+            // la couleur est comparée apres normalisation (couche service).
+            modelBuilder.Entity<BesoinCoupe>()
+                .HasOne(b => b.CommandeClient)
+                .WithMany()
+                .HasForeignKey(b => b.CommandeClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<BesoinCoupe>()
+                .HasOne(b => b.Article)
+                .WithMany()
+                .HasForeignKey(b => b.ArticleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<BesoinCoupe>()
+                .HasIndex(b => new { b.CommandeClientId, b.ArticleId, b.Couleur })
                 .IsUnique();
 
             // ChaineProduction — nom unique, type stocké en string

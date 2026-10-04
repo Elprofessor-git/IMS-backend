@@ -3,6 +3,7 @@ using Backend_Gestion_Magasin_API.Models;
 using dotenv.net;
 using Microsoft.EntityFrameworkCore;
 using Backend_Gestion_Magasin_API.Services;
+using Backend_Gestion_Magasin_API.Services.Coupe;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Helpers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -290,6 +291,7 @@ Console.WriteLine(string.IsNullOrWhiteSpace(adresseSysteme)
 builder.Services.AddScoped<IPasswordSetupLinkService, PasswordSetupLinkService>();
 builder.Services.AddScoped<ISessionValidationService, SessionValidationService>();
 builder.Services.AddScoped<StockService>();
+builder.Services.AddScoped<BesoinCoupeService>();
 builder.Services.AddScoped<CommandeService>();
 builder.Services.AddScoped<ImportationService>();
 builder.Services.AddScoped<FournisseurClientService>();

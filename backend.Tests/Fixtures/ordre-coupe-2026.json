@@ -1,0 +1,4028 @@
+{
+ "source": "ORDRE DE COUPE-2026.xlsx",
+ "grain": "commande x article x couleur ; une ligne par gabarit et par passe",
+ "regle": "reste(t) = reste(t-1) - plis(t) x occ(t,taille) ; les restes negatifs sont conserves",
+ "totalPlanifie": "somme(plis(t) x somme(occ(t))) ; ecart = totalPlanifie - quantite commandee ; surplus = max(0, ecart) ; manque = max(0, -ecart). L'invariant est totalPlanifie = commande + surplus - manque : 5 des 54 feuilles sous-couvrent la commande, dont DDRD7-D321 (80 planifies pour 1200).",
+ "avertissement": "enTeteClasseur est INFORMATIF : valeurs relues dans le classeur, jamais assertees. Sur OVITA le classeur se contredit. QT COUPE (J4) vaut 4717 : c'est la somme pieces x plis de chaque passe, et le nombre de pieces de la passe 7 n'y est pas renseigne (0), donc ses 4 m de T44 n'y sont pas comptes. L'echelle REPARTITION lui affecte pourtant 4 m, et c'est 4721 que le classeur utilise lui-meme pour le tissu (U4 -> MT UT 4248,9 -> stock restant J17 = 12711,5), avec un surplus U5 = 127. Le moteur retient 4721 : il suit l'echelle, pas une cellule mal renseignee. Seule divergence constatee sur les 54 feuilles.",
+ "feuilles": [
+  {
+   "feuille": "PDJ22-D676",
+   "modele": "PDJ22 D676",
+   "couleur": "6001-ECRU rosé",
+   "qtCommande": 347,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "0": 20,
+    "1": 132,
+    "2": 105,
+    "3": 78,
+    "4": 12
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 20,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 2,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 12,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 46,
+     "occurrences": {
+      "1": 2,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 8,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 348,
+    "surplus": 1,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": -1,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 348,
+    "tissuQt": 348,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "PDC60B-D598",
+   "modele": "PDC60B D598",
+   "couleur": "1200 - ECRU",
+   "qtCommande": 298,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 40,
+    "36": 84,
+    "38": 78,
+    "40": 68,
+    "42": 26,
+    "44": 2
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 26,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 41,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 11,
+     "occurrences": {
+      "36": 1,
+      "38": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 3,
+     "occurrences": {
+      "36": 2,
+      "44": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 299,
+    "surplus": 1,
+    "manque": 0,
+    "restes": {
+     "34": -1,
+     "36": 0,
+     "38": 0,
+     "40": 1,
+     "42": 0,
+     "44": -1
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 299,
+    "tissuQt": 299,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "RBRESIL",
+   "modele": "RBRESIL",
+   "couleur": "IMP",
+   "qtCommande": 1811,
+   "consoTissu": 1.4,
+   "tisRecu": 2655,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 88,
+    "36": 286,
+    "38": 493,
+    "40": 446,
+    "42": 367,
+    "44": 131
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 16,
+     "occurrences": {
+      "38": 2
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 95,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 42,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 164,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 2,
+      "42": 1
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 41,
+     "occurrences": {
+      "38": 3,
+      "42": 2
+     }
+    },
+    {
+     "numero": 6,
+     "plis": 15,
+     "occurrences": {
+      "38": 4
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 1897,
+    "surplus": 86,
+    "manque": 0,
+    "restes": {
+     "34": -7,
+     "36": -15,
+     "38": -23,
+     "40": -19,
+     "42": -16,
+     "44": -6
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 1897,
+    "tissuQt": 1897,
+    "tissuConso": 1.4,
+    "tissuRestant": -0.7999999999997272
+   }
+  },
+  {
+   "feuille": "RCACAO",
+   "modele": "RCACAO",
+   "couleur": "IMP",
+   "qtCommande": 2080,
+   "consoTissu": 1.93,
+   "tisRecu": 4100,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42"
+   ],
+   "quantites": {
+    "34": 331,
+    "36": 500,
+    "38": 520,
+    "40": 398,
+    "42": 331
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 173,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 243,
+     "occurrences": {
+      "36": 1,
+      "38": 2,
+      "40": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 52,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 52,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "42": 2
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 17,
+     "occurrences": {
+      "34": 4,
+      "42": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 2165,
+    "surplus": 85,
+    "manque": 0,
+    "restes": {
+     "34": -14,
+     "36": -20,
+     "38": -18,
+     "40": -18,
+     "42": -15
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 2165,
+    "tissuQt": 2165,
+    "tissuConso": 1.93,
+    "tissuRestant": -78.44999999999982
+   }
+  },
+  {
+   "feuille": "RDANA",
+   "modele": "RDANA",
+   "couleur": "IMP",
+   "qtCommande": 539,
+   "consoTissu": 2.13,
+   "tisRecu": 2004.62,
+   "tailles": [
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "38": 108,
+    "40": 107,
+    "42": 112,
+    "44": 117,
+    "46": 95
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 98,
+     "occurrences": {
+      "38": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 56,
+     "occurrences": {
+      "40": 2,
+      "44": 2
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 15,
+     "occurrences": {
+      "38": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 7,
+     "occurrences": {
+      "42": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 570,
+    "surplus": 31,
+    "manque": 0,
+    "restes": {
+     "38": -5,
+     "40": -5,
+     "42": -8,
+     "44": -10,
+     "46": -3
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 570,
+    "tissuQt": 570,
+    "tissuConso": 2.13,
+    "tissuRestant": 790.52
+   }
+  },
+  {
+   "feuille": "KDANA",
+   "modele": "KDANA",
+   "couleur": "IMP",
+   "qtCommande": 533,
+   "consoTissu": 1.25,
+   "tisRecu": 790.52,
+   "tailles": [
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "38": 99,
+    "40": 103,
+    "42": 108,
+    "44": 110,
+    "46": 113
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 108,
+     "occurrences": {
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 7,
+     "occurrences": {
+      "42": 1,
+      "44": 1,
+      "46": 2
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 568,
+    "surplus": 35,
+    "manque": 0,
+    "restes": {
+     "38": -9,
+     "40": -5,
+     "42": -7,
+     "44": -5,
+     "46": -9
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 568,
+    "tissuQt": 568,
+    "tissuConso": 1.25,
+    "tissuRestant": 80.51999999999998
+   }
+  },
+  {
+   "feuille": "PDJ38 D649-BEIGE",
+   "modele": "PDJ38 D649",
+   "couleur": "1901 - BEIGE",
+   "qtCommande": 196,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 20,
+    "1": 76,
+    "2": 56,
+    "3": 44
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 20,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 24,
+     "occurrences": {
+      "1": 2,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 8,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 2,
+     "occurrences": {
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 194,
+    "surplus": 0,
+    "manque": 2,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 2,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 194,
+    "tissuQt": 194,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "PDC14 D649-BEIGE",
+   "modele": "PDC14 D649",
+   "couleur": "1901 - BEIGE",
+   "qtCommande": 234,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 20,
+    "1": 106,
+    "2": 66,
+    "3": 42
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 20,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 22,
+     "occurrences": {
+      "1": 2,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 24,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 9,
+     "occurrences": {
+      "1": 2
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 234,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 234,
+    "tissuQt": 234,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "PDR98 D649-BEIGE",
+   "modele": "PDR98 D649",
+   "couleur": "1901 - BEIGE",
+   "qtCommande": 75,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 6,
+    "1": 29,
+    "2": 26,
+    "3": 14
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 13,
+     "occurrences": {
+      "1": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 6,
+     "occurrences": {
+      "0": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 16,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 4,
+     "occurrences": {
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 74,
+    "surplus": 0,
+    "manque": 1,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 1
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 74,
+    "tissuQt": 74,
+    "tissuConso": 0,
+    "tissuRestant": 0,
+    "qtSaisi": 76
+   }
+  },
+  {
+   "feuille": "PDR98 D649-BLEU GRISE",
+   "modele": "PDR98 D649",
+   "couleur": "3001-BLEU GRISE",
+   "qtCommande": 291,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 12,
+    "1": 123,
+    "2": 96,
+    "3": 60
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 60,
+     "occurrences": {
+      "1": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 12,
+     "occurrences": {
+      "0": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 62,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 18,
+     "occurrences": {
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 286,
+    "surplus": 0,
+    "manque": 5,
+    "restes": {
+     "0": 0,
+     "1": 1,
+     "2": 4,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 286,
+    "tissuQt": 286,
+    "tissuConso": 0,
+    "tissuRestant": 0,
+    "qtSaisi": 294
+   }
+  },
+  {
+   "feuille": "PDR60 D649-BLEU GRISE",
+   "modele": "PDR60 D649",
+   "couleur": "3001-BLEU GRISE",
+   "qtCommande": 374,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 22,
+    "1": 146,
+    "2": 114,
+    "3": 92
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 22,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 69,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 22,
+     "occurrences": {
+      "1": 2,
+      "2": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 10,
+     "occurrences": {
+      "1": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 371,
+    "surplus": 0,
+    "manque": 3,
+    "restes": {
+     "0": 0,
+     "1": 1,
+     "2": 1,
+     "3": 1
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 371,
+    "tissuQt": 371,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "RDIXA",
+   "modele": "RDIXA",
+   "couleur": "IMP",
+   "qtCommande": 730,
+   "consoTissu": 1.48,
+   "tisRecu": 1076.5,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 28,
+    "36": 181,
+    "38": 203,
+    "40": 172,
+    "42": 112,
+    "44": 34
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 31,
+     "occurrences": {
+      "34": 1,
+      "36": 2,
+      "40": 2,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 104,
+     "occurrences": {
+      "36": 1,
+      "38": 2,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 11,
+     "occurrences": {
+      "36": 2,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 6,
+     "occurrences": {
+      "44": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 756,
+    "surplus": 26,
+    "manque": 0,
+    "restes": {
+     "34": -3,
+     "36": -7,
+     "38": -5,
+     "40": -5,
+     "42": -3,
+     "44": -3
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 756,
+    "tissuQt": 756,
+    "tissuConso": 1.48,
+    "tissuRestant": -42.37999999999988
+   }
+  },
+  {
+   "feuille": "OVITA",
+   "modele": "OVITA",
+   "couleur": "IMP",
+   "qtCommande": 4594,
+   "consoTissu": 0.9,
+   "tisRecu": 16960.4,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 505,
+    "36": 1031,
+    "38": 1240,
+    "40": 949,
+    "42": 731,
+    "44": 138
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 30,
+     "occurrences": {
+      "38": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 139,
+     "occurrences": {
+      "34": 1,
+      "36": 2,
+      "38": 2,
+      "40": 1,
+      "42": 2,
+      "44": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 236,
+     "occurrences": {
+      "34": 1,
+      "36": 2,
+      "38": 2,
+      "40": 2,
+      "42": 2
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 145,
+     "occurrences": {
+      "34": 1,
+      "36": 2,
+      "38": 3,
+      "40": 2
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 29,
+     "occurrences": {
+      "38": 2,
+      "40": 2
+     }
+    },
+    {
+     "numero": 6,
+     "plis": 18,
+     "occurrences": {
+      "36": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 7,
+     "plis": 4,
+     "occurrences": {
+      "44": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 4721,
+    "surplus": 127,
+    "manque": 0,
+    "restes": {
+     "34": -15,
+     "36": -27,
+     "38": -33,
+     "40": -28,
+     "42": -19,
+     "44": -5
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 4717,
+    "tissuQt": 4721,
+    "tissuConso": 0.9,
+    "tissuRestant": 12711.5
+   }
+  },
+  {
+   "feuille": "JOVITA",
+   "modele": "JOVITA",
+   "couleur": "IMP",
+   "qtCommande": 4520,
+   "consoTissu": 1.25,
+   "tisRecu": 12711.5,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 500,
+    "36": 1024,
+    "38": 1173,
+    "40": 955,
+    "42": 707,
+    "44": 161
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 30,
+     "occurrences": {
+      "38": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 163,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 350,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 2,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 212,
+     "occurrences": {
+      "36": 2,
+      "38": 1,
+      "40": 2,
+      "42": 1
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 38,
+     "occurrences": {
+      "36": 3,
+      "38": 2,
+      "40": 1
+     }
+    },
+    {
+     "numero": 6,
+     "plis": 16,
+     "occurrences": {
+      "38": 2
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 4640,
+    "surplus": 120,
+    "manque": 0,
+    "restes": {
+     "34": -13,
+     "36": -27,
+     "38": -40,
+     "40": -20,
+     "42": -18,
+     "44": -2
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 4640,
+    "tissuQt": 4640,
+    "tissuConso": 1.25,
+    "tissuRestant": 6911.5
+   }
+  },
+  {
+   "feuille": "ROVITA",
+   "modele": "ROVITA",
+   "couleur": "IMP",
+   "qtCommande": 4549,
+   "consoTissu": 1.48,
+   "tisRecu": 6911.5,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 497,
+    "36": 1055,
+    "38": 1216,
+    "40": 966,
+    "42": 677,
+    "44": 138
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 30,
+     "occurrences": {
+      "38": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 515,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 140,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 169,
+     "occurrences": {
+      "36": 2,
+      "38": 1,
+      "40": 2
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 90,
+     "occurrences": {
+      "36": 1,
+      "38": 3
+     }
+    },
+    {
+     "numero": 6,
+     "plis": 40,
+     "occurrences": {
+      "38": 3,
+      "42": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 4670,
+    "surplus": 121,
+    "manque": 0,
+    "restes": {
+     "34": -18,
+     "36": -28,
+     "38": -28,
+     "40": -27,
+     "42": -18,
+     "44": -2
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 4670,
+    "tissuQt": 4670,
+    "tissuConso": 1.48,
+    "tissuRestant": -0.1000000000003638
+   }
+  },
+  {
+   "feuille": "RIPSY",
+   "modele": "RIPSY",
+   "couleur": "IMP",
+   "qtCommande": 504,
+   "consoTissu": 1.58,
+   "tisRecu": 1434,
+   "tailles": [
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "38": 96,
+    "40": 95,
+    "42": 97,
+    "44": 109,
+    "46": 107
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 102,
+     "occurrences": {
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 14,
+     "occurrences": {
+      "44": 1,
+      "46": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 538,
+    "surplus": 34,
+    "manque": 0,
+    "restes": {
+     "38": -6,
+     "40": -7,
+     "42": -5,
+     "44": -7,
+     "46": -9
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 538,
+    "tissuQt": 538,
+    "tissuConso": 1.58,
+    "tissuRestant": 583.9599999999999
+   }
+  },
+  {
+   "feuille": "KIPSY",
+   "modele": "KIPSY",
+   "couleur": "IMP",
+   "qtCommande": 526,
+   "consoTissu": 1.06,
+   "tisRecu": 583.9599999999999,
+   "tailles": [
+    "T2/T38",
+    "T3/T40",
+    "T4/T42",
+    "T5/T44",
+    "T6/T46"
+   ],
+   "quantites": {
+    "T2/T38": 99,
+    "T3/T40": 101,
+    "T4/T42": 108,
+    "T5/T44": 110,
+    "T6/T46": 108
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 105,
+     "occurrences": {
+      "T2/T38": 1,
+      "T3/T40": 1,
+      "T4/T42": 1,
+      "T5/T44": 1,
+      "T6/T46": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 11,
+     "occurrences": {
+      "T4/T42": 1,
+      "T5/T44": 1,
+      "T6/T46": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 558,
+    "surplus": 32,
+    "manque": 0,
+    "restes": {
+     "T2/T38": -6,
+     "T3/T40": -4,
+     "T4/T42": -8,
+     "T5/T44": -6,
+     "T6/T46": -8
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 558,
+    "tissuQt": 558,
+    "tissuConso": 1.06,
+    "tissuRestant": -7.5200000000000955
+   }
+  },
+  {
+   "feuille": "KROSE",
+   "modele": "KROSE",
+   "couleur": "IMP",
+   "qtCommande": 552,
+   "consoTissu": 0.88,
+   "tisRecu": 0,
+   "tailles": [
+    "38",
+    "40",
+    "42",
+    "44",
+    "48"
+   ],
+   "quantites": {
+    "38": 99,
+    "40": 103,
+    "42": 115,
+    "44": 117,
+    "48": 118
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 105,
+     "occurrences": {
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1,
+      "48": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 15,
+     "occurrences": {
+      "42": 1,
+      "44": 1,
+      "48": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 570,
+    "surplus": 18,
+    "manque": 0,
+    "restes": {
+     "38": -6,
+     "40": -2,
+     "42": -5,
+     "44": -3,
+     "48": -2
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 570,
+    "tissuQt": 570,
+    "tissuConso": 0.88,
+    "tissuRestant": -501.6
+   }
+  },
+  {
+   "feuille": "PEPITE",
+   "modele": "PEPITE",
+   "couleur": "IMP",
+   "qtCommande": 1546,
+   "consoTissu": 1.24,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 227,
+    "36": 382,
+    "38": 383,
+    "40": 310,
+    "42": 230,
+    "44": 14
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 233,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 14,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 71,
+     "occurrences": {
+      "36": 2,
+      "38": 2,
+      "40": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 12,
+     "occurrences": {
+      "40": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 1574,
+    "surplus": 28,
+    "manque": 0,
+    "restes": {
+     "34": -6,
+     "36": -7,
+     "38": -6,
+     "40": -6,
+     "42": -3,
+     "44": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 1574,
+    "tissuQt": 1574,
+    "tissuConso": 1.24,
+    "tissuRestant": -1951.76
+   }
+  },
+  {
+   "feuille": "CPTIE",
+   "modele": "CPTIE",
+   "couleur": "IMP",
+   "qtCommande": 1790,
+   "consoTissu": 1.08,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 247,
+    "36": 355,
+    "38": 471,
+    "40": 385,
+    "42": 320,
+    "44": 12
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 13,
+     "occurrences": {
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 232,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 2,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 64,
+     "occurrences": {
+      "36": 2,
+      "40": 2,
+      "42": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 19,
+     "occurrences": {
+      "34": 1,
+      "40": 1,
+      "42": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 1821,
+    "surplus": 31,
+    "manque": 0,
+    "restes": {
+     "34": -4,
+     "36": -5,
+     "38": -6,
+     "40": -7,
+     "42": -8,
+     "44": -1
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 1821,
+    "tissuQt": 1821,
+    "tissuConso": 1.08,
+    "tissuRestant": -1966.68
+   }
+  },
+  {
+   "feuille": "RAVIR",
+   "modele": "RAVIR",
+   "couleur": "UNI",
+   "qtCommande": 2795,
+   "consoTissu": 1.85,
+   "tisRecu": 0,
+   "tailles": [
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "36": 505,
+    "38": 585,
+    "40": 615,
+    "42": 585,
+    "44": 505
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 510,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 81,
+     "occurrences": {
+      "38": 1,
+      "40": 2,
+      "42": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 115,
+     "occurrences": {
+      "40": 4
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 2824,
+    "surplus": 29,
+    "manque": 0,
+    "restes": {
+     "36": -5,
+     "38": -6,
+     "40": -7,
+     "42": -6,
+     "44": -5
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 2824,
+    "tissuQt": 2824,
+    "tissuConso": 1.85,
+    "tissuRestant": -5224.400000000001
+   }
+  },
+  {
+   "feuille": "PDC92 D649",
+   "modele": "PDC92-D649",
+   "couleur": "3001-BLEU GRISE",
+   "qtCommande": 422,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 20,
+    "1": 187,
+    "2": 124,
+    "3": 91
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 20,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 71,
+     "occurrences": {
+      "1": 2,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 13,
+     "occurrences": {
+      "1": 2,
+      "2": 2
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 7,
+     "occurrences": {
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 423,
+    "surplus": 1,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": -1,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 423,
+    "tissuQt": 423,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "PDC33 D676",
+   "modele": "PDC33-D676",
+   "couleur": "6001-ECRU ROSE",
+   "qtCommande": 308,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "0": 20,
+    "1": 110,
+    "2": 92,
+    "3": 74,
+    "4": 12
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 12,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 8,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 36,
+     "occurrences": {
+      "1": 2,
+      "2": 2,
+      "3": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 18,
+     "occurrences": {
+      "1": 1,
+      "3": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 308,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 308,
+    "tissuQt": 308,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ18 D086-BLEU CIEL",
+   "modele": "DDJ18 D086",
+   "couleur": "3101-BLEU CIEL",
+   "qtCommande": 948,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "0": 20,
+    "1": 388,
+    "2": 326,
+    "3": 198,
+    "4": 16
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 21,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 89,
+     "occurrences": {
+      "1": 2,
+      "2": 2,
+      "3": 2
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 42,
+     "occurrences": {
+      "1": 3,
+      "2": 3
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 16,
+     "occurrences": {
+      "1": 4,
+      "4": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 950,
+    "surplus": 2,
+    "manque": 0,
+    "restes": {
+     "0": -1,
+     "1": -1,
+     "2": 1,
+     "3": -1,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 950,
+    "tissuQt": 950,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ18 D086-BRONZE",
+   "modele": "DDJ18 D086",
+   "couleur": "5401-BRONZE",
+   "qtCommande": 1251,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "0": 20,
+    "1": 531,
+    "2": 432,
+    "3": 267,
+    "4": 1
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 20,
+     "occurrences": {
+      "0": 1,
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 123,
+     "occurrences": {
+      "1": 2,
+      "2": 2,
+      "3": 2
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 55,
+     "occurrences": {
+      "1": 3,
+      "2": 3
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 25,
+     "occurrences": {
+      "1": 4
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 1,
+     "occurrences": {
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 1251,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 1251,
+    "tissuQt": 1251,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ18 D086-NOIR",
+   "modele": "DDJ18 D086",
+   "couleur": "9100-NOIR",
+   "qtCommande": 80,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 5,
+    "1": 31,
+    "2": 26,
+    "3": 18
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 18,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 8,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 5,
+     "occurrences": {
+      "0": 1,
+      "1": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 80,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 80,
+    "tissuQt": 80,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ18 D086-CARAMEL",
+   "modele": "DDJ18 D086",
+   "couleur": "1902-CARAMEL",
+   "qtCommande": 15,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 0,
+    "1": 5,
+    "2": 5,
+    "3": 5
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 5,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 15,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 15,
+    "tissuQt": 15,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ18 D086-VERT",
+   "modele": "DDJ18 D086",
+   "couleur": "5701-VERT",
+   "qtCommande": 13,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 0,
+    "1": 5,
+    "2": 5,
+    "3": 3
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 3,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 2,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 13,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 13,
+    "tissuQt": 13,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ18 D086-CIGARE",
+   "modele": "DDJ18 D086",
+   "couleur": "6401-CIGARE",
+   "qtCommande": 4,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "0": 0,
+    "1": 2,
+    "2": 2,
+    "3": 0
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 2,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 4,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 4,
+    "tissuQt": 4,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-BLEU CIEL",
+   "modele": "DDC28 D086",
+   "couleur": "3101-BLEU CIEL",
+   "qtCommande": 866,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "1": 308,
+    "2": 241,
+    "3": 170,
+    "4": 147
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 147,
+     "occurrences": {
+      "1": 2,
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 23,
+     "occurrences": {
+      "2": 3,
+      "3": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 13,
+     "occurrences": {
+      "1": 1,
+      "2": 2
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 866,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 1,
+     "2": -1,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 866,
+    "tissuQt": 866,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-BRONZE",
+   "modele": "DDC28 D086",
+   "couleur": "5401-BRONZE",
+   "qtCommande": 1266,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "0": 0,
+    "1": 470,
+    "2": 364,
+    "3": 267,
+    "4": 165
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 165,
+     "occurrences": {
+      "1": 2,
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 51,
+     "occurrences": {
+      "1": 2,
+      "2": 2,
+      "3": 2
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 37,
+     "occurrences": {
+      "1": 1,
+      "2": 2
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 12,
+     "occurrences": {
+      "2": 2
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 1266,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 1,
+     "2": -1,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 1266,
+    "tissuQt": 1266,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-NATUREL",
+   "modele": "DDC28 D086",
+   "couleur": "1301-NATUREL",
+   "qtCommande": 14,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "1": 6,
+    "2": 4,
+    "3": 4
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 4,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 2,
+     "occurrences": {
+      "1": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 14,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 14,
+    "tissuQt": 14,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-BEIGE",
+   "modele": "DDC28 D086",
+   "couleur": "1301-BEIGE",
+   "qtCommande": 13,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "1": 5,
+    "2": 4,
+    "3": 4
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 4,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 1,
+     "occurrences": {
+      "1": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 13,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 13,
+    "tissuQt": 13,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-SABLE",
+   "modele": "DDC28 D086",
+   "couleur": "1600-SABLE",
+   "qtCommande": 13,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "1": 5,
+    "2": 4,
+    "3": 4
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 4,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 1,
+     "occurrences": {
+      "1": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 13,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 13,
+    "tissuQt": 13,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-NUDE",
+   "modele": "DDC28 D086",
+   "couleur": "4201-NUDE",
+   "qtCommande": 13,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "1": 5,
+    "2": 4,
+    "3": 4
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 4,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 1,
+     "occurrences": {
+      "1": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 13,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 13,
+    "tissuQt": 13,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-JAUNE",
+   "modele": "DDC28 D086",
+   "couleur": "8201-JAUNE",
+   "qtCommande": 10,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3"
+   ],
+   "quantites": {
+    "1": 4,
+    "2": 4,
+    "3": 2
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 2,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 2,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 10,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 0,
+     "2": 0,
+     "3": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 10,
+    "tissuQt": 10,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-FUCHSIA",
+   "modele": "DDC28 D086",
+   "couleur": "4701-FUCHSIA",
+   "qtCommande": 20,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "1": 5,
+    "2": 5,
+    "3": 5,
+    "4": 5
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 5,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 20,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 20,
+    "tissuQt": 20,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-VERT D'EAU",
+   "modele": "DDC28 D086",
+   "couleur": "5201-VERT D'EAU",
+   "qtCommande": 21,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "1": 6,
+    "2": 5,
+    "3": 5,
+    "4": 5
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 5,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 1,
+     "occurrences": {
+      "1": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 21,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 21,
+    "tissuQt": 21,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC28 D086-LIE DE VIE",
+   "modele": "DDC28 D086",
+   "couleur": "7701-LIE DE VIE",
+   "qtCommande": 22,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "1": 6,
+    "2": 6,
+    "3": 6,
+    "4": 4
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 4,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 2,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 22,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 22,
+    "tissuQt": 22,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ29-D086",
+   "modele": "DDJ29 D086",
+   "couleur": "5401-BRONZE",
+   "qtCommande": 349,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "quantites": {
+    "0": 1,
+    "1": 102,
+    "2": 107,
+    "3": 90,
+    "4": 49
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 49,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 41,
+     "occurrences": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 12,
+     "occurrences": {
+      "1": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 1,
+     "occurrences": {
+      "0": 1,
+      "2": 1
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 4,
+     "occurrences": {
+      "2": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 349,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "0": 0,
+     "1": 0,
+     "2": 0,
+     "3": 0,
+     "4": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 349,
+    "tissuQt": 349,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "PDC60A-D657",
+   "modele": "PDC60A-D657",
+   "couleur": "3101-BLEU CIEL",
+   "qtCommande": 356,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42"
+   ],
+   "quantites": {
+    "34": 40,
+    "36": 104,
+    "38": 98,
+    "40": 88,
+    "42": 26
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 26,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 14,
+     "occurrences": {
+      "34": 1,
+      "36": 2,
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 24,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 2
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 26,
+     "occurrences": {
+      "36": 1,
+      "38": 1
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 8,
+     "occurrences": {
+      "38": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 356,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "34": 0,
+     "36": 0,
+     "38": 0,
+     "40": 0,
+     "42": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 356,
+    "tissuQt": 356,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "PDR68-D628",
+   "modele": "PDR68-D628",
+   "couleur": "2100-MARINE",
+   "qtCommande": 126,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44"
+   ],
+   "quantites": {
+    "34": 20,
+    "36": 36,
+    "38": 38,
+    "40": 28,
+    "42": 4,
+    "44": 0
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 20,
+     "occurrences": {
+      "34": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 36,
+     "occurrences": {
+      "36": 1,
+      "38": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 4,
+     "occurrences": {
+      "40": 2,
+      "42": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 2,
+     "occurrences": {
+      "38": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 126,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "34": 0,
+     "36": 0,
+     "38": 0,
+     "40": 0,
+     "42": 0,
+     "44": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 126,
+    "tissuQt": 126,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "PDR22A-D657",
+   "modele": "PDR22A-D657",
+   "couleur": "3101-BLEU CILE",
+   "qtCommande": 306,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42"
+   ],
+   "quantites": {
+    "34": 20,
+    "36": 88,
+    "38": 94,
+    "40": 82,
+    "42": 22
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 20,
+     "occurrences": {
+      "34": 1,
+      "36": 1,
+      "38": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 68,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 6,
+     "occurrences": {
+      "38": 1,
+      "40": 2
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 2,
+     "occurrences": {
+      "40": 1,
+      "42": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 306,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "34": 0,
+     "36": 0,
+     "38": 0,
+     "40": 0,
+     "42": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 306,
+    "tissuQt": 306,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDC33P-D315",
+   "modele": "DDC33P-D315",
+   "couleur": "4201-NUDE",
+   "qtCommande": 236,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "36": 44,
+    "38": 62,
+    "40": 54,
+    "42": 40,
+    "44": 22,
+    "46": 14
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 22,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 18,
+     "occurrences": {
+      "36": 1,
+      "38": 2,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 14,
+     "occurrences": {
+      "40": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 4,
+     "occurrences": {
+      "36": 1,
+      "38": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 236,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "36": 0,
+     "38": 0,
+     "40": 0,
+     "42": 0,
+     "44": 0,
+     "46": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 236,
+    "tissuQt": 236,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ34-D128-ECRU",
+   "modele": "DDJ34-D128-ECRU",
+   "couleur": "1200-ECRU",
+   "qtCommande": 296,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "36": 54,
+    "38": 76,
+    "40": 74,
+    "42": 46,
+    "44": 28,
+    "46": 18
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 28,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 18,
+     "occurrences": {
+      "38": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 26,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 4,
+     "occurrences": {
+      "38": 1,
+      "40": 2
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 12,
+     "occurrences": {
+      "40": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 296,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "36": 0,
+     "38": 0,
+     "40": 0,
+     "42": 0,
+     "44": 0,
+     "46": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 296,
+    "tissuQt": 296,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ34-D128-MARINE",
+   "modele": "DDJ34-D128-MARINE",
+   "couleur": "2100-MARINE",
+   "qtCommande": 310,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "36": 52,
+    "38": 80,
+    "40": 68,
+    "42": 56,
+    "44": 34,
+    "46": 20
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 34,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 21,
+     "occurrences": {
+      "38": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 18,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 8,
+     "occurrences": {
+      "38": 1,
+      "40": 2
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 311,
+    "surplus": 1,
+    "manque": 0,
+    "restes": {
+     "36": 0,
+     "38": -1,
+     "40": 0,
+     "42": 1,
+     "44": 0,
+     "46": -1
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 311,
+    "tissuQt": 311,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ34-D128-CINNAMON",
+   "modele": "DDJ34-D128-MARINE",
+   "couleur": "6600-CINNAMON",
+   "qtCommande": 308,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "34": 2,
+    "36": 50,
+    "38": 76,
+    "40": 76,
+    "42": 54,
+    "44": 34,
+    "46": 16
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 34,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 16,
+     "occurrences": {
+      "38": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 16,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 10,
+     "occurrences": {
+      "38": 1,
+      "40": 2
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 6,
+     "occurrences": {
+      "40": 1
+     }
+    },
+    {
+     "numero": 6,
+     "plis": 2,
+     "occurrences": {
+      "34": 1,
+      "42": 2
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 308,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "34": 0,
+     "36": 0,
+     "38": 0,
+     "40": 0,
+     "42": 0,
+     "44": 0,
+     "46": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 308,
+    "tissuQt": 308,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ36-D128-ECRU",
+   "modele": "DDJ36-D128-ECRU",
+   "couleur": "1200-ECRU",
+   "qtCommande": 192,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "34": 8,
+    "36": 30,
+    "38": 48,
+    "40": 42,
+    "42": 36,
+    "44": 20,
+    "46": 8
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 20,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 9,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 8,
+     "occurrences": {
+      "34": 1,
+      "38": 2,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 4,
+     "occurrences": {
+      "38": 1,
+      "40": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 193,
+    "surplus": 1,
+    "manque": 0,
+    "restes": {
+     "34": 0,
+     "36": 1,
+     "38": -1,
+     "40": 1,
+     "42": -1,
+     "44": 0,
+     "46": -1
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 193,
+    "tissuQt": 193,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ36-D128-MARINE",
+   "modele": "DDJ36-D128-ECRU",
+   "couleur": "2100-MARINE",
+   "qtCommande": 932,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "34": 12,
+    "36": 152,
+    "38": 216,
+    "40": 186,
+    "42": 172,
+    "44": 108,
+    "46": 86
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 108,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 44,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 12,
+     "occurrences": {
+      "34": 1,
+      "38": 2,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 22,
+     "occurrences": {
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 18,
+     "occurrences": {
+      "38": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 6,
+     "plis": 8,
+     "occurrences": {
+      "42": 1,
+      "46": 3
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 932,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "34": 0,
+     "36": 0,
+     "38": 0,
+     "40": 0,
+     "42": 0,
+     "44": 0,
+     "46": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 932,
+    "tissuQt": 932,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDJ36-D128-CINNAMON",
+   "modele": "DDJ36-D128-ECRU",
+   "couleur": "6600-CINNAMON",
+   "qtCommande": 284,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "34": 8,
+    "36": 52,
+    "38": 74,
+    "40": 62,
+    "42": 46,
+    "44": 26,
+    "46": 16
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 26,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 16,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 4,
+     "occurrences": {
+      "34": 1,
+      "38": 2,
+      "40": 1,
+      "42": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 16,
+     "occurrences": {
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 5,
+     "occurrences": {
+      "34": 1,
+      "36": 2,
+      "38": 2
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 287,
+    "surplus": 3,
+    "manque": 0,
+    "restes": {
+     "34": -1,
+     "36": 0,
+     "38": -2,
+     "40": 0,
+     "42": 0,
+     "44": 0,
+     "46": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 287,
+    "tissuQt": 287,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDP97-D128-ECRU",
+   "modele": "DDP97-D128-ECRU",
+   "couleur": "1200-ECRU",
+   "qtCommande": 1250,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "34": 14,
+    "36": 218,
+    "38": 284,
+    "40": 274,
+    "42": 224,
+    "44": 134,
+    "46": 102
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 134,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 84,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 6,
+     "occurrences": {
+      "34": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 12,
+     "occurrences": {
+      "38": 2,
+      "40": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 30,
+     "occurrences": {
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 6,
+     "plis": 8,
+     "occurrences": {
+      "34": 1,
+      "38": 1,
+      "40": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 1252,
+    "surplus": 2,
+    "manque": 0,
+    "restes": {
+     "34": 0,
+     "36": 0,
+     "38": -2,
+     "40": 0,
+     "42": 0,
+     "44": 0,
+     "46": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 1252,
+    "tissuQt": 1252,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDP97-D128-CINNAMON",
+   "modele": "DDP97-D128-CINNAMON",
+   "couleur": "6600-CINNAMON",
+   "qtCommande": 878,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "34": 12,
+    "36": 146,
+    "38": 196,
+    "40": 192,
+    "42": 168,
+    "44": 132,
+    "46": 32
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 132,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "44": 1
+     }
+    },
+    {
+     "numero": 2,
+     "plis": 14,
+     "occurrences": {
+      "36": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 3,
+     "plis": 12,
+     "occurrences": {
+      "34": 1,
+      "38": 1,
+      "40": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 4,
+     "plis": 6,
+     "occurrences": {
+      "38": 2,
+      "40": 1,
+      "42": 1,
+      "46": 1
+     }
+    },
+    {
+     "numero": 5,
+     "plis": 27,
+     "occurrences": {
+      "38": 1,
+      "40": 1
+     }
+    },
+    {
+     "numero": 6,
+     "plis": 4,
+     "occurrences": {
+      "42": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 878,
+    "surplus": 0,
+    "manque": 0,
+    "restes": {
+     "34": 0,
+     "36": 0,
+     "38": -1,
+     "40": 1,
+     "42": 0,
+     "44": 0,
+     "46": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 878,
+    "tissuQt": 878,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDRD7-D321",
+   "modele": "DDRD7-D321",
+   "couleur": "4302-ROSE",
+   "qtCommande": 1200,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "34",
+    "36",
+    "38",
+    "40",
+    "42",
+    "44",
+    "46"
+   ],
+   "quantites": {
+    "34": 20,
+    "36": 160,
+    "38": 280,
+    "40": 260,
+    "42": 240,
+    "44": 160,
+    "46": 80
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 80,
+     "occurrences": {
+      "46": 1
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 80,
+    "surplus": 0,
+    "manque": 1120,
+    "restes": {
+     "34": 20,
+     "36": 160,
+     "38": 280,
+     "40": 260,
+     "42": 240,
+     "44": 160,
+     "46": 0
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 80,
+    "tissuQt": 80,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  },
+  {
+   "feuille": "DDH31P-D321",
+   "modele": "DDH31P-D321",
+   "couleur": "4302",
+   "qtCommande": 223,
+   "consoTissu": 0,
+   "tisRecu": 0,
+   "tailles": [
+    "TU"
+   ],
+   "quantites": {
+    "TU": 223
+   },
+   "passes": [
+    {
+     "numero": 1,
+     "plis": 25,
+     "occurrences": {
+      "TU": 9
+     }
+    }
+   ],
+   "_attendu": {
+    "metrage": 225,
+    "surplus": 2,
+    "manque": 0,
+    "restes": {
+     "TU": -2
+    }
+   },
+   "enTeteClasseur": {
+    "qtCoupe": 225,
+    "tissuQt": 225,
+    "tissuConso": 0,
+    "tissuRestant": 0
+   }
+  }
+ ]
+}

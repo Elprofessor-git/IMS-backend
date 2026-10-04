@@ -27,4 +27,10 @@
     <ProjectReference Include="..\Backend_Gestion_Magasin_API.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Le corpus de coupe est un JSON versionné, pas le classeur : les tests ne
+         doivent pas dépendre d'un binaire .xlsx présent sur la machine. -->
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

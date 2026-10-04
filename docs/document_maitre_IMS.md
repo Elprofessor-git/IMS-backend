@@ -57,6 +57,36 @@ Le document Excel partagé (Modèle/Couleur, plusieurs OF sur une même feuille,
 
 Une fois la Partie 2 réconciliée, produire un "Ordre de Coupe" imprimable/exportable devient un **rapport/export** combinant ces éléments existants — pas une nouvelle architecture de données.
 
+### 4.1 — C1 : moteur de coupe et grain de l'ordre de coupe (livré)
+
+**Périmètre.** L'application crée un ordre de coupe pour **chaque commande**, un par couple **modèle/couleur** de la commande, prérempli depuis la commande et modifiable. Le fichier Excel n'est **pas importé** : ses 54 feuilles ne servent que de cas de test du moteur.
+
+**Grain.** `BesoinCoupe` est au grain `(CommandeClientId, ArticleId, Couleur)`, avec un index unique sur ce triplet. La couleur est normalisée (`Trim` + majuscules) pour que deux saisies libres de la même couleur ne créent pas deux lignes. Le `manque` n'est **pas stocké** : il se recalcule à la lecture, donc il ne peut pas devenir faux.
+
+**Règle du moteur** (`Services/Coupe/MoteurCoupe.cs`, fonction pure, sans base ni horloge) :
+
+```
+reste(0, g) = quantiteCommandee(g)
+reste(t, g) = reste(t-1, g) - plis(t) × occurrences(t, g)
+totalPlanifie = Σ plis(t) × Σ_g occurrences(t, g)
+surplus = max(0, totalPlanifie - quantiteCommandee)
+manque  = max(0, quantiteCommandee - totalPlanifie)
+invariant : totalPlanifie = quantiteCommandee + surplus - manque
+```
+
+Les restes négatifs sont **conservés** : un gabarit trop coupé n'est pas ramené à zéro. L'ordre des passes n'a aucun effet sur le total ni sur les restes (ce sont des sommes de retraits) ; seules les lignes intermédiaires changent.
+
+**Deux limites assumées de la règle**, figées par les tests :
+
+- `surplus` et `manque` se calculent sur les **totaux**, pas gabarit par gabarit. Un surplus global peut donc masquer un gabarit non couvert, et un manque global peut coexister avec un gabarit intact. Les restes par gabarit restent visibles dans le résultat.
+- La quantité commandée est la **somme des quantités par gabarit**, pas la cellule « QT » saisie à la main. Sur 2 feuilles du classeur (`PDR98 D649-BEIGE`, `PDR98 D649-BLEU GRISE`) cette cellule ne vaut pas la somme que le classeur calcule lui-même ; le moteur lit la somme.
+
+**Le classeur se contredit sur OVITA.** `QT COUPE` (J4) vaut 4717 parce que le nombre de pièces de la 7ᵉ passe n'y est pas renseigné, alors que l'échelle REPARTITION lui affecte 4 m de T44. Le total **4721** est celui que le classeur utilise lui-même pour le tissu (`U4` → `MT UT` 4248,9 → `J17` = 12711,5), avec un surplus `U5` = 127. Le moteur retient **4721**, applique toutes les passes, sans cas particulier.
+
+**Corpus de test.** `backend.Tests/Fixtures/ordre-coupe-2026.json` : 54 feuilles extraites une fois, versionnées, **sans dépendance au `.xlsx`**. Les tests lisent le JSON, jamais le classeur. Le bloc `enTeteClasseur` est **informatif** : il n'est jamais comparé au moteur, et le rapport de divergence (`RapportDivergence`, côté test) est le seul endroit où il apparaît. Sur les 54 feuilles, **OVITA est la seule divergence**.
+
+**Migration.** `AddBesoinCoupe` est purement additive : une table, deux index, deux clés étrangères, aucune modification d'une table existante. Aucun backfill historique.
+
 ---
 
 ## PARTIE 5 — Architecture cible complète, module par module

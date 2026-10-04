@@ -6,6 +6,7 @@ using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Commande;
 using Backend_Gestion_Magasin_API.Services;
+using Backend_Gestion_Magasin_API.Services.Coupe;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend_Gestion_Magasin_API.Controllers
@@ -206,7 +207,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToList();
 
             // Cumul plan par taille + coupes réelles par taille (commande entière).
-            var planParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var coupeParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var sansMatelasParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
@@ -220,9 +220,31 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     sansMatelasParTaille[lot.Taille] = sansMatelasParTaille.GetValueOrDefault(lot.Taille) + lot.QuantiteCoupee;
             }
 
+            // Le plan de coupe passe par le moteur commun : c'est lui qui applique la
+            // règle des restes (reste = reste précédent − plis × occurrences, restes
+            // négatifs conservés). Un matelas = une passe ; l'ordre est celui de
+            // l'atelier. Les cumuls par taille ci-dessous lisent ses contributions,
+            // donc l'ordre de coupe et le rapport ne peuvent pas diverger.
+            var echelle = MoteurCoupe.Calculer(
+                commande.ConfigTailles.Select(c => new Gabarit(c.Taille, c.Quantite)).ToList(),
+                matelasTries.Select((m, i) => new PasseCoupe(
+                    i + 1,
+                    m.PiecePliage,
+                    m.PlanDeCoupeLignes.ToDictionary(
+                        p => p.Taille,
+                        p => p.Occurrences,
+                        StringComparer.OrdinalIgnoreCase),
+                    m.NumeroMatelas)).ToList());
+
+            var planParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ligneEchelle in echelle.Passes)
+                foreach (var (taille, contribution) in ligneEchelle.Contributions)
+                    planParTaille[taille] = planParTaille.GetValueOrDefault(taille) + contribution;
+
             for (var i = 0; i < matelasTries.Count; i++)
             {
                 var m = matelasTries[i];
+                var ligneEchelle = echelle.Passes[i];
                 var plan = new OrdreCoupeMatelasDto
                 {
                     MatelasId = m.Id,
@@ -239,7 +261,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
                 foreach (var ligne in m.PlanDeCoupeLignes.OrderBy(p => p.Taille))
                 {
-                    var theorique = ligne.Occurrences * m.PiecePliage;
+                    // Quantité produite par CETTE passe sur CETTE taille : c'est le
+                    // moteur qui l'a calculée, plus une recomputation locale qui
+                    // pourrait diverger si la règle changeait un jour.
+                    var theorique = ligneEchelle.Contributions.GetValueOrDefault(ligne.Taille);
                     // Coupes réelles de CE matelas sur CETTE taille (vue lecture, calculée).
                     var coupeReelle = m.LotCoupes
                         .Where(lc => string.Equals(lc.Taille, ligne.Taille, StringComparison.OrdinalIgnoreCase))
@@ -257,7 +282,6 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     });
                     plan.TotalTheorique += theorique;
                     plan.ResteTotal += reste;
-                    planParTaille[ligne.Taille] = planParTaille.GetValueOrDefault(ligne.Taille) + theorique;
                 }
 
                 dto.TotalPlanTheorique += plan.TotalTheorique;
