@@ -271,22 +271,54 @@ builder.Services.AddScoped<TokenService>();
 
 // Authentification — emails de mot de passe et validation de session.
 //
-// IEmailSender : Gmail (module Courriels) si une adresse système est configurée,
-// sinon un émetteur qui journalise. Le choix se fait sur IConfiguration
-// (Email:SenderGmailAddress), jamais sur #if DEBUG : un environnement de recette
-// sans adresse doit continuer à démarrer, et une suite de tests ne doit jamais
-// faire d'appel réseau vers un service externe.
+// IEmailSender : trois canaux possibles, choisis à chaque envoi par SystemEmailSender,
+// dans cet ordre — Smtp__Host -> SMTP (MailKit, mot de passe d'application Gmail),
+// sinon Email:SenderGmailAddress -> API Gmail (OAuth, module Courriels), sinon un
+// émetteur qui journalise. Le choix se fait sur IConfiguration, jamais sur #if DEBUG :
+// un environnement de recette doit continuer à démarrer, et une suite de tests ne
+// doit jamais faire d'appel réseau vers un service externe.
 //
-// Aucune clé ni SDK supplémentaire : l'envoi réutilise IGmailApiService et la
-// connexion OAuth déjà autorisée par un administrateur (scopes gmail.compose).
+// SMTP est une OPTION et non un remplacement : Render bloque les ports 25/465/587 sur
+// ses instances gratuites (changelog du 16/09/2025). L'opérateur qui dispose d'un
+// port ouvert pose Smtp__Host ; sinon il ne pose rien et garde le comportement
+// précédent, sans aucune autre modification.
+//
+// Garde : dès que Smtp__Host est posé, l'API ne DÉMARRE PAS si une autre clé Smtp__*
+// manque — même principe que le garde du secret JWT ci-dessus. Sans cet arrêt, l'API
+// démarrerait « normalement », l'administrateur recevrait un message d'invitation
+// annonçant un email envoyé, et personne ne le recevrait jamais.
+SmtpOptions optionsSmtp;
+try
+{
+    optionsSmtp = VerificationDemarrageSmtp.Verifier(builder.Configuration);
+}
+catch (InvalidOperationException ex)
+{
+    // Le message d'origine nomme des variables d'environnement ; on le tel quel,
+    // avec une mention de .env.example pour retrouver le gabarit.
+    throw new InvalidOperationException(ex.Message + " (see .env.example)", ex);
+}
+
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.PrefixeConfiguration));
+builder.Services.AddScoped<ISmtpTransport, MailKitSmtpTransport>();
+builder.Services.AddScoped<SmtpEmailSender>();
 builder.Services.AddScoped<GmailApiEmailSender>();
 builder.Services.AddScoped<LoggingEmailSender>();
 builder.Services.AddScoped<IEmailSender, SystemEmailSender>();
 
-var adresseSysteme = builder.Configuration["Email:SenderGmailAddress"];
-Console.WriteLine(string.IsNullOrWhiteSpace(adresseSysteme)
-    ? "Emails transactionnels : émetteur journalisé (Email__SenderGmailAddress non configurée)."
-    : $"Emails transactionnels : Gmail ({adresseSysteme}).");
+if (optionsSmtp.EstModeSmtp)
+{
+    // Jamais le mot de passe ni le port en clair au-delà de l'hôte : ce message
+    // atterrit dans stdout (Render, docker logs), d'où il n'est pas un secret.
+    Console.WriteLine($"Emails transactionnels : SMTP ({optionsSmtp.Host}:{optionsSmtp.Port}).");
+}
+else
+{
+    var adresseSysteme = builder.Configuration["Email:SenderGmailAddress"];
+    Console.WriteLine(string.IsNullOrWhiteSpace(adresseSysteme)
+        ? "Emails transactionnels : émetteur journalisé (Smtp__Host et Email__SenderGmailAddress non configurés)."
+        : $"Emails transactionnels : Gmail ({adresseSysteme}).");
+}
 
 builder.Services.AddScoped<IPasswordSetupLinkService, PasswordSetupLinkService>();
 builder.Services.AddScoped<ISessionValidationService, SessionValidationService>();
