@@ -2547,6 +2547,208 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.ToTable("Notifications");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupe", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ChaineProductionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CommandeClientId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Couleur")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("CreePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DateMiseAJour")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("MargeSecurite")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Modele")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ModifiePar")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ReferenceOF")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChaineProductionId");
+
+                    b.HasIndex("CommandeClientId", "Modele", "Couleur")
+                        .IsUnique();
+
+                    b.ToTable("OrdresCoupe");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupeMatiere", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ConsoClient")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("ConsoReelle")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Designation")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("Laize")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("MetresRecus")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("OrdreCoupeId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RetraitPourcentage")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrdreCoupeId");
+
+                    b.ToTable("OrdreCoupeMatieres");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupePlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Index")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Libelle")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("MatelasId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OrdreCoupeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Plis")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatelasId");
+
+                    b.HasIndex("OrdreCoupeId", "Index")
+                        .IsUnique();
+
+                    b.ToTable("OrdreCoupePlans");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupePlanOccurrence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Occurrences")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OrdreCoupePlanId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Taille")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrdreCoupePlanId", "Taille")
+                        .IsUnique();
+
+                    b.ToTable("OrdreCoupeOccurrences");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupeTaille", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Index")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("OrdreCoupeId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("QuantiteAvecMarge")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("QuantiteDemandee")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrdreCoupeId", "Index")
+                        .IsUnique();
+
+                    b.HasIndex("OrdreCoupeId", "Libelle")
+                        .IsUnique();
+
+                    b.ToTable("OrdreCoupeTailles");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreFabrication", b =>
                 {
                     b.Property<int>("Id")
@@ -4303,6 +4505,75 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("TacheProduction");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupe", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.ChaineProduction", "ChaineProduction")
+                        .WithMany()
+                        .HasForeignKey("ChaineProductionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.CommandeClient", "CommandeClient")
+                        .WithMany()
+                        .HasForeignKey("CommandeClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChaineProduction");
+
+                    b.Navigation("CommandeClient");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupeMatiere", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.OrdreCoupe", "OrdreCoupe")
+                        .WithMany("Matieres")
+                        .HasForeignKey("OrdreCoupeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OrdreCoupe");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupePlan", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.Matelas", "Matelas")
+                        .WithMany()
+                        .HasForeignKey("MatelasId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.OrdreCoupe", "OrdreCoupe")
+                        .WithMany("Plans")
+                        .HasForeignKey("OrdreCoupeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Matelas");
+
+                    b.Navigation("OrdreCoupe");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupePlanOccurrence", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.OrdreCoupePlan", "OrdreCoupePlan")
+                        .WithMany("Occurrences")
+                        .HasForeignKey("OrdreCoupePlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OrdreCoupePlan");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupeTaille", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.OrdreCoupe", "OrdreCoupe")
+                        .WithMany("Tailles")
+                        .HasForeignKey("OrdreCoupeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OrdreCoupe");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreFabrication", b =>
                 {
                     b.HasOne("Backend_Gestion_Magasin_API.Models.ChaineProduction", "ChaineProduction")
@@ -4738,6 +5009,20 @@ namespace Backend_Gestion_Magasin_API.Migrations
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.ModeleBom", b =>
                 {
                     b.Navigation("Fournitures");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupe", b =>
+                {
+                    b.Navigation("Matieres");
+
+                    b.Navigation("Plans");
+
+                    b.Navigation("Tailles");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreCoupePlan", b =>
+                {
+                    b.Navigation("Occurrences");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.OrdreFabrication", b =>
