@@ -19,6 +19,7 @@ obj/
 backend.Tests/
 
 # Worktrees / outillage local résiduel
+.git/
 .claude/
 .codegraph/
 .qodo/
