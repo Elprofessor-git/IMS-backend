@@ -190,12 +190,124 @@ public class SystemEmailSenderTests : IClassFixture<AuthApiFactory>
             var db = sp.GetRequiredService<ApplicationDbContext>();
             var gmail = new GmailApiEmailSender(db, recorder, Config(null), NullLogger<GmailApiEmailSender>.Instance);
             var logging = new LoggingEmailSender(NullLogger<LoggingEmailSender>.Instance, new EnvironnementDeTest());
-            var sender = new SystemEmailSender(gmail, logging, NullLogger<SystemEmailSender>.Instance);
+            var sender = new SystemEmailSender(
+                SmtpVide(), gmail, logging,
+                OptionsSmtp(null), NullLogger<SystemEmailSender>.Instance);
 
             await sender.SendAsync("destinataire@example.com", "Objet", "<p>x</p>");
         });
 
         Assert.Empty(recorder.Sends);
+    }
+
+    // ══════════ Sélecteur : les 3 modes ══════════
+    //
+    // Ordre contractuel : Smtp__Host -> SMTP ; sinon Email:SenderGmailAddress ->
+    // API Gmail ; sinon journalisation. Aucun appel réseau : chaque canal est doublé.
+
+    private static SmtpEmailSender SmtpVide() =>
+        new(OptionsSmtp(null), new FauxTransportSmtp(), NullLogger<SmtpEmailSender>.Instance);
+
+    private static SmtpEmailSender SmtpConfigure(FauxTransportSmtp transport) =>
+        new(OptionsSmtp(OptionsSmtpCompletes()), transport, NullLogger<SmtpEmailSender>.Instance);
+
+    private static Microsoft.Extensions.Options.IOptions<SmtpOptions> OptionsSmtp(SmtpOptions? options) =>
+        Microsoft.Extensions.Options.Options.Create(options ?? new SmtpOptions());
+
+    private static SmtpOptions OptionsSmtpCompletes() => new()
+    {
+        Host = "smtp.gmail.com",
+        Port = 587,
+        User = "systeme@example.com",
+        Password = "factice",
+        From = "systeme@example.com",
+        FromName = "SGT",
+    };
+
+    [Fact]
+    public async Task Selection_smtp_prévaille_sur_l_API_Gmail_et_ne_l_appelle_meme_pas()
+    {
+        var recorder = new RecordingSendGmailApi();
+        var transport = new FauxTransportSmtp();
+
+        await _factory.WithScopeAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<ApplicationDbContext>();
+            var sender = new SystemEmailSender(
+                SmtpConfigure(transport),
+                new GmailApiEmailSender(db, recorder, Config("chef@example.com"), NullLogger<GmailApiEmailSender>.Instance),
+                new LoggingEmailSender(NullLogger<LoggingEmailSender>.Instance, new EnvironnementDeTest()),
+                OptionsSmtp(OptionsSmtpCompletes()),
+                NullLogger<SystemEmailSender>.Instance);
+
+            await sender.SendAsync("destinataire@example.com", "Objet", "<p>x</p>");
+        });
+
+        Assert.Single(transport.Envois);
+        Assert.Empty(recorder.Sends);
+    }
+
+    [Fact]
+    public async Task Selection_sans_smtp_utilise_l_API_Gmail()
+    {
+        var adresse = $"system-{Guid.NewGuid():N}@gmail.com";
+        await CreerConnexionAsync(adresse);
+
+        var recorder = new RecordingSendGmailApi();
+        var transport = new FauxTransportSmtp();
+
+        await _factory.WithScopeAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<ApplicationDbContext>();
+            var sender = new SystemEmailSender(
+                SmtpVide(),
+                new GmailApiEmailSender(db, recorder, Config(adresse), NullLogger<GmailApiEmailSender>.Instance),
+                new LoggingEmailSender(NullLogger<LoggingEmailSender>.Instance, new EnvironnementDeTest()),
+                OptionsSmtp(null),
+                NullLogger<SystemEmailSender>.Instance);
+
+            await sender.SendAsync("destinataire@example.com", "Objet", "<p>x</p>");
+        });
+
+        Assert.Single(recorder.Sends);
+        Assert.Empty(transport.Envois);
+    }
+
+    [Fact]
+    public async Task Selection_sans_smtp_ni_gmail_tombe_sur_la_journalisation()
+    {
+        var recorder = new RecordingSendGmailApi();
+        var transport = new FauxTransportSmtp();
+
+        await _factory.WithScopeAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<ApplicationDbContext>();
+            var sender = new SystemEmailSender(
+                SmtpVide(),
+                new GmailApiEmailSender(db, recorder, Config(null), NullLogger<GmailApiEmailSender>.Instance),
+                new LoggingEmailSender(NullLogger<LoggingEmailSender>.Instance, new EnvironnementDeTest()),
+                OptionsSmtp(null),
+                NullLogger<SystemEmailSender>.Instance);
+
+            // Ne doit lever : aucun émetteur réel n'est disponible, mais ce n'est
+            // pas une raison de faire échouer le flux qui déclenche l'email.
+            await sender.SendAsync("destinataire@example.com", "Objet", "<p>x</p>");
+        });
+
+        Assert.Empty(recorder.Sends);
+        Assert.Empty(transport.Envois);
+    }
+
+    /// <summary>Faux SMTP en mémoire, même double que SmtpEmailSenderTests : aucun socket.</summary>
+    private sealed class FauxTransportSmtp : ISmtpTransport
+    {
+        public List<(string To, string Subject, string HtmlBody)> Envois { get; } = new();
+
+        public Task EnvoyerAsync(SmtpOptions options, string to, string subject, string htmlBody)
+        {
+            Envois.Add((to, subject, htmlBody));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class EnvironnementDeTest : IHostEnvironment
