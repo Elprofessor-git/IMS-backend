@@ -35,12 +35,31 @@
 
   <!--
     Le projet de tests est imbriqué dans ce dépôt, donc dans le périmètre des globs
-    par défaut de ce projet. On l'exclut explicitement : sans cela, les .cs du projet
-    de tests (et les AssemblyAttributes générés dans son obj/) seraient compilés dans
-    l'API, provoquant des erreurs d'attributs dupliqués.
+    par défaut de ce projet. On l'exclut de TOUS les types d'items.
+
+    CAUSE DE L'IMBRICATION DE bin/ (mesurée : 209 Mo, 40 niveaux) :
+    le SDK Web range **/*.json en Content — appsettings.json, mais aussi
+    backend.Tests/Fixtures/*.json et les .json déjà présents dans
+    backend.Tests/bin/. Comme la sortie de l'API est bin/Debug/net9.0/ ET que
+    backend.Tests/ vit sous le même répertoire racine, chaque build copiait un
+    fichier de backend.Tests DANS bin/, donc dans un répertoire lui-même
+    sous backend.Tests/ — d'où la récursion, qui doublait à chaque build et
+    rendait MSBuild interminable (build au timeout).
+
+    Trois lignes explicites (celles du projet) + DefaultItemExcludes, qui est
+    la seule qui couvre Content : un bloc ne portant que sur
+    Compile / EmbeddedResource / None (l'état précédent) ne fermait pas la
+    porte, puisque Content n'était pas concerné. Les exclures toutes est
+    défensif : si un jour un autre item a un glob par défaut, il est déjà couvert.
   -->
+  <PropertyGroup>
+    <!-- bin/ et obj/ du projet de tests : déjà couverts par backend.Tests/**,
+         listés à part parce que ce sont eux qui s'auto-recopiaient. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);backend.Tests/**;backend.Tests/bin/**;backend.Tests/obj/**</DefaultItemExcludes>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Remove="backend.Tests/**" />
+    <Content Remove="backend.Tests/**" />
     <EmbeddedResource Remove="backend.Tests/**" />
     <None Remove="backend.Tests/**" />
   </ItemGroup>
