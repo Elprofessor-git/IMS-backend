@@ -294,7 +294,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 var planT = planParTaille.GetValueOrDefault(ct.Taille);
                 var coupeT = coupeParTaille.GetValueOrDefault(ct.Taille);
                 var seuil = ct.Quantite * (1m + commande.MargeSecuriteDefaut / 100m);
-                dto.Tailles.Add(new OrdreCoupeTailleDto
+                dto.Tailles.Add(new OrdreCoupeTailleRapportDto
                 {
                     Taille = ct.Taille,
                     QuantiteCommande = ct.Quantite,

@@ -78,6 +78,11 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<EmailAiReply> EmailAiReponses { get; set; }
         public DbSet<ShareLink> ShareLinks { get; set; }
         public DbSet<ShareLinkAccess> ShareLinkAccess { get; set; }
+        public DbSet<OrdreCoupe> OrdresCoupe { get; set; }
+        public DbSet<OrdreCoupeTaille> OrdreCoupeTailles { get; set; }
+        public DbSet<OrdreCoupePlan> OrdreCoupePlans { get; set; }
+        public DbSet<OrdreCoupePlanOccurrence> OrdreCoupeOccurrences { get; set; }
+        public DbSet<OrdreCoupeMatiere> OrdreCoupeMatieres { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -913,6 +918,77 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<BesoinCoupe>()
                 .HasIndex(b => new { b.CommandeClientId, b.ArticleId, b.Couleur })
                 .IsUnique();
+
+            // OrdreCoupe — grain (commande, modèle, couleur) : un ordre par couple,
+            // comme une feuille du classeur. La comparaison insensible à la casse et
+            // aux espaces est faite en couche service (même règle que BesoinCoupe) ;
+            // l'index unique porte les valeurs telles que saisies.
+            modelBuilder.Entity<OrdreCoupe>()
+                .HasOne(o => o.CommandeClient)
+                .WithMany()
+                .HasForeignKey(o => o.CommandeClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrdreCoupe>()
+                .HasOne(o => o.ChaineProduction)
+                .WithMany()
+                .HasForeignKey(o => o.ChaineProductionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<OrdreCoupe>()
+                .HasIndex(o => new { o.CommandeClientId, o.Modele, o.Couleur })
+                .IsUnique();
+
+            // Colonnes de tailles : une seule colonne par libellé et une position
+            // par colonne, pour que l'ordre de saisie reste celui de l'écran.
+            modelBuilder.Entity<OrdreCoupeTaille>()
+                .HasOne(t => t.OrdreCoupe)
+                .WithMany(o => o.Tailles)
+                .HasForeignKey(t => t.OrdreCoupeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrdreCoupeTaille>()
+                .HasIndex(t => new { t.OrdreCoupeId, t.Libelle })
+                .IsUnique();
+
+            modelBuilder.Entity<OrdreCoupeTaille>()
+                .HasIndex(t => new { t.OrdreCoupeId, t.Index })
+                .IsUnique();
+
+            // Plans (matelas) : le rattachement à un matelas est optionnel et se
+            // détruit en SetNull pour ne jamais gâcher l'historique des coupes.
+            modelBuilder.Entity<OrdreCoupePlan>()
+                .HasOne(p => p.OrdreCoupe)
+                .WithMany(o => o.Plans)
+                .HasForeignKey(p => p.OrdreCoupeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrdreCoupePlan>()
+                .HasOne(p => p.Matelas)
+                .WithMany()
+                .HasForeignKey(p => p.MatelasId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<OrdreCoupePlan>()
+                .HasIndex(p => new { p.OrdreCoupeId, p.Index })
+                .IsUnique();
+
+            modelBuilder.Entity<OrdreCoupePlanOccurrence>()
+                .HasOne(o => o.OrdreCoupePlan)
+                .WithMany(p => p.Occurrences)
+                .HasForeignKey(o => o.OrdreCoupePlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrdreCoupePlanOccurrence>()
+                .HasIndex(o => new { o.OrdreCoupePlanId, o.Taille })
+                .IsUnique();
+
+            // Matières : liste libre, une ligne par matière de l'ordre.
+            modelBuilder.Entity<OrdreCoupeMatiere>()
+                .HasOne(m => m.OrdreCoupe)
+                .WithMany(o => o.Matieres)
+                .HasForeignKey(m => m.OrdreCoupeId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // ChaineProduction — nom unique, type stocké en string
             modelBuilder.Entity<ChaineProduction>()

@@ -129,7 +129,7 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
     }
 
     /// <summary>Couverture par taille : Σ plans vs demande ConfigTaille (± marge).</summary>
-    public class OrdreCoupeTailleDto
+    public class OrdreCoupeTailleRapportDto
     {
         public string Taille { get; set; } = string.Empty;
         public int QuantiteCommande { get; set; }
@@ -154,6 +154,6 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int TotalCoupeReelle { get; set; }
         public int TotalCoupesSansMatelas { get; set; }
         public List<OrdreCoupeMatelasDto> Matelas { get; set; } = new();
-        public List<OrdreCoupeTailleDto> Tailles { get; set; } = new();
+        public List<OrdreCoupeTailleRapportDto> Tailles { get; set; } = new();
     }
 }
