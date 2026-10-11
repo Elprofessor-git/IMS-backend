@@ -4,6 +4,7 @@ using Backend_Gestion_Magasin_API.Filters;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Commande;
+using Backend_Gestion_Magasin_API.Services;
 using Backend_Gestion_Magasin_API.Services.Coupe;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,10 +36,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private const int MaxPlans = 9;
 
         private readonly ApplicationDbContext _context;
+        private readonly ExcelExportService _excel;
+        private readonly PdfExportService _pdf;
 
-        public OrdreCoupeController(ApplicationDbContext context)
+        public OrdreCoupeController(ApplicationDbContext context, ExcelExportService excel, PdfExportService pdf)
         {
             _context = context;
+            _excel = excel;
+            _pdf = pdf;
         }
 
         private static string Normaliser(string? v) =>
@@ -73,6 +78,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var matieres = await _context.OrdreCoupeMatieres.AsNoTracking()
                 .Where(m => ids.Contains(m.OrdreCoupeId)).ToListAsync();
             var matelasCoupes = await MatelasCoupesAsync(plans.Select(p => p.MatelasId));
+            var attaches = await _context.Matelas.AsNoTracking()
+                .Where(m => m.OrdreCoupeId != null && ids.Contains(m.OrdreCoupeId.Value))
+                .GroupBy(m => m.OrdreCoupeId!.Value)
+                .Select(g => new { OrdreCoupeId = g.Key, N = g.Count() })
+                .ToDictionaryAsync(x => x.OrdreCoupeId, x => x.N);
 
             var dtos = new List<OrdreCoupeListeDto>(ordres.Count);
             foreach (var o in ordres)
@@ -90,6 +100,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     NbTailles = mesTailles.Count,
                     NbPlans = mesPlans.Count,
                     NbMatieres = matieres.Count(m => m.OrdreCoupeId == o.Id),
+                    NbMatelas = attaches.GetValueOrDefault(o.Id),
                     TotalCommande = resultat.QuantiteCommandee,
                     TotalPlanifie = resultat.TotalPlanifie,
                     AlerteManque = resultat.AlerteManque,
@@ -117,6 +128,191 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .FirstOrDefaultAsync(c => c.Id == ordre.CommandeClientId);
 
             return Ok(await ConstruireDtoAsync(ordre, commande));
+        }
+
+        // ───────────────────────────── Export (C3) ─────────────────────────────
+
+        /// <summary>
+        /// Feuille Excel de l'ordre de coupe : même vue que l'écran, mise en forme
+        /// proche du classeur de référence, sans ligne « THERMO » fixe (les matières
+        /// émises sont celles saisies librement sur l'ordre).
+        /// </summary>
+        [HttpGet("{id}/Export")]
+        [RequireModulePermission("coupe")]
+        public async Task<IActionResult> ExportOrdreCoupe(int id)
+        {
+            var ordre = await ChargerAsync(id);
+            if (ordre == null)
+                return NotFound(new { message = "Ordre de coupe introuvable." });
+
+            var commande = await _context.CommandesClients.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == ordre.CommandeClientId);
+            var dto = await ConstruireDtoAsync(ordre, commande);
+
+            var bytes = _excel.ExportOrdreCoupe(dto);
+            return File(
+                bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"OrdreDeCoupe_{dto.Modele}_{dto.Couleur}.xlsx");
+        }
+
+        /// <summary>Version PDF du même document (QuestPDF, même vue).</summary>
+        [HttpGet("{id}/ExportPdf")]
+        [RequireModulePermission("coupe")]
+        public async Task<IActionResult> ExportOrdreCoupePdf(int id)
+        {
+            var ordre = await ChargerAsync(id);
+            if (ordre == null)
+                return NotFound(new { message = "Ordre de coupe introuvable." });
+
+            var commande = await _context.CommandesClients.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == ordre.CommandeClientId);
+            var dto = await ConstruireDtoAsync(ordre, commande);
+
+            var bytes = _pdf.ExportOrdreCoupe(dto);
+            return File(bytes, "application/pdf", $"OrdreDeCoupe_{dto.Modele}_{dto.Couleur}.pdf");
+        }
+
+        // ───────────────────────────── Rattachement des matelas (C3) ─────────────────────────────
+
+        /// <summary>
+        /// Matelas de la commande pas encore rattachés à un ordre de coupe : ni
+        /// rattachement explicite (OrdreCoupeId), ni référence par un plan (les plans
+        /// C2 restent la source des rattachements préexistants).
+        /// </summary>
+        [HttpGet("commande/{commandeId}/matelas-orphelins")]
+        [RequireModulePermission("coupe")]
+        public async Task<ActionResult<IEnumerable<MatelasOrphelinDto>>> GetMatelasOrphelins(int commandeId)
+        {
+            if (!await _context.CommandesClients.AnyAsync(c => c.Id == commandeId))
+                return NotFound(new { message = "Commande introuvable." });
+
+            var dejaParPlan = await _context.OrdreCoupePlans.AsNoTracking()
+                .Where(p => p.MatelasId != null)
+                .Select(p => p.MatelasId!.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var matelas = await _context.Matelas.AsNoTracking()
+                .Where(m => m.CommandeId == commandeId && m.OrdreCoupeId == null)
+                .OrderBy(m => m.DateMatelas).ThenBy(m => m.NumeroMatelas)
+                .ToListAsync();
+            var orphelins = matelas.Where(m => !dejaParPlan.Contains(m.Id)).ToList();
+            if (orphelins.Count == 0)
+                return Ok(new List<MatelasOrphelinDto>());
+
+            var ids = orphelins.Select(m => m.Id).ToList();
+            var coupes = await _context.LotCoupes.AsNoTracking()
+                .Where(l => l.MatelasId != null && ids.Contains(l.MatelasId.Value))
+                .GroupBy(l => l.MatelasId!.Value)
+                .Select(g => new { MatelasId = g.Key, Total = g.Sum(l => (int?)l.QuantiteCoupee) ?? 0 })
+                .ToDictionaryAsync(x => x.MatelasId, x => x.Total);
+
+            return Ok(orphelins.Select(m => new MatelasOrphelinDto
+            {
+                MatelasId = m.Id,
+                NumeroMatelas = m.NumeroMatelas,
+                DateMatelas = m.DateMatelas,
+                PiecePliage = m.PiecePliage,
+                Planifie = 0,
+                CoupeReelle = coupes.GetValueOrDefault(m.Id),
+            }).ToList());
+        }
+
+        /// <summary>Matelas rattachés à un ordre (rattachement explicite C3).</summary>
+        [HttpGet("{id}/matelas")]
+        [RequireModulePermission("coupe")]
+        public async Task<ActionResult<IEnumerable<MatelasRattacheDto>>> GetMatelas(int id)
+        {
+            if (!await _context.OrdresCoupe.AnyAsync(o => o.Id == id))
+                return NotFound(new { message = "Ordre de coupe introuvable." });
+
+            var attaches = await _context.Matelas.AsNoTracking()
+                .Where(m => m.OrdreCoupeId == id)
+                .OrderBy(m => m.DateMatelas).ThenBy(m => m.NumeroMatelas)
+                .ToListAsync();
+            if (attaches.Count == 0)
+                return Ok(new List<MatelasRattacheDto>());
+
+            var ids = attaches.Select(m => m.Id).ToList();
+            var coupes = await _context.LotCoupes.AsNoTracking()
+                .Where(l => l.MatelasId != null && ids.Contains(l.MatelasId.Value))
+                .GroupBy(l => l.MatelasId!.Value)
+                .Select(g => new { MatelasId = g.Key, Total = g.Sum(l => (int?)l.QuantiteCoupee) ?? 0 })
+                .ToDictionaryAsync(x => x.MatelasId, x => x.Total);
+            var plans = await _context.OrdreCoupePlans.AsNoTracking()
+                .Include(p => p.Occurrences)
+                .Where(p => p.OrdreCoupeId == id && p.MatelasId != null)
+                .ToListAsync();
+
+            return Ok(attaches.Select(m => new MatelasRattacheDto
+            {
+                MatelasId = m.Id,
+                NumeroMatelas = m.NumeroMatelas,
+                DateMatelas = m.DateMatelas,
+                PiecePliage = m.PiecePliage,
+                Planifie = plans.Where(p => p.MatelasId == m.Id)
+                    .Sum(p => p.Plis * p.Occurrences.Sum(o => o.Occurrences)),
+                CoupeReelle = coupes.GetValueOrDefault(m.Id),
+            }).ToList());
+        }
+
+        /// <summary>
+        /// Rattaché un matelas orphelin de la commande à l'ordre. Verrou d'ordre
+        /// respecté : une feuille figée par une première coupe ne change plus.
+        /// </summary>
+        [HttpPost("{id}/matelas")]
+        [RequireModulePermission("coupe", requireWrite: true)]
+        public async Task<ActionResult> AttacherMatelas(int id, [FromBody] AttacherMatelasDto dto)
+        {
+            var ordre = await _context.OrdresCoupe.AsNoTracking().FirstOrDefaultAsync(o => o.Id == id);
+            if (ordre == null)
+                return NotFound(new { message = "Ordre de coupe introuvable." });
+
+            if (await OrdreVerrouilleAsync(ordre.Id))
+                return VerrouOrdreErreur();
+
+            var matelas = await _context.Matelas.FirstOrDefaultAsync(m => m.Id == dto.MatelasId);
+            if (matelas == null)
+                return NotFound(new { message = "Matelas introuvable." });
+            if (matelas.CommandeId != ordre.CommandeClientId)
+                return BadRequest(new { message = "Le matelas n'appartient pas à la commande de cet ordre." });
+            if (matelas.OrdreCoupeId.HasValue && matelas.OrdreCoupeId.Value != ordre.Id)
+                return Conflict(new { message = "Le matelas est déjà rattaché à un autre ordre de coupe." });
+            if (await _context.OrdreCoupePlans.AnyAsync(p => p.MatelasId == matelas.Id))
+                return Conflict(new { message = "Le matelas est déjà référencé par un plan d'un ordre de coupe." });
+
+            matelas.OrdreCoupeId = ordre.Id;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Matelas rattaché à l'ordre de coupe." });
+        }
+
+        /// <summary>
+        /// Détache un matelas. Refusé si un plan de l'ordre le référence (il faut le
+        /// retirer du plan d'abord) ou s'il porte déjà des coupes enregistrées.
+        /// </summary>
+        [HttpDelete("{id}/matelas/{matelasId}")]
+        [RequireModulePermission("coupe", requireWrite: true)]
+        public async Task<ActionResult> DetacherMatelas(int id, int matelasId)
+        {
+            if (!await _context.OrdresCoupe.AnyAsync(o => o.Id == id))
+                return NotFound(new { message = "Ordre de coupe introuvable." });
+
+            if (await OrdreVerrouilleAsync(id))
+                return VerrouOrdreErreur();
+
+            var matelas = await _context.Matelas.FirstOrDefaultAsync(m => m.Id == matelasId && m.OrdreCoupeId == id);
+            if (matelas == null)
+                return NotFound(new { message = "Matelas introuvable ou non rattaché à cet ordre." });
+
+            if (await _context.OrdreCoupePlans.AnyAsync(p => p.OrdreCoupeId == id && p.MatelasId == matelasId))
+                return Conflict(new { message = "Impossible de détacher : le matelas est référencé par un plan de cet ordre. Retirez-le du plan d'abord." });
+            if (await _context.LotCoupes.AnyAsync(l => l.MatelasId == matelasId))
+                return Conflict(new { message = "Impossible de détacher : le matelas porte déjà des coupes enregistrées." });
+
+            matelas.OrdreCoupeId = null;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Matelas détaché de l'ordre de coupe." });
         }
 
         // ───────────────────────────── En-tête ─────────────────────────────
@@ -487,6 +683,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
             foreach (var occ in dto.Occurrences)
                 plan.Occurrences.Add(new OrdreCoupePlanOccurrence { Taille = occ.Taille.Trim(), Occurrences = occ.Occurrences });
 
+            // Rattachement automatique (C3) : un matelas référencé par un plan est,
+            // de fait, rattaché à l'ordre — même si le rattachement explicite n'a
+            // pas été posé par l'écran dédié.
+            if (dto.MatelasId.HasValue)
+            {
+                var matelas = await _context.Matelas.FindAsync(dto.MatelasId.Value);
+                if (matelas != null) matelas.OrdreCoupeId = ordre.Id;
+            }
+
             _context.OrdreCoupePlans.Add(plan);
             await _context.SaveChangesAsync();
 
@@ -511,6 +716,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
             plan.Libelle = dto.Libelle;
             plan.Plis = dto.Plis;
             plan.MatelasId = dto.MatelasId;
+
+            // Rattachement automatique (C3) : idem création de plan.
+            if (dto.MatelasId.HasValue)
+            {
+                var matelas = await _context.Matelas.FindAsync(dto.MatelasId.Value);
+                if (matelas != null) matelas.OrdreCoupeId = plan.OrdreCoupeId;
+            }
 
             _context.OrdreCoupeOccurrences.RemoveRange(plan.Occurrences);
             plan.Occurrences.Clear();
@@ -770,6 +982,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Surplus = resultat.Surplus,
                 Manque = resultat.Manque,
                 AlerteManque = resultat.AlerteManque,
+                TotalCoupeReelle = await _context.LotCoupes.AsNoTracking()
+                    .Where(l => l.OrdreCoupeId == ordre.Id)
+                    .SumAsync(l => (int?)l.QuantiteCoupee) ?? 0,
+                NbMatelas = await _context.Matelas.AsNoTracking().CountAsync(m => m.OrdreCoupeId == ordre.Id),
             };
 
             foreach (var t in tailles)

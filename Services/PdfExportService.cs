@@ -285,6 +285,153 @@ namespace Backend_Gestion_Magasin_API.Services
             }).GeneratePdf();
         }
 
+        // ─────────────────────────────────────────────────────────────────────────────
+        //  Ordre de coupe (C3) — même vue que l'export Excel, SANS la ligne fixe
+        //  « THERMO » : les matières émises sont celles saisies librement sur l'ordre.
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        public byte[] ExportOrdreCoupe(OrdreCoupeDto d)
+        {
+            return Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(1.8f, Unit.Centimetre);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontColor(Colors.Black));
+
+                    page.Header().Column(header =>
+                    {
+                        header.Item().AlignCenter().Text("ORDRE DE COUPE").FontSize(16).Bold();
+
+                        header.Item().PaddingTop(6).Text(t =>
+                        {
+                            t.Span("Modèle : ").SemiBold();
+                            t.Span(d.Modele);
+                        });
+                        header.Item().Text(t =>
+                        {
+                            t.Span("Couleur : ").SemiBold();
+                            t.Span(d.Couleur);
+                        });
+                        if (!string.IsNullOrWhiteSpace(d.ChaineProductionNom))
+                        {
+                            header.Item().Text(t =>
+                            {
+                                t.Span("Chaîne : ").SemiBold();
+                                t.Span(d.ChaineProductionNom);
+                            });
+                        }
+                        header.Item().Text(t =>
+                        {
+                            t.Span("OF : ").SemiBold();
+                            t.Span(d.ReferenceOF ?? "—");
+                        });
+                        header.Item().Text(t =>
+                        {
+                            t.Span("Tissu reçu : ").SemiBold();
+                            t.Span($"{d.Matieres.Sum(m => m.MetresRecus):F2} m");
+                        });
+                        header.Item().PaddingTop(4).Text(t =>
+                        {
+                            t.Span("Qt commandée : ").SemiBold();
+                            t.Span(d.TotalCommande.ToString());
+                            t.Span("    Qt coupée : ").SemiBold();
+                            t.Span(d.TotalCoupeReelle.ToString());
+                            t.Span("    Surplus : ").SemiBold();
+                            t.Span(d.Surplus.ToString());
+                            t.Span("    Manque : ").SemiBold();
+                            t.Span(d.Manque.ToString());
+                        });
+                    });
+
+                    page.Content().PaddingTop(10).Column(content =>
+                    {
+                        // Répartition par matelas : restes par taille après chaque passe.
+                        content.Item().Text("Répartition par matelas").FontSize(11).Bold();
+                        content.Item().PaddingTop(4).Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn(0.7f); // N°
+                                columns.RelativeColumn(1.6f); // Matelas
+                                columns.RelativeColumn(1f);   // Plis
+                                foreach (var _ in d.Tailles) columns.RelativeColumn(1f);
+                            });
+
+                            table.Header(header =>
+                            {
+                                header.Cell().Background(Colors.Grey.Lighten3).Text("N°").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).Text("Matelas").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text("Plis").Bold();
+                                foreach (var t in d.Tailles)
+                                    header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text($"R {t.Libelle}").Bold();
+                            });
+
+                            for (var i = 0; i < d.Plans.Count; i++)
+                            {
+                                var plan = d.Plans[i];
+                                var restes = plan.Restes.ToDictionary(r => r.Taille.Trim().ToUpperInvariant(), r => r.Valeur);
+                                table.Cell().Text((i + 1).ToString());
+                                table.Cell().Text(plan.MatelasNumero ?? plan.Libelle ?? string.Empty);
+                                table.Cell().AlignRight().Text(plan.Plis.ToString());
+                                foreach (var t in d.Tailles)
+                                {
+                                    if (restes.TryGetValue(t.Libelle.Trim().ToUpperInvariant(), out var reste))
+                                        table.Cell().AlignRight().Text(reste < 0
+                                            ? $"{reste} S"
+                                            : reste.ToString());
+                                    else
+                                        table.Cell().AlignRight().Text("—");
+                                }
+                            }
+                        });
+
+                        // Matières libres de l'ordre — jamais de ligne « THERMO » fixe.
+                        content.Item().PaddingTop(14).Text("Matières").FontSize(11).Bold();
+                        content.Item().PaddingTop(4).Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn(2.4f); // MODL
+                                columns.RelativeColumn(1f);   // LAIZE
+                                columns.RelativeColumn(1.2f); // MT RC
+                                columns.RelativeColumn(1f);   // Qt
+                                columns.RelativeColumn(1.3f); // CONO
+                                columns.RelativeColumn(1.3f); // MT UT
+                                columns.RelativeColumn(1f);   // RETR %
+                                columns.RelativeColumn(1.3f); // STOCK
+                            });
+
+                            table.Header(header =>
+                            {
+                                header.Cell().Background(Colors.Grey.Lighten3).Text("Matière").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text("Laize").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text("Mètres reçus").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text("Qt").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text("Conso client").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text("Conso réel").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text("Retrait %").Bold();
+                                header.Cell().Background(Colors.Grey.Lighten3).AlignRight().Text("Stock restant").Bold();
+                            });
+
+                            foreach (var m in d.Matieres)
+                            {
+                                table.Cell().Text(m.Designation);
+                                table.Cell().AlignRight().Text(m.Laize.HasValue ? $"{m.Laize.Value:F2}" : "—");
+                                table.Cell().AlignRight().Text($"{m.MetresRecus:F2}");
+                                table.Cell().AlignRight().Text(d.TotalCommande.ToString());
+                                table.Cell().AlignRight().Text($"{m.ConsoClient:F2}");
+                                table.Cell().AlignRight().Text(m.ConsoReelle.HasValue ? $"{m.ConsoReelle.Value:F2}" : "—");
+                                table.Cell().AlignRight().Text($"{m.RetraitPourcentage:F2}");
+                                table.Cell().AlignRight().Text($"{m.StockRestant:F2}");
+                            }
+                        });
+                    });
+                });
+            }).GeneratePdf();
+        }
+
         private static string FormatMontant(decimal valeur) =>
             valeur.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("fr-FR"));
     }

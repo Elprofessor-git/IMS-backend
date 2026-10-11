@@ -175,6 +175,130 @@ namespace Backend_Gestion_Magasin_API.Services
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
+        //  Ordre de coupe (C3) — feuille générée de toutes pièces.
+        //  Reproduit le document de référence (repartition par matelas + restes par
+        //  taille + matières) SANS la ligne fixe « THERMO » : seules les matières
+        //  libres de l'ordre sont émises, jamais une ligne codée en dur.
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        public byte[] ExportOrdreCoupe(OrdreCoupeDto d)
+        {
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("ORDRE DE COUPE");
+
+            // ── En-tête : MODELE / COL / CHAINE / OF / QT / QT COUPE / SURPLUS / MANQUE / TIS RECU ──
+            var tisRecu = d.Matieres.Sum(m => m.MetresRecus);
+            var entete = new (string Label, object Valeur)[]
+            {
+                ("MODELE", d.Modele),
+                ("COL", d.Couleur),
+                ("CHAINE", d.ChaineProductionNom ?? string.Empty),
+                ("OF", d.ReferenceOF ?? string.Empty),
+                ("QT", d.TotalCommande),
+                ("QT COUPE", d.TotalCoupeReelle),
+                ("SURPLUS", d.Surplus),
+                ("MANQUE", d.Manque),
+                ("TIS RECU", tisRecu),
+            };
+            var col = 1;
+            foreach (var (label, valeur) in entete)
+            {
+                var cell = ws.Cell(1, col);
+                cell.Value = label;
+                cell.Style.Font.Bold = true;
+                XLCellValue val = valeur switch
+                {
+                    string s => s,
+                    long l => l,
+                    int i => i,
+                    decimal d2 => d2,
+                    _ => string.Empty,
+                };
+                ws.Cell(1, col + 1).Value = val;
+                col += 2;
+            }
+
+            // ── Répartition par matelas : une ligne par plan, restes après chaque passe ──
+            var tailles = d.Tailles.Select(t => t.Libelle).ToList();
+            ws.Cell(3, 1).Value = "REPARTITION PAR MATELAS";
+            ws.Cell(3, 1).Style.Font.Bold = true;
+
+            // En-têtes de colonnes (ligne 4) : N° | MATELAS | DATE | PLIS | restes par taille.
+            ws.Cell(4, 1).Value = "N°";
+            ws.Cell(4, 2).Value = "MATELAS";
+            ws.Cell(4, 3).Value = "DATE";
+            ws.Cell(4, 4).Value = "PLIS";
+            for (var i = 0; i < tailles.Count; i++)
+                ws.Cell(4, 5 + i).Value = tailles[i];
+            for (var c = 1; c <= 4 + tailles.Count; c++)
+                ws.Cell(4, c).Style.Font.Bold = true;
+
+            var row = 5;
+            for (var i = 0; i < d.Plans.Count; i++)
+            {
+                var plan = d.Plans[i];
+                var restes = plan.Restes.ToDictionary(r => NormaliserTaille(r.Taille), r => r.Valeur);
+                ws.Cell(row, 1).Value = i + 1;
+                ws.Cell(row, 2).Value = plan.MatelasNumero ?? plan.Libelle ?? string.Empty;
+                ws.Cell(row, 3).Value = string.Empty; // la date vit sur le matelas, pas sur le plan
+                ws.Cell(row, 4).Value = plan.Plis;
+                for (var j = 0; j < tailles.Count; j++)
+                {
+                    if (restes.TryGetValue(NormaliserTaille(tailles[j]), out var reste))
+                    {
+                        var cell = ws.Cell(row, 5 + j);
+                        cell.Value = reste;
+                        if (reste < 0)
+                            cell.Style.Font.FontColor = XLColor.Red; // surplus
+                    }
+                }
+                row++;
+            }
+            row++; // ligne de respiration
+
+            // ── Matières : uniquement celles saisies libres sur l'ordre ──
+            var titreM = ws.Cell(row, 1);
+            titreM.Value = "MATIERES LIBRES";
+            titreM.Style.Font.Bold = true;
+            row++;
+            string[] enTetesM = { "MODL", "COL", "LAIZE", "MT RC", "Qt", "CONO", "MT UT", "RETR%", "RTRAI", "STOCK" };
+            for (var c = 0; c < enTetesM.Length; c++)
+            {
+                ws.Cell(row, c + 1).Value = enTetesM[c];
+                ws.Cell(row, c + 1).Style.Font.Bold = true;
+            }
+            row++;
+
+            foreach (var m in d.Matieres)
+            {
+                ws.Cell(row, 1).Value = m.Designation;
+                ws.Cell(row, 2).Value = d.Couleur;
+                ws.Cell(row, 3).Value = m.Laize ?? 0m;
+                ws.Cell(row, 4).Value = m.MetresRecus;
+                ws.Cell(row, 5).Value = d.TotalCommande;
+                ws.Cell(row, 6).Value = m.ConsoClient;
+                ws.Cell(row, 7).Value = m.ConsoReelle ?? m.ConsoClient;
+                ws.Cell(row, 8).Value = m.RetraitPourcentage;
+                ws.Cell(row, 9).Value = m.Retrait;
+                ws.Cell(row, 10).Value = m.StockRestant;
+                row++;
+            }
+
+            // TOTAUX matière : tissu reçu global (utilisé aussi par l'en-tête).
+            ws.Cell(row, 8).Value = "TOTAUX";
+            ws.Cell(row, 4).Style.Font.Bold = true;
+            ws.Cell(row, 4).Value = d.Matieres.Sum(x => x.MetresRecus);
+
+            ws.Columns().AdjustToContents();
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            return ms.ToArray();
+        }
+
+        private static string NormaliserTaille(string t) =>
+            string.IsNullOrWhiteSpace(t) ? string.Empty : t.Trim().ToUpperInvariant();
+
+        // ─────────────────────────────────────────────────────────────────────────────
         //  Helpers
         // ─────────────────────────────────────────────────────────────────────────────
 
