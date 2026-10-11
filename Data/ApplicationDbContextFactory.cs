@@ -7,8 +7,12 @@ namespace Backend_Gestion_Magasin_API.Data
     {
         public ApplicationDbContext CreateDbContext(string[] args)
         {
+            // Aucun repli codé en dur : la chaîne vient exclusivement de l'environnement.
+            // Absente, on échoue explicitement plutôt que de s'appuyer sur un secret littéral.
             var connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION")
-                ?? "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=Frigoriste3.;Pooling=true;CommandTimeout=300";
+                ?? throw new InvalidOperationException(
+                    "La variable d'environnement DB_CONNECTION est absente. Posez-la avec la chaîne " +
+                    "de connexion PostgreSQL (voir backend/.env.example) avant d'utiliser cette fabrique.");
 
             var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
             optionsBuilder.UseNpgsql(connectionString);

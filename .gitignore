@@ -10,3 +10,13 @@ query
 # Outillage local (index codegraph, audits Qodo) — non versionné
 .codegraph/
 .qodo/
+
+# Secrets & fichiers de configuration sensibles
+client_secret*.json
+*.pem
+*.pfx
+*.key
+.env
+.env.*
+!.env.example
+!.env.local.example

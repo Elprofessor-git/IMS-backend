@@ -26,8 +26,14 @@ namespace Backend.Tests
 
         public TestDatabase()
         {
+            // Aucun repli codé en dur : on lit exclusivement l'environnement. La chaîne complète
+            // (hôte, port, base, identifiants) est posée dans IMS_TEST_PG par la méthode documentée
+            // backend/docs/README.md ; absente, on échoue explicitement plutôt que de voler un secret.
             var host = Environment.GetEnvironmentVariable("IMS_TEST_PG")
-                       ?? "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=Frigoriste3.";
+                       ?? throw new InvalidOperationException(
+                           "La variable d'environnement IMS_TEST_PG est absente. Posez la chaîne de " +
+                           "connexion PostgreSQL du serveur de test (voir backend/docs/README.md) avant " +
+                           "de lancer les tests d'intégration.");
 
             _databaseName = "ims_test_" + Guid.NewGuid().ToString("N")[..12];
             _adminConnectionString = host;
