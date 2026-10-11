@@ -465,3 +465,52 @@ Protocole: git diff --stat → AUCUNE méthode protégée touchée
 - **Tests Playwright à API interceptée** (`page.route` + JWT factice) : ils pilotent l'interface et le transport, pas le contrôle des droits serveur — celui-ci est couvert par `DiscussionTests`.
 - **Notifications de mention** : la notification est créée côté serveur ; son lien vers la conversation n'a pas été vérifié de bout en bout dans un navigateur réel.
 - **Reprise du lot suivant** : l'écran d'ordre de coupe (C2) fait l'objet d'un lot séparé et n'entre pas dans ce journal.
+
+# LOT COUPE C2 — AUDIT DE VÉRITÉ + complétion du verrou (C0)
+
+**Date** : 2026-10-11
+**Commits** : Backend `41e280d` (API ordre de coupe), `b33a2bd` (tests API C2, 15), `9aabb39` (verrou étendu à toute la feuille), `dd5924b` (tests verrou étendu, 5) — Frontend `aaefc67` (client API/hooks), `baabe19` (écran type feuille Excel), `b8386fa` + `5c8ce4b` (Playwright C2, 4), `9d56954` (add matière respecte le verrou), `e2379ba` (e2e ordre figé, 1)
+
+## Résumé — audit de l'ordre de coupe C2, un seul écart complété
+
+| # | Exigence | Avant | Après | Preuve |
+|---|----------|-------|-------|--------|
+| a | CRUD ordre / tailles / plans / matières | FAIT | FAIT | `Controllers/OrdreCoupeController.cs:128-211, 323-442, 446-522, 526-588` |
+| b | Préremplissage explicite depuis les besoins de la commande | FAIT | FAIT | `POST {id}/Preremplir` `OrdreCoupeController.cs:223-316` |
+| c | Surcharge manuelle jamais écrasée par un recalcul | FAIT | FAIT | remplissage **NULL seulement** `:240-301` ; restes jamais persistés `:699-701` |
+| d | Verrou après première coupe | **PARTIEL** | **FAIT** | avant : seulement les plans (`:631-638`) ; après : +`OrdreVerrouilleAsync` → `409` sur en-tête, préremplissage, tailles, plans et matières (`:612-625`) |
+| e | Restes par taille (moteur C1, jamais stockés) | FAIT | FAIT | `Services/Coupe/MoteurCoupe.cs:25-90` |
+| f | Surplus, manque, alerte tissu (stock restant négatif) | FAIT | FAIT | `OrdreCoupeController.cs:720-724, 774-797` |
+| g | Matières libres (laize, conso client/réelle, écart, retrait %, mètres reçus) | FAIT | FAIT | `OrdreCoupeController.cs:774-797` |
+| h | Chaîne de production sélectionnable (internes + sous-traitants) | FAIT | FAIT | `OrdreCoupeController.cs:139-141` ; select `ordre-coupe-sheet.tsx:459-477` |
+| i | Écran : route, page, composants | FAIT | FAIT | `app/(dashboard)/coupe/[commandeId]/ordre-de-coupe/page.tsx`, `components/coupe/ordre-coupe-sheet.tsx` |
+| j | Tests backend C2 / Playwright | 15 / 4 | **20 / 5** | `backend.Tests/OrdreCoupeC2Tests.cs` (20 `[Fact]`), `e2e/c2-ordre-coupe.spec.ts` (5) |
+
+## Détails techniques
+
+### Complétion du verrou (l'écart trouvé par l'audit)
+- **Avant** : seuls `ModifierPlan` / `SupprimerPlan` refusaient l'écriture après une coupe réelle. L'en-tête, les tailles, le **préremplissage** et les matières restaient modifiables via l'API alors que l'écran les désactivait.
+- **Après** : `OrdreVerrouilleAsync(ordreId)` (vrai si un plan est rattaché à un matelas portant un `LotCoupe`) + `409 VerrouOrdreErreur` sur `Modifier`, `Preremplir`, `Ajouter/Modifier/SupprimerTaille`, `AjouterPlan`, `Ajouter/Modifier/SupprimerMatiere`. **Aucune migration** (pur serveur), **aucune méthode protégée** modifiée (helpers privés).
+- **Frontend** : la ligne « Ajouter la matière » (`bouton + 3 champs`) désactivée quand l'ordre est figé — l'API et l'interface refusent désormais **les mêmes** écritures.
+
+### Tests ajoutés (commit `dd5924b`, 5)
+`Verrou_Refuse_Modification_De_L_Entete`, `Verrou_Refuse_Ajout_De_Taille`, `Verrou_Refuse_Modification_Et_Suppression_De_Taille`, `Verrou_Refuse_Preremplissage`, `Verrou_Refuse_Ajout_Et_Modification_De_Matiere` — tous `409` après la première coupe.
+
+### Tests Playwright ajoutés (commit `e2379ba`, 1)
+`un ordre figé après coupe bloque la saisie de chaque cellule` : libellé/quantité/occurrences, en-tête, préremplir, ajouter un plan et ajouter une matière tous `disabled`.
+
+## Vérifications
+```
+Backend:  OrdreCoupeC2Tests ✅ 20 / 20 (worktree isolé à HEAD + commits C2)
+          suite complète   ✅ 376 / 376 (objet isolé #IMS_TEST_PG, 1m27s)
+          attributs [Fact]/[Theory] : 299 avant C2 → 330 à HEAD → 335 après
+          git diff --stat avant chaque commit : AUCUNE méthode protégée touchée
+Frontend: pnpm typecheck ✅   eslint (fichiers C2) ✅
+          npx playwright test e2e/c2-ordre-coupe.spec.ts ✅ 5 / 5 (49s)
+          total Playwright : 62 (dont 5 C2)
+```
+
+## Points laissés ouverts
+- **Suite complète re-vérifiée en worktree isolé** : entre-temps, un **WIP Discussions concurrent** non commité sur la branche (`Services/ReferenceDiscussionService.cs`, `Controllers/DiscussionController.cs`, `Dtos/Discussion/*`, `Models/Notification.cs`, `Services/{Notification,Permission}Service.cs`, `Program.cs`, `backend.Tests/DiscussionContexteTests.cs`) **rompt le build local** (`ReferenceDiscussionService.cs:256,426`). Il n'a **pas** été commité ni poussé ; à finaliser par son auteur avant le prochain `dotnet build`/`dotnet test` sur la branche.
+- **Migration en double** : aucune (une seule `20261007184526_AddOrdreCoupe`, une seule `20261004125935_AddBesoinCoupe`, toutes avec Designer).
+- **Branche `feat/production-readiness-updates`** : aucun commit hors main (ancêtre), rien à pousser ni fusionner — à abandonner.
