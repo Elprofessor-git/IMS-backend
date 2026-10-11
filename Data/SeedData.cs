@@ -88,6 +88,9 @@ namespace Backend_Gestion_Magasin_API.Data
                 PeutGererQualite = true,
                 PeutVoirCourriels = true,
                 PeutGererCourriels = true,
+                // Discussion : l'admin utilise le module et modère les canaux publics.
+                PeutUtiliserDiscussion = true,
+                PeutGererDiscussion = true,
                 DateCreation = DateTime.Now
             });
             await context.SaveChangesAsync();
@@ -147,6 +150,11 @@ namespace Backend_Gestion_Magasin_API.Data
                 PeutConfirmerAchats = false,
                 PeutValiderImportations = false,
                 PeutPartagerLiens = false,
+
+                // Discussion : lecture seule (ses propres conversations), aucun droit
+                // de modération de canal.
+                PeutUtiliserDiscussion = true,
+                PeutGererDiscussion = false,
                 DateCreation = DateTime.Now
             });
             await context.SaveChangesAsync();

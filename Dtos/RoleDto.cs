@@ -64,6 +64,15 @@ namespace Backend_Gestion_Magasin_API.Dtos
         public bool PeutVoirCourriels { get; set; } = false;
         public bool PeutGererCourriels { get; set; } = false;
 
+        // Module Discussion (type Slack, E1). Capacités TRANSVERSALES présentes
+        // dans RoleDto ET CreateRoleDto : un aller-retour GET puis PUT depuis
+        // l'écran des rôles doit être sans perte (motif LOT18 §1), sinon
+        // enregistrer un rôle révoquerait silencieusement l'accès au module.
+        // PeutUtiliserDiscussion : accès au module (lecture de ses conversations).
+        // PeutGererDiscussion : modération des canaux publics uniquement.
+        public bool PeutUtiliserDiscussion { get; set; } = false;
+        public bool PeutGererDiscussion { get; set; } = false;
+
         public bool EstActif { get; set; }
     }
 
@@ -132,6 +141,13 @@ namespace Backend_Gestion_Magasin_API.Dtos
         // Module Courriels (Gmail)
         public bool PeutVoirCourriels { get; set; }
         public bool PeutGererCourriels { get; set; }
+
+        // Module Discussion (type Slack, E1). Même présence dans CreateRoleDto
+        // que dans RoleDto (motif LOT18 §1) : sans cette ligne, la séquence
+        // GET puis PUT d'un rôle créerait le champ à false et révoquerait
+        // l'accès au module.
+        public bool PeutUtiliserDiscussion { get; set; }
+        public bool PeutGererDiscussion { get; set; }
     }
 
     public class UpdateStatutDto

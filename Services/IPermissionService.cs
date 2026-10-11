@@ -25,5 +25,19 @@ namespace Backend_Gestion_Magasin_API.Services
         /// d'un droit doit être immédiate, sans réémission ni liste de révocation.
         /// </summary>
         Task<bool> CanPartagerLiensAsync(string userId);
+
+        /// <summary>
+        /// Accès au module Discussion (type Slack) : lecture de ses conversations.
+        /// Capacité transverse résolue depuis Role, jamais depuis le jeton.
+        /// </summary>
+        Task<bool> CanUtiliserDiscussionAsync(string userId);
+
+        /// <summary>
+        /// Modération des canaux PUBLICS de la Discussion : création/modération de
+        /// ceux-ci uniquement. N'ouvre JAMAIS les DM ni les groupes privés d'autrui,
+        /// même pour un administrateur : l'appartenance prime. Capacité transverse
+        /// résolue depuis Role, jamais depuis le jeton.
+        /// </summary>
+        Task<bool> CanGererDiscussionAsync(string userId);
     }
 }

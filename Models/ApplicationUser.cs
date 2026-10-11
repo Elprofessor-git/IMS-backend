@@ -33,6 +33,14 @@ namespace Backend_Gestion_Magasin_API.Models
         public DateTime DateCreation { get; set; } = DateTime.Now;
 
         public bool EstActif { get; set; } = true;
+
+        // ── Module Discussion E1 ────────────────────────────────────────────────
+        // Marqueur « compte interne » (invité par un administrateur, aucun
+        // self-signup possible aujourd'hui). Un futur compte EXTERNE (partenaire,
+        // client) devra être créé avec EstCompteInterne = false : il sera alors
+        // exclu de l'annuaire de la Discussion et refusé sur tous ses endpoints.
+        // En cas de doute sur le type de compte, la règle est le REFUS.
+        public bool EstCompteInterne { get; set; } = true;
         
         // Relations
         public virtual Role? Role { get; set; }

@@ -68,6 +68,30 @@ namespace Backend_Gestion_Magasin_API.Services
             return user.Role?.PeutPartagerLiens == true;
         }
 
+        public async Task<bool> CanUtiliserDiscussionAsync(string userId)
+        {
+            var user = await _db.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null) return false;
+            if (user.Role?.EstAdministrateur == true) return true;
+
+            return user.Role?.PeutUtiliserDiscussion == true;
+        }
+
+        public async Task<bool> CanGererDiscussionAsync(string userId)
+        {
+            var user = await _db.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null) return false;
+            if (user.Role?.EstAdministrateur == true) return true;
+
+            return user.Role?.PeutGererDiscussion == true;
+        }
+
         public async Task<IEnumerable<ModulePermission>> GetAllPermissionsAsync(string userId)
         {
             var user = await _db.Users
@@ -114,6 +138,11 @@ namespace Backend_Gestion_Magasin_API.Services
                 "production"   => (role.PeutVoirProduction,      role.PeutGererProduction),
                 "qualite"      => (role.PeutVoirQualite,         role.PeutGererQualite),
                 "courriels"    => (role.PeutVoirCourriels,       role.PeutGererCourriels),
+                // Discussion : canWrite est toujours false au niveau module. Écrire
+                // (envoyer un message, créer une conversation) dépend de
+                // l'APPARTENANCE à la conversation, pas d'un droit global : les
+                // capacités transversales sont exposées par /Permission/me.
+                "discussion"   => (role.PeutUtiliserDiscussion,  false),
                 "parametres"   => (role.EstAdministrateur,      role.EstAdministrateur),
                 _              => (false,                       false),
             };
@@ -122,7 +151,7 @@ namespace Backend_Gestion_Magasin_API.Services
         [
             "articles", "stock", "mouvements", "achats", "importations",
             "commandes", "clients", "fournisseurs", "plateformes", "taches",
-            "utilisateurs", "roles", "chatbot", "dashboard", "rapports", "factures", "parametres", "machines", "coupe", "planning", "production", "qualite", "courriels"
+            "utilisateurs", "roles", "chatbot", "dashboard", "rapports", "factures", "parametres", "machines", "coupe", "planning", "production", "qualite", "courriels", "discussion"
         ];
     }
 }

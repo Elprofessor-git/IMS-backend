@@ -26,6 +26,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var permissions = await _permissionService.GetAllPermissionsAsync(userId);
             var peutPartagerLiens = await _permissionService.CanPartagerLiensAsync(userId);
             var peutAssignerTaches = await _permissionService.CanAssignerTachesAsync(userId);
+            var peutUtiliserDiscussion = await _permissionService.CanUtiliserDiscussionAsync(userId);
+            var peutGererDiscussion = await _permissionService.CanGererDiscussionAsync(userId);
 
             return Ok(permissions.Select(p => new
             {
@@ -41,7 +43,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 // « assigner » conditionne l'accès à l'annuaire des utilisateurs
                 // (TacheProduction/UtilisateursAssignables) : le frontend ne doit pas
                 // appeler cet endpoint s'il ne la possède pas.
-                peutAssignerTaches
+                peutAssignerTaches,
+                // Module Discussion (E1) : PeutUtiliserDiscussion = accès au module ;
+                // PeutGererDiscussion = modération des canaux publics uniquement.
+                peutUtiliserDiscussion,
+                peutGererDiscussion
             }));
         }
     }

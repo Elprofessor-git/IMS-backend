@@ -94,6 +94,18 @@ namespace Backend_Gestion_Magasin_API.Models
         public bool PeutVoirCourriels { get; set; } = false;
         public bool PeutGererCourriels { get; set; } = false;
 
+        // ── Module Discussion (type Slack) — E1 ──────────────────────────────────
+        // Capacités TRANSVERSALES, comme PeutPartagerLiens : présentes dans RoleDto
+        // ET CreateRoleDto, réassignées dans Create/Update/MapToDto (motif LOT18 §1),
+        // sinon un aller-retour GET puis PUT depuis l'écran des rôles révoquerait
+        // silencieusement les droits.
+        // PeutUtiliserDiscussion : accès au module (lecture de ses conversations).
+        // PeutGererDiscussion : modération des canaux publics et gestion des
+        //   membres de ceux-ci. N'ouvre JAMAIS les DM ni les groupes privés
+        //   d'autrui, même pour un administrateur : l'appartenance prime.
+        public bool PeutUtiliserDiscussion { get; set; } = false;
+        public bool PeutGererDiscussion { get; set; } = false;
+
         // Module Planning (grille chaînes × samedis)
                 
         public DateTime DateCreation { get; set; } = DateTime.Now;

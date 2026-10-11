@@ -88,6 +88,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 PeutGererQualite = dto.PeutGererQualite,
                 PeutVoirCourriels = dto.PeutVoirCourriels,
                 PeutGererCourriels = dto.PeutGererCourriels,
+                // Capacités transversales du module Discussion (E1) : réaffectées
+                // explicitement, sinon le PUT les remettrait à false.
+                PeutUtiliserDiscussion = dto.PeutUtiliserDiscussion,
+                PeutGererDiscussion = dto.PeutGererDiscussion,
                 DateCreation = DateTime.Now,
                 EstActif = true
             };
@@ -160,6 +164,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
             role.PeutGererQualite = dto.PeutGererQualite;
             role.PeutVoirCourriels = dto.PeutVoirCourriels;
             role.PeutGererCourriels = dto.PeutGererCourriels;
+            // Module Discussion (E1) : mêmes précautions que PeutPartagerLiens
+            // ci-dessus — PUT = remplacement complet, champ absent = false.
+            role.PeutUtiliserDiscussion = dto.PeutUtiliserDiscussion;
+            role.PeutGererDiscussion = dto.PeutGererDiscussion;
 
             await _context.SaveChangesAsync();
             return NoContent();
@@ -230,6 +238,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             PeutGererQualite = r.PeutGererQualite,
             PeutVoirCourriels = r.PeutVoirCourriels,
             PeutGererCourriels = r.PeutGererCourriels,
+            PeutUtiliserDiscussion = r.PeutUtiliserDiscussion,
+            PeutGererDiscussion = r.PeutGererDiscussion,
         };
     }
 }
