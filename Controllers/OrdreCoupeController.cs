@@ -171,6 +171,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (ordre == null)
                 return NotFound(new { message = "Ordre de coupe introuvable." });
 
+            if (await OrdreVerrouilleAsync(ordre.Id))
+                return VerrouOrdreErreur();
+
             if (dto.ChaineProductionId.HasValue &&
                 !await _context.ChainesProduction.AnyAsync(c => c.Id == dto.ChaineProductionId.Value))
                 return BadRequest(new { message = "Chaîne de production introuvable." });
@@ -227,6 +230,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var ordre = await ChargerAsync(id, track: true);
             if (ordre == null)
                 return NotFound(new { message = "Ordre de coupe introuvable." });
+
+            if (await OrdreVerrouilleAsync(ordre.Id))
+                return VerrouOrdreErreur();
 
             var commande = await _context.CommandesClients.AsNoTracking()
                 .Include(c => c.ConfigTailles)
@@ -331,6 +337,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (ordre == null)
                 return NotFound(new { message = "Ordre de coupe introuvable." });
 
+            if (await OrdreVerrouilleAsync(ordre.Id))
+                return VerrouOrdreErreur();
+
             if (ordre.Tailles.Count >= MaxTailles)
                 return Conflict(new { message = $"Maximum {MaxTailles} colonnes de tailles par ordre de coupe." });
 
@@ -370,6 +379,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .FirstOrDefaultAsync(t => t.Id == tailleId);
             if (taille == null)
                 return NotFound(new { message = "Taille introuvable." });
+
+            if (await OrdreVerrouilleAsync(taille.OrdreCoupeId))
+                return VerrouOrdreErreur();
 
             var ancienLibelle = taille.Libelle;
             var nouveauLibelle = dto.Libelle.Trim();
@@ -422,6 +434,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (taille == null)
                 return NotFound(new { message = "Taille introuvable." });
 
+            if (await OrdreVerrouilleAsync(taille.OrdreCoupeId))
+                return VerrouOrdreErreur();
+
             // Les occurrences des plans qui pointent vers cette colonne partent avec
             // elle : la base ne porte aucune clé étrangère taille → plan, le
             // ménage est fait ici, dans la même transaction.
@@ -450,6 +465,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var ordre = await ChargerAsync(id, track: true);
             if (ordre == null)
                 return NotFound(new { message = "Ordre de coupe introuvable." });
+
+            if (await OrdreVerrouilleAsync(ordre.Id))
+                return VerrouOrdreErreur();
 
             if (ordre.Plans.Count >= MaxPlans)
                 return Conflict(new { message = $"Maximum {MaxPlans} plans par ordre de coupe." });
@@ -534,6 +552,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (ordre == null)
                 return NotFound(new { message = "Ordre de coupe introuvable." });
 
+            if (await OrdreVerrouilleAsync(ordre.Id))
+                return VerrouOrdreErreur();
+
             var matiere = new OrdreCoupeMatiere
             {
                 OrdreCoupeId = ordre.Id,
@@ -562,6 +583,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (matiere == null)
                 return NotFound(new { message = "Matière introuvable." });
 
+            if (await OrdreVerrouilleAsync(matiere.OrdreCoupeId))
+                return VerrouOrdreErreur();
+
             matiere.Designation = dto.Designation.Trim();
             matiere.Laize = dto.Laize;
             matiere.ConsoClient = dto.ConsoClient;
@@ -581,6 +605,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var matiere = await _context.OrdreCoupeMatieres.FindAsync(matiereId);
             if (matiere == null)
                 return NotFound(new { message = "Matière introuvable." });
+
+            if (await OrdreVerrouilleAsync(matiere.OrdreCoupeId))
+                return VerrouOrdreErreur();
 
             _context.OrdreCoupeMatieres.Remove(matiere);
             await _context.SaveChangesAsync();
@@ -612,8 +639,29 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private async Task<bool> PlanVerrouilleAsync(int matelasId) =>
             await _context.LotCoupes.AnyAsync(l => l.MatelasId == matelasId);
 
+        /// <summary>
+        /// Verrou d'ORDRE : vrai si au moins un plan de l'ordre est rattaché à un
+        /// matelas déjà servi par une coupe réelle. Une fois la première coupe
+        /// enregistrée, toute la feuille est figée — en-tête, colonnes de tailles,
+        /// plans et matières — sur le serveur, pas seulement dans l'interface.
+        /// </summary>
+        private async Task<bool> OrdreVerrouilleAsync(int ordreId)
+        {
+            var matelasIds = await _context.OrdreCoupePlans.AsNoTracking()
+                .Where(p => p.OrdreCoupeId == ordreId && p.MatelasId != null)
+                .Select(p => p.MatelasId!.Value)
+                .Distinct()
+                .ToListAsync();
+            if (matelasIds.Count == 0) return false;
+            return await _context.LotCoupes
+                .AnyAsync(l => l.MatelasId != null && matelasIds.Contains(l.MatelasId.Value));
+        }
+
         private static ConflictObjectResult VerrouErreur() =>
             new(new { message = "Plan figé : le matelas rattaché porte déjà des coupes enregistrées." });
+
+        private static ConflictObjectResult VerrouOrdreErreur() =>
+            new(new { message = "Ordre figé : une première coupe est déjà enregistrée. En-tête, tailles, plans et matières ne sont plus modifiables." });
 
         private async Task<ActionResult?> ValiderPlanAsync(
             OrdreCoupe ordre,
