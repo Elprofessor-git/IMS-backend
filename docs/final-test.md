@@ -406,7 +406,7 @@ Réseau:   aucun appel externe — base PostgreSQL jetable sur ims-test-net
 # LOT DISCUSSION — Module de messagerie interne (PHASE E : E1 backend + E2 frontend)
 
 **Date** : 2026-10-11
-**Commits** : Backend `20ac87e` (drapeaux + comptes internes), `5390e7b` (entités), `5a0f2d6` (notifications + migration), `413615a` (endpoints E1), `b529bf2` (tests E1) — Frontend `4c7b458` (drapeaux dans le formulaire de rôle), `068d967` (page, polling `/sync`, badge de non-lus)
+**Commits** : Backend `20ac87e` (drapeaux + comptes internes), `5390e7b` (entités), `5a0f2d6` (notifications + migration), `413615a` (endpoints E1), `b529bf2` (tests E1), `392f41f` (tests admin/modérateur sans accès aux DM/groupes privés) — Frontend `4c7b458` (drapeaux dans le formulaire de rôle), `068d967` (page, polling `/sync`, badge de non-lus), `feb6407` (apostrophes du texte d'aide Discussion, eslint)
 
 ## Résumé — un fil de discussion interne sans SignalR
 
@@ -430,7 +430,8 @@ Réseau:   aucun appel externe — base PostgreSQL jetable sur ims-test-net
 ## Détails techniques
 
 ### Backend (E1)
-- **Nouveaux** : `Models/Discussion/DiscussionModels.cs`, `Dtos/Discussion/DiscussionDtos.cs`, `Controllers/DiscussionController.cs`, `Filters/RequireCompteInterneAttribute.cs`, `backend.Tests/DiscussionTests.cs` (14 tests).
+- **Nouveaux** : `Models/Discussion/DiscussionModels.cs`, `Dtos/Discussion/DiscussionDtos.cs`, `Controllers/DiscussionController.cs`, `Filters/RequireCompteInterneAttribute.cs`, `backend.Tests/DiscussionTests.cs` (16 tests).
+- **Non-membre, y compris admin** : un `EstAdministrateur` **ou** un `PeutGererDiscussion` non-membre reçoit **404** sur un DM / un groupe privé d'autrui — l'appartenance prime sur tout privilège transverse ; `PeutGererDiscussion` n'ouvre que les **canaux publics**. Le contenu d'un message supprimé est vérifié **vidé en base**, pas seulement masqué par la projection API (`Admin_PeutGerer_NeLitPasLeDmDAutrui`, `Moderateur_PeutGerer_NeLitPasLeGroupePriveDAutrui`, `Message_ModificationEtSuppression_PropresMessagesSeulement`).
 - **Modifiés** : `Models/Role.cs` (+`PeutUtiliserDiscussion`, +`PeutGererDiscussion`), `Models/ApplicationUser.cs` (+`EstCompteInterne`), `Models/Notification.cs`, `Data/ApplicationDbContext.cs`, `Data/SeedData.cs` (Admin `true`/`true`, Lecteur `true`/`false`), `Services/PermissionService.cs`, `Services/NotificationService.cs`, `Controllers/{Role,Permission}Controller.cs`, `backend.Tests/TacheApiFactory.cs` (`SetRoleFlagsAsync`, `SetCompteInterneAsync`).
 - **Migration** : `20261010222413_AddDiscussion` — **additive** (3 tables, colonnes, séquence, trigger). Enums convertis en texte via `HasConversion<string>()` ; DTO `type` en chaîne (`"Direct" | "Groupe" | "Canal"`).
 - **Routes** (JSON camelCase) : `GET/POST /api/Discussion`, `GET /api/Discussion/utilisateurs`, `GET /api/Discussion/{id}/messages?avantId=` (30/page), `POST /api/Discussion/{id}/messages` (`{contenu, reponseAId}`), `POST /api/Discussion/{id}/lire` (`{jusquaMessageId}`), `PUT/DELETE /api/Discussion/{id}/messages/{msgId}`, `POST /api/Discussion/{id}/membres`, `DELETE /api/Discussion/{id}/quitter`, `GET /api/Discussion/sync?depuis=`.
@@ -449,7 +450,7 @@ Réseau:   aucun appel externe — base PostgreSQL jetable sur ims-test-net
 ## Vérifications
 ```
 Backend:  dotnet build API + backend.Tests séparément ✅ 0 erreur
-          DiscussionTests ✅ 14 / 14
+          DiscussionTests ✅ 16 / 16
           suite complète ✅ 354 / 354
 EF:       migration 20261010222413_AddDiscussion additive (Up = création)
 Frontend: pnpm run typecheck ✅
