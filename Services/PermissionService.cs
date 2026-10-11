@@ -92,6 +92,21 @@ namespace Backend_Gestion_Magasin_API.Services
             return user.Role?.PeutGererDiscussion == true;
         }
 
+        public async Task<IReadOnlyList<string>> UtilisateursAvecAccesModuleAsync(string module)
+        {
+            var utilisateurs = await _db.Users
+                .AsNoTracking()
+                .Where(u => u.EstActif)
+                .Select(u => new { u.Id, u.Role })
+                .ToListAsync();
+
+            return utilisateurs
+                .Where(u => u.Role?.EstAdministrateur == true
+                    || (u.Role != null && MapModule(u.Role, module).canAccess))
+                .Select(u => u.Id)
+                .ToList();
+        }
+
         public async Task<IEnumerable<ModulePermission>> GetAllPermissionsAsync(string userId)
         {
             var user = await _db.Users

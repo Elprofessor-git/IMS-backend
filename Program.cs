@@ -347,6 +347,10 @@ builder.Services.AddScoped<ITacheOwnershipService, TacheOwnershipService>();
 // système de notification n'est introduit.
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
+// Discussion E3 — résolution des références (#CMD-…), autocomplétion et participants
+// des conversations contextuelles. Le calcul des cartes dépend des droits du LECTEUR.
+builder.Services.AddScoped<IReferenceDiscussionService, ReferenceDiscussionService>();
+
 // Chatbot IA — HttpClient typé pour GroqService, puis ToolExecutor et ChatbotAgentService
 builder.Services.AddHttpClient<GroqService>(client =>
 {

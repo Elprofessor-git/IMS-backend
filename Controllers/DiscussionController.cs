@@ -51,15 +51,18 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private readonly ApplicationDbContext _db;
         private readonly INotificationService _notifications;
         private readonly IPermissionService _permissions;
+        private readonly IReferenceDiscussionService _references;
 
         public DiscussionController(
             ApplicationDbContext db,
             INotificationService notifications,
-            IPermissionService permissions)
+            IPermissionService permissions,
+            IReferenceDiscussionService references)
         {
             _db = db;
             _notifications = notifications;
             _permissions = permissions;
+            _references = references;
         }
 
         private string? Moi => User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -78,9 +81,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             // Tout est calculé EN SQL : les non-lus sont un Count côté base, jamais un
             // chargement complet des messages côté application.
+            //
+            // Les conversations CONTEXTUELLES (E3) sont exclues de la liste globale :
+            // leur accès relève du module de l'objet, pas de l'appartenance, et les
+            // lister ici divulguerait des références d'objets hors permissions. Elles
+            // se consultent depuis l'onglet Discussion de leur fiche.
             var lignes = await _db.ConversationMembres
                 .AsNoTracking()
-                .Where(m => m.UserId == moi && m.AQuitteLe == null)
+                .Where(m => m.UserId == moi && m.AQuitteLe == null
+                    && m.Conversation.ContexteType == null)
                 .Select(m => new
                 {
                     m.ConversationId,
@@ -291,7 +300,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var moi = Moi;
             if (moi == null) return Unauthorized();
 
-            if (!await EstMembreAsync(id, moi))
+            if (!await PeutAccederAsync(id, moi))
                 return NotFound();
 
             var ct = HttpContext.RequestAborted;
@@ -329,6 +338,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .ToListAsync(ct);
 
             page.Reverse();
+
+            // Les cartes sont calculées APRÈS la mise en page, pour le LECTEUR courant.
+            await AttacherReferencesAsync(page, moi, ct);
+
             return Ok(page);
         }
 
@@ -342,7 +355,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var moi = Moi;
             if (moi == null) return Unauthorized();
 
-            if (!await EstMembreAsync(id, moi))
+            if (!await PeutAccederAsync(id, moi))
                 return NotFound();
 
             var contenu = dto.Contenu?.Trim() ?? string.Empty;
@@ -368,6 +381,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 return BadRequest(new { message = "Le message auquel vous répondez n'existe pas dans cette conversation." });
             }
 
+            // Auteur du message auquel on répond (s'il existe), pour la notification de
+            // réponse. Revalidé contre la conversation plus haut.
+            var auteurRepondu = dto.ReponseAId is long repondre
+                ? await _db.MessagesDiscussion.AsNoTracking()
+                    .Where(m => m.Id == repondre)
+                    .Select(m => m.AuteurUserId)
+                    .FirstOrDefaultAsync(HttpContext.RequestAborted)
+                : null;
+
             var message = new MessageDiscussion
             {
                 ConversationId = id,
@@ -378,6 +400,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
             };
 
             _db.MessagesDiscussion.Add(message);
+
+            // Conversation contextuelle : écrire fait de moi un PARTICIPANT (la liste
+            // des participants est « ceux qui écrivent, plus les responsables »). Cette
+            // adhésion ne conditionne PAS l'accès, qui suit le module de l'objet.
+            await InscrireParticipantSiContexteAsync(id, moi);
+
             await _db.SaveChangesAsync(HttpContext.RequestAborted);
 
             // La revision a été attribuée par la base (default/trigger) et relue par EF.
@@ -385,7 +413,49 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             await NotifierMentionsAsync(id, message, contenu, moi);
 
+            // Réponse : l'auteur du message d'origine est prévenu via la même cloche.
+            if (auteurRepondu != null && auteurRepondu != moi)
+            {
+                await _notifications.NotifierReponseAsync(
+                    auteurRepondu, moi, id, await NomConversationAsync(id, HttpContext.RequestAborted),
+                    message.Id, HttpContext.RequestAborted);
+            }
+
             return StatusCode(StatusCodes.Status201Created, projection);
+        }
+
+        /// <summary>
+        /// Ajoute l'utilisateur comme participant ACTIF d'une conversation contextuelle
+        /// s'il ne l'est pas déjà. No-op pour les conversations libres (leur accès est
+        /// déjà gouverné par l'appartenance).
+        /// </summary>
+        private async Task InscrireParticipantSiContexteAsync(int conversationId, string userId)
+        {
+            var contexte = await _db.Conversations
+                .AsNoTracking()
+                .Where(c => c.Id == conversationId)
+                .Select(c => c.ContexteType)
+                .FirstOrDefaultAsync(HttpContext.RequestAborted);
+            if (contexte == null) return;
+
+            var membre = await _db.ConversationMembres
+                .FirstOrDefaultAsync(m => m.ConversationId == conversationId && m.UserId == userId);
+
+            if (membre == null)
+            {
+                _db.ConversationMembres.Add(new ConversationMembre
+                {
+                    ConversationId = conversationId,
+                    UserId = userId,
+                    EstAdmin = false,
+                    RejointLe = DateTime.Now
+                });
+            }
+            else if (membre.AQuitteLe != null)
+            {
+                membre.AQuitteLe = null;
+                membre.RejointLe = DateTime.Now;
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -398,7 +468,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var moi = Moi;
             if (moi == null) return Unauthorized();
 
-            if (!await EstMembreAsync(id, moi))
+            if (!await PeutAccederAsync(id, moi))
                 return NotFound();
 
             var message = await _db.MessagesDiscussion
@@ -440,7 +510,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var moi = Moi;
             if (moi == null) return Unauthorized();
 
-            if (!await EstMembreAsync(id, moi))
+            if (!await PeutAccederAsync(id, moi))
                 return NotFound();
 
             var message = await _db.MessagesDiscussion
@@ -473,9 +543,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var moi = Moi;
             if (moi == null) return Unauthorized();
 
+            if (!await PeutAccederAsync(id, moi))
+                return NotFound();
+
             var membre = await _db.ConversationMembres
                 .FirstOrDefaultAsync(m => m.ConversationId == id && m.UserId == moi && m.AQuitteLe == null);
-            if (membre == null) return NotFound();
+
+            // Conversation contextuelle : un lecteur autorisé par le module mais non
+            // participant n'a pas de compteur de non-lus à faire avancer. No-op, pas 404.
+            if (membre == null) return NoContent();
 
             // Le pointeur ne recule jamais : relire un ancien message ne « dé-lit » pas.
             if (dto.JusquaMessageId > membre.DernierMessageLuId)
@@ -501,6 +577,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .Include(c => c.Membres)
                 .FirstOrDefaultAsync(c => c.Id == id);
             if (conversation == null) return NotFound();
+
+            // Une conversation contextuelle a pour participants les rédacteurs et les
+            // responsables assignés de l'objet : la liste n'est pas manuelle. Le refus
+            // est explicite, et prononcé AVANT l'appartenance — l'accès y suit le module.
+            if (conversation.ContexteType != null)
+            {
+                if (!await PeutAccederAsync(id, moi)) return NotFound();
+                return BadRequest(new { message = "Les participants d'une discussion rattachée à un objet sont ajoutés automatiquement." });
+            }
 
             var membre = conversation.Membres.FirstOrDefault(m => m.UserId == moi && m.AQuitteLe == null);
             if (membre == null) return NotFound();
@@ -571,6 +656,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
             var conversation = await _db.Conversations.FirstOrDefaultAsync(c => c.Id == id);
             if (conversation == null) return NotFound();
 
+            // On ne « quitte » pas une conversation contextuelle : l'accès suit le
+            // module de l'objet, pas l'appartenance. Refus explicite AVANT l'appartenance.
+            if (conversation.ContexteType != null)
+            {
+                if (!await PeutAccederAsync(id, moi)) return NotFound();
+                return BadRequest(new { message = "On ne quitte pas une discussion rattachée à un objet." });
+            }
+
             var membre = await _db.ConversationMembres
                 .FirstOrDefaultAsync(m => m.ConversationId == id && m.UserId == moi && m.AQuitteLe == null);
             if (membre == null) return NotFound();
@@ -599,7 +692,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             var mesIds = await _db.ConversationMembres
                 .AsNoTracking()
-                .Where(m => m.UserId == moi && m.AQuitteLe == null)
+                .Where(m => m.UserId == moi && m.AQuitteLe == null
+                    && m.Conversation.ContexteType == null)
                 .Select(m => m.ConversationId)
                 .ToListAsync(ct);
 
@@ -629,6 +723,9 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 })
                 .ToListAsync(ct);
 
+            // Cartes des références calculées pour le LECTEUR (moi).
+            await AttacherReferencesAsync(messages, moi, ct);
+
             // Snapshot complet de MES conversations et de leurs membres : les
             // changements d'appartenance (ajout, départ) sont ainsi reflétés même
             // sans nouveau message. Le volume reste faible (quelques dizaines).
@@ -645,6 +742,110 @@ namespace Backend_Gestion_Magasin_API.Controllers
         }
 
         // ─────────────────────────────────────────────────────────────────────────
+        // POST api/Discussion/contexte/{segment}/{id} — ouvrir (ou créer) la
+        // discussion rattachée à un objet métier (E3)
+        // ─────────────────────────────────────────────────────────────────────────
+        //
+        // segment ∈ { commande, of, tache, achat }. Idempotent : le second appel
+        // renvoie la même conversation (index unique filtré). L'accès exige le module
+        // de l'objet EN PLUS du drapeau Discussion (attribut de classe).
+
+        [HttpPost("contexte/{segment}/{id:int}")]
+        public async Task<IActionResult> OuvrirContexte(string segment, int id)
+        {
+            var moi = Moi;
+            if (moi == null) return Unauthorized();
+
+            if (!ContexteDiscussion.TryDepuisSegment(segment, out var type))
+                return BadRequest(new { message = "Type de contexte inconnu : attendu commande, of, tache ou achat." });
+
+            var module = ContexteDiscussion.Module(type);
+            var (canAccess, _) = await _permissions.GetPermissionAsync(moi, module);
+            if (!canAccess)
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    message = $"Accès refusé : la discussion de cet objet exige le module « {module} »."
+                });
+
+            var libelle = await _references.LibelleObjetAsync(type, id, HttpContext.RequestAborted);
+            if (libelle == null)
+                return NotFound(new { message = "Objet introuvable." });
+
+            var contexteStocke = ContexteDiscussion.Stockage(type);
+
+            var conversation = await _db.Conversations
+                .Include(c => c.Membres)
+                .FirstOrDefaultAsync(c => c.ContexteType == contexteStocke && c.ContexteId == id,
+                    HttpContext.RequestAborted);
+
+            if (conversation == null)
+            {
+                conversation = new Conversation
+                {
+                    Type = TypeConversation.Contexte,
+                    Nom = libelle,
+                    EstPrive = true,
+                    ContexteType = contexteStocke,
+                    ContexteId = id,
+                    CreeParUserId = moi,
+                    CreeLe = DateTime.Now
+                };
+
+                // Participants initiaux : les responsables assignés de l'objet, résolus
+                // par leurs FK utilisateur ou leur nom d'auteur legacy. L'appelant qui
+                // EST l'un de ces responsables en fait donc partie ; sinon il devient
+                // participant dès qu'il écrit (voir Envoyer).
+                var responsables = await _references.ParticipantsResponsablesAsync(type, id, HttpContext.RequestAborted);
+                foreach (var responsable in responsables)
+                    conversation.Membres.Add(new ConversationMembre
+                    {
+                        UserId = responsable,
+                        EstAdmin = false,
+                        RejointLe = DateTime.Now
+                    });
+
+                _db.Conversations.Add(conversation);
+                try
+                {
+                    await _db.SaveChangesAsync(HttpContext.RequestAborted);
+                }
+                catch (DbUpdateException)
+                {
+                    // Course perdue sur l'index unique filtré : une conversation vient
+                    // d'être créée pour le même objet, on la renvoie.
+                    _db.ChangeTracker.Clear();
+                    conversation = await _db.Conversations
+                        .Include(c => c.Membres)
+                        .FirstAsync(c => c.ContexteType == contexteStocke && c.ContexteId == id,
+                            HttpContext.RequestAborted);
+                }
+
+                return StatusCode(StatusCodes.Status201Created,
+                    await ProjectionContexteAsync(conversation.Id, moi));
+            }
+
+            return Ok(await ProjectionContexteAsync(conversation.Id, moi));
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // GET api/Discussion/references?q= — autocomplétion des références (E3)
+        // ─────────────────────────────────────────────────────────────────────────
+        //
+        // Ne renvoie QUE des objets accessibles au lecteur : l'autocomplétion ne doit
+        // pas devenir un annuaire des objets hors permissions.
+
+        [HttpGet("references")]
+        public async Task<IActionResult> References([FromQuery] string? q)
+        {
+            var moi = Moi;
+            if (moi == null) return Unauthorized();
+
+            var resultats = await _references.RechercherAsync(
+                q ?? string.Empty, moi, HttpContext.RequestAborted);
+            return Ok(resultats);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
         // Helpers
         // ─────────────────────────────────────────────────────────────────────────
 
@@ -653,11 +854,49 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _db.ConversationMembres.AnyAsync(m =>
                 m.ConversationId == conversationId && m.UserId == userId && m.AQuitteLe == null);
 
+        /// <summary>
+        /// Vrai si l'utilisateur peut lire/écrire DANS la conversation.
+        ///
+        /// Conversation LIBRE (DM, groupe, canal) : l'appartenance active décide — un
+        /// non-membre reçoit 404, jamais 403 (ne pas confirmer l'existence). Conversation
+        /// CONTEXTUELLE (E3) : c'est la permission du MODULE DE L'OBJET qui décide ;
+        /// l'appartenance n'y liste que les participants et ne restreint pas l'accès.
+        /// </summary>
+        private async Task<bool> PeutAccederAsync(int conversationId, string userId)
+        {
+            var contexte = await _db.Conversations
+                .AsNoTracking()
+                .Where(c => c.Id == conversationId)
+                .Select(c => new { c.ContexteType })
+                .FirstOrDefaultAsync(HttpContext.RequestAborted);
+
+            if (contexte == null) return false;
+            if (contexte.ContexteType == null) return await EstMembreAsync(conversationId, userId);
+
+            if (!ContexteDiscussion.TryDepuisStockage(contexte.ContexteType, out var type))
+                return false;
+
+            var (canAccess, _) = await _permissions.GetPermissionAsync(userId, ContexteDiscussion.Module(type));
+            return canAccess;
+        }
+
+        /// <summary>Libellé affichable d'une conversation (nom, ou « conversation privée »).</summary>
+        private async Task<string> NomConversationAsync(int conversationId, CancellationToken ct)
+        {
+            var nom = await _db.Conversations
+                .AsNoTracking()
+                .Where(c => c.Id == conversationId)
+                .Select(c => c.Nom)
+                .FirstOrDefaultAsync(ct);
+            return string.IsNullOrWhiteSpace(nom) ? "une conversation privée" : nom!;
+        }
+
         private async Task<List<ConversationDto>> ProjeterMesConversationsAsync(string moi, CancellationToken ct)
         {
             var lignes = await _db.ConversationMembres
                 .AsNoTracking()
-                .Where(m => m.UserId == moi && m.AQuitteLe == null)
+                .Where(m => m.UserId == moi && m.AQuitteLe == null
+                    && m.Conversation.ContexteType == null)
                 .Select(m => new
                 {
                     m.ConversationId,
@@ -708,9 +947,68 @@ namespace Backend_Gestion_Magasin_API.Controllers
             return touts.First(c => c.Id == id);
         }
 
+        /// <summary>
+        /// Projection d'UNE conversation contextuelle, y compris pour un lecteur qui
+        /// n'en est pas membre (l'accès est gouverné par le module de l'objet, pas par
+        /// l'appartenance). Le compteur de non-lus vaut alors le total des messages
+        /// non lus depuis l'origine.
+        /// </summary>
+        private async Task<ConversationDto> ProjectionContexteAsync(int id, string moi)
+        {
+            var ct = HttpContext.RequestAborted;
+
+            var conversation = await _db.Conversations
+                .AsNoTracking()
+                .Include(c => c.Membres).ThenInclude(m => m.User)
+                .FirstAsync(c => c.Id == id, ct);
+
+            var dernierLu = conversation.Membres
+                .Where(m => m.UserId == moi)
+                .Select(m => m.DernierMessageLuId)
+                .FirstOrDefault();
+
+            var dernier = await _db.MessagesDiscussion
+                .AsNoTracking()
+                .Where(m => m.ConversationId == id && m.SupprimeLe == null)
+                .OrderByDescending(m => m.Id)
+                .Select(m => new { m.EnvoyeLe, m.Contenu })
+                .FirstOrDefaultAsync(ct);
+
+            var nonLus = await _db.MessagesDiscussion.CountAsync(
+                m => m.ConversationId == id && m.Id > dernierLu
+                    && m.AuteurUserId != moi && m.SupprimeLe == null, ct);
+
+            return new ConversationDto
+            {
+                Id = conversation.Id,
+                Type = conversation.Type.ToString(),
+                Nom = conversation.Nom,
+                EstPrive = conversation.EstPrive,
+                EstAdmin = conversation.Membres.Any(m =>
+                    m.UserId == moi && m.EstAdmin && m.AQuitteLe == null),
+                CreeLe = conversation.CreeLe,
+                ArchiveLe = conversation.ArchiveLe,
+                NonLus = nonLus,
+                DernierMessageLe = dernier?.EnvoyeLe,
+                DernierMessageApercu = dernier == null ? null : Apercu(dernier.Contenu),
+                Membres = conversation.Membres
+                    .Where(m => m.AQuitteLe == null)
+                    .Select(m => new MembreDto
+                    {
+                        UserId = m.UserId,
+                        EstAdmin = m.EstAdmin,
+                        Muet = m.Muet,
+                        RejointLe = m.RejointLe,
+                        AQuitteLe = m.AQuitteLe,
+                        NomAffichage = m.User.UserName ?? m.User.Nom
+                    })
+                    .ToList()
+            };
+        }
+
         private async Task<MessageDto> ProjectionMessageAsync(long msgId, string moi)
         {
-            return await _db.MessagesDiscussion
+            var message = await _db.MessagesDiscussion
                 .AsNoTracking()
                 .Where(m => m.Id == msgId)
                 .Select(m => new MessageDto
@@ -732,13 +1030,37 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     Revision = m.Revision
                 })
                 .FirstAsync(HttpContext.RequestAborted);
+
+            await AttacherReferencesAsync(new List<MessageDto> { message }, moi, HttpContext.RequestAborted);
+            return message;
         }
 
         /// <summary>
-        /// Détecte les mentions @ dans le message et notifie les membres concernés.
-        /// La correspondance se fait sur UserName ou Nom, insensible à la casse, et
-        /// UNIQUEMENT parmi les membres actifs de la conversation : on ne peut pas
-        /// notifier quelqu'un qui n'a pas accès au message. Muet et l'auteur sont exclus.
+        /// Calcule, pour le LECTEUR donné, les cartes des références présentes dans les
+        /// messages. Le calcul est délégué au service (droits du lecteur) : un objet
+        /// hors permissions ne produit pas de carte, un lecteur sans droit d'écriture ne
+        /// reçoit ni montant ni tiers.
+        /// </summary>
+        private async Task AttacherReferencesAsync(
+            List<MessageDto> messages, string lecteur, CancellationToken ct)
+        {
+            if (messages.Count == 0) return;
+
+            var map = await _references.ResoudreMessagesAsync(
+                messages.Select(m => (m.Id, m.Contenu)).ToList(), lecteur, ct);
+
+            foreach (var message in messages)
+                if (map.TryGetValue(message.Id, out var references))
+                    message.References = references;
+        }
+
+        /// <summary>
+        /// Détecte les mentions @ dans le message et notifie les destinataires
+        /// concernés. La correspondance se fait sur UserName ou Nom, insensible à la
+        /// casse. On ne notifie QUE des personnes ayant accès au message : les membres
+        /// actifs de la conversation, et — pour une conversation CONTEXTUELLE — les
+        /// utilisateurs actifs détenant le module de l'objet (leur accès ne dépend pas
+        /// de l'appartenance). Muet et l'auteur sont exclus.
         /// </summary>
         private async Task NotifierMentionsAsync(int conversationId, MessageDiscussion message, string contenu, string moi)
         {
@@ -749,43 +1071,56 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             if (tokens.Count == 0) return;
 
-            var membres = await _db.ConversationMembres
-                .AsNoTracking()
-                .Where(m => m.ConversationId == conversationId && m.AQuitteLe == null && m.UserId != moi && !m.Muet)
-                .Select(m => new
-                {
-                    m.UserId,
-                    m.User.UserName,
-                    m.User.Nom
-                })
-                .ToListAsync(HttpContext.RequestAborted);
-
             var conversation = await _db.Conversations
                 .AsNoTracking()
                 .Where(c => c.Id == conversationId)
-                .Select(c => new { c.Type, c.Nom })
+                .Select(c => new { c.Type, c.Nom, c.ContexteType })
                 .FirstAsync(HttpContext.RequestAborted);
 
             var nomConversation = string.IsNullOrWhiteSpace(conversation.Nom)
                 ? "une conversation privée"
                 : conversation.Nom!;
 
+            var candidats = await _db.ConversationMembres
+                .AsNoTracking()
+                .Where(m => m.ConversationId == conversationId && m.AQuitteLe == null && m.UserId != moi && !m.Muet)
+                .Select(m => new { m.UserId, m.User.UserName, m.User.Nom })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            // Conversation contextuelle : élargir aux détenteurs du module de l'objet.
+            if (conversation.ContexteType != null
+                && ContexteDiscussion.TryDepuisStockage(conversation.ContexteType, out var type))
+            {
+                var acces = await _permissions.UtilisateursAvecAccesModuleAsync(ContexteDiscussion.Module(type));
+                var dejaIds = candidats.Select(c => c.UserId).ToHashSet();
+                var nouveaux = acces.Where(id => id != moi && !dejaIds.Contains(id)).ToList();
+
+                if (nouveaux.Count > 0)
+                {
+                    candidats.AddRange(await _db.Users
+                        .AsNoTracking()
+                        .Where(u => nouveaux.Contains(u.Id))
+                        .Select(u => new { UserId = u.Id, u.UserName, u.Nom })
+                        .ToListAsync(HttpContext.RequestAborted));
+                }
+            }
+
             var deja = new HashSet<string>();
 
-            foreach (var membre in membres)
+            foreach (var candidat in candidats)
             {
-                var motifs = new[] { membre.UserName, membre.Nom }
+                var motifs = new[] { candidat.UserName, candidat.Nom }
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Select(x => x!.ToLowerInvariant());
 
                 if (!motifs.Any(motif => tokens.Contains(motif)))
                     continue;
 
-                if (!deja.Add(membre.UserId))
+                if (!deja.Add(candidat.UserId))
                     continue;
 
                 await _notifications.NotifierMentionAsync(
-                    membre.UserId,
+                    candidat.UserId,
                     moi,
                     conversationId,
                     nomConversation,

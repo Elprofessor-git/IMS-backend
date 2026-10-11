@@ -74,6 +74,25 @@ namespace Backend_Gestion_Magasin_API.Services
             string nomConversation,
             long messageId,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Notifie l'auteur d'un message qu'on lui a répondu (module Discussion, E3).
+        /// Même contrat que la mention (jamais de contenu, best effort, dédupliqué par
+        /// destinataire et message de discussion).
+        /// </summary>
+        /// <param name="destinataireUserId">Auteur du message d'origine (jamais le répondeur).</param>
+        /// <param name="auteurUserId">Utilisateur qui a répondu (claims JWT).</param>
+        /// <param name="conversationId">Conversation où la réponse a été écrite.</param>
+        /// <param name="nomConversation">Libellé affichable de la conversation.</param>
+        /// <param name="messageId">Le message RÉPONSE, cible de la déduplication.</param>
+        /// <param name="cancellationToken">Annulation de l'appel HTTP.</param>
+        Task NotifierReponseAsync(
+            string destinataireUserId,
+            string auteurUserId,
+            int conversationId,
+            string nomConversation,
+            long messageId,
+            CancellationToken cancellationToken = default);
     }
 
     public class NotificationService : INotificationService
@@ -122,13 +141,54 @@ namespace Backend_Gestion_Magasin_API.Services
                 messageRetrait: null,
                 cancellationToken: cancellationToken);
 
-        public async Task NotifierMentionAsync(
+        public Task NotifierMentionAsync(
             string destinataireUserId,
             string auteurUserId,
             int conversationId,
             string nomConversation,
             long messageId,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default) =>
+            NotifierDiscussionAsync(
+                destinataireUserId,
+                auteurUserId,
+                conversationId,
+                nomConversation,
+                messageId,
+                TypeNotification.MentionDiscussion,
+                "Vous avez été mentionné par {0} dans « {1} ».",
+                cancellationToken);
+
+        public Task NotifierReponseAsync(
+            string destinataireUserId,
+            string auteurUserId,
+            int conversationId,
+            string nomConversation,
+            long messageId,
+            CancellationToken cancellationToken = default) =>
+            NotifierDiscussionAsync(
+                destinataireUserId,
+                auteurUserId,
+                conversationId,
+                nomConversation,
+                messageId,
+                TypeNotification.ReponseDiscussion,
+                "{0} a répondu à votre message dans « {1} ».",
+                cancellationToken);
+
+        /// <summary>
+        /// Écrit une notification de discussion (mention OU réponse), best effort et
+        /// dédupliquée par (destinataire, type, message). Ne contient jamais le contenu
+        /// du message : seulement le nom de l'auteur et le libellé de la conversation.
+        /// </summary>
+        private async Task NotifierDiscussionAsync(
+            string destinataireUserId,
+            string auteurUserId,
+            int conversationId,
+            string nomConversation,
+            long messageId,
+            TypeNotification type,
+            string modele,
+            CancellationToken cancellationToken)
         {
             try
             {
@@ -141,8 +201,8 @@ namespace Backend_Gestion_Magasin_API.Services
                 if (!await EstDestinataireValideAsync(destinataireUserId, cancellationToken))
                 {
                     _logger.LogWarning(
-                        "Notification de mention ignorée : destinataire {Destinataire} inexistant ou inactif (conversation {ConversationId}).",
-                        destinataireUserId, conversationId);
+                        "Notification {Type} ignorée : destinataire {Destinataire} inexistant ou inactif (conversation {ConversationId}).",
+                        type, destinataireUserId, conversationId);
                     return;
                 }
 
@@ -150,7 +210,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 // personne à chaque réécriture.
                 if (await _db.Notifications.AnyAsync(n =>
                         n.UtilisateurId == destinataireUserId
-                        && n.Type == TypeNotification.MentionDiscussion
+                        && n.Type == type
                         && n.MessageDiscussionId == messageId
                         && !n.EstLivree,
                         cancellationToken))
@@ -170,7 +230,7 @@ namespace Backend_Gestion_Magasin_API.Services
                         ? (auteur.UserName ?? "Quelqu'un")
                         : $"{auteur.Prenom} {auteur.Nom}".Trim());
 
-                var texte = $"Vous avez été mentionné par {nomAuteur} dans « {nomConversation} ».";
+                var texte = string.Format(modele, nomAuteur, nomConversation);
 
                 // La colonne fait 500 caractères : on borne le libellé de conversation.
                 if (texte.Length > 500)
@@ -182,7 +242,7 @@ namespace Backend_Gestion_Magasin_API.Services
                     Message = texte,
                     DateNotification = DateTime.Now,
                     EstLivree = false,
-                    Type = TypeNotification.MentionDiscussion,
+                    Type = type,
                     MessageDiscussionId = messageId
                 });
 
@@ -193,7 +253,7 @@ namespace Backend_Gestion_Magasin_API.Services
                 // Best effort : une notification ratée ne doit jamais faire échouer
                 // l'envoi du message de discussion.
                 _logger.LogError(ex,
-                    "Échec (ignoré) de la notification de mention pour le message {MessageId}.", messageId);
+                    "Échec (ignoré) de la notification {Type} pour le message {MessageId}.", type, messageId);
             }
         }
 

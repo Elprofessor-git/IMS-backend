@@ -39,5 +39,13 @@ namespace Backend_Gestion_Magasin_API.Services
         /// résolue depuis Role, jamais depuis le jeton.
         /// </summary>
         Task<bool> CanGererDiscussionAsync(string userId);
+
+        /// <summary>
+        /// Identifiants des utilisateurs ACTIFS ayant l'accès en LECTURE à un module,
+        /// administrateurs inclus. Sert à cibler les mentions dans une conversation
+        /// contextuelle (E3) : y notifier quelqu'un suppose qu'il peut accéder au
+        /// message, c.-à-d. qu'il possède le module de l'objet de la conversation.
+        /// </summary>
+        Task<IReadOnlyList<string>> UtilisateursAvecAccesModuleAsync(string module);
     }
 }

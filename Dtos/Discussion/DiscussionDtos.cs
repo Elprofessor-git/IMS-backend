@@ -105,6 +105,66 @@ namespace Backend_Gestion_Magasin_API.Dtos.Discussion
         public bool EstSupprime { get; set; }
         public long? ReponseAId { get; set; }
         public long Revision { get; set; }
+
+        /// <summary>
+        /// Cartes des références (#CMD-123, #OF-…, #TAC-…, #ACH-…) présentes dans le
+        /// contenu, calculées CÔTÉ SERVEUR pour le LECTEUR courant (E3). Un objet hors
+        /// des permissions du lecteur n'a AUCUNE carte ; un lecteur sans droit
+        /// d'écriture sur le module ne reçoit jamais de montant ni de tiers.
+        /// </summary>
+        public List<ReferenceDto> References { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Carte d'une référence métier dans un message (E3). Toujours calculée pour le
+    /// LECTEUR : le serveur n'envoie que ce que ses droits autorisent.
+    /// </summary>
+    public class ReferenceDto
+    {
+        /// <summary>Type de l'objet EN CHAÎNE ("Commande" | "OrdreFabrication" | "TacheProduction" | "Achat").</summary>
+        public string Type { get; set; } = string.Empty;
+
+        /// <summary>Jeton canonique inséré dans le texte, ex. "CMD-123".</summary>
+        public string Reference { get; set; } = string.Empty;
+
+        public int Id { get; set; }
+
+        /// <summary>Libellé toujours lisible (n° de commande, titre de tâche…).</summary>
+        public string Libelle { get; set; } = string.Empty;
+
+        /// <summary>Statut de l'objet, quand il en a un (nullation pour un OF).</summary>
+        public string? Statut { get; set; }
+
+        /// <summary>Date significative de l'objet (création / commande / achat).</summary>
+        public DateTime? Date { get; set; }
+
+        // ── Champs SENSIBLES : renseignés UNIQUEMENT si le lecteur a le droit
+        //    d'ÉCRITURE du module de l'objet. Sinon ils restent null (jamais de
+        //    prix ni de tiers « masqué côté client » : le serveur ne les émet pas). ──
+
+        /// <summary>Montant total (commande, achat). Null si le lecteur n'a pas le droit d'écriture.</summary>
+        public decimal? Montant { get; set; }
+
+        /// <summary>Devise du montant. Null si pas de droit d'écriture ou pas de montant.</summary>
+        public string? Devise { get; set; }
+
+        /// <summary>Tiers identifiant (client d'une commande, fournisseur d'un achat). Null si pas de droit d'écriture.</summary>
+        public string? Tiers { get; set; }
+    }
+
+    /// <summary>Entrée d'autocomplétion d'une référence (E3) : uniquement des objets accessibles au lecteur.</summary>
+    public class ResultatReferenceDto
+    {
+        /// <summary>Type de l'objet EN CHAÎNE.</summary>
+        public string Type { get; set; } = string.Empty;
+
+        /// <summary>Jeton à insérer, ex. "CMD-123".</summary>
+        public string Reference { get; set; } = string.Empty;
+
+        public int Id { get; set; }
+
+        /// <summary>Libellé affiché sous la suggestion.</summary>
+        public string Libelle { get; set; } = string.Empty;
     }
 
     /// <summary>Vue d'un utilisateur de l'annuaire de la Discussion (actif et interne).</summary>

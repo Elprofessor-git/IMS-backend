@@ -33,7 +33,15 @@ namespace Backend_Gestion_Magasin_API.Models
         /// conversation sera ajouté côté frontend en E2. Valeur AJOUTÉE à l'énumération,
         /// stockée en texte — additive vis-à-vis des lignes existantes.
         /// </summary>
-        MentionDiscussion = 4
+        MentionDiscussion = 4,
+
+        /// <summary>
+        /// Quelqu'un a répondu à un message de discussion que j'ai écrit (E3).
+        /// Aucune FK cible propre : la déduplication s'appuie sur le message
+        /// RÉPONSE (<see cref="Notification.MessageDiscussionId"/>) comme pour une
+        /// mention. Valeur AJOUTÉE à l'énumération, stockée en texte — additive.
+        /// </summary>
+        ReponseDiscussion = 5
     }
 
     /// <summary>

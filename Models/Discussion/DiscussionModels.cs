@@ -17,7 +17,36 @@ namespace Backend_Gestion_Magasin_API.Models
         Groupe = 1,
 
         /// <summary>Canal, public ou privé. Un canal public se modère avec PeutGererDiscussion.</summary>
-        Canal = 2
+        Canal = 2,
+
+        /// <summary>
+        /// Conversation RATTACHÉE à un objet métier (E3) : commande, OF, tâche de
+        /// production ou achat. Une seule par objet, garantie par l'index unique
+        /// filtré (ContexteType, ContexteId). L'appartenance n'y régit PAS l'accès :
+        /// seule la permission du module de l'objet ouvre la conversation (voir le
+        /// contrôleur). Les membres ne sont que la liste des participants.
+        /// </summary>
+        Contexte = 3
+    }
+
+    /// <summary>
+    /// Nature de l'objet métier rattaché à une conversation contextuelle (E3).
+    /// Stockée en texte dans <see cref="Conversation.ContexteType"/> (conversion
+    /// string) : lisible en base et insensible à un réordonnancement.
+    /// </summary>
+    public enum TypeContexte
+    {
+        /// <summary>Commande client (#CMD-&lt;id&gt;), module « commandes ».</summary>
+        Commande = 0,
+
+        /// <summary>Ordre de fabrication (#OF-&lt;id&gt;), module « production ».</summary>
+        OrdreFabrication = 1,
+
+        /// <summary>Tâche de production (#TAC-&lt;id&gt;), module « taches ».</summary>
+        TacheProduction = 2,
+
+        /// <summary>Achat (#ACH-&lt;id&gt;), module « achats ».</summary>
+        Achat = 3
     }
 
     /// <summary>
@@ -27,10 +56,10 @@ namespace Backend_Gestion_Magasin_API.Models
     /// participants, index unique) : deux requêtes simultanées ne peuvent pas
     /// créer deux conversations distinctes pour la même paire.
     ///
-    /// <see cref="ContexteType"/> et <see cref="ContexteId"/> sont réservés à E3
-    /// (discussion rattachée à une commande / un OF / une tâche) : aujourd'hui
-    /// toujours null, index unique filtré pour qu'un objet métier n'ait jamais
-    /// deux conversations.
+    /// <see cref="ContexteType"/> et <see cref="ContexteId"/> rattachent, en E3, une
+    /// conversation à un objet métier (commande / OF / tâche / achat). Index unique
+    /// filtré pour qu'un objet métier n'ait jamais deux conversations. Null pour
+    /// toutes les conversations libres (DM, groupe, canal).
     /// </summary>
     public class Conversation
     {
