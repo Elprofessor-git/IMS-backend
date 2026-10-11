@@ -12,6 +12,9 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int? OrdreFabricationId { get; set; }
         /// <summary>Matelas dont relève la coupe (coupe uniquement, optionnel).</summary>
         public int? MatelasId { get; set; }
+        /// <summary>Ordre de coupe dont relève la coupe (C3, optionnel). S'il est vide et que
+        /// le matelas choisi est rattaché à un ordre, la valeur est déduite du matelas.</summary>
+        public int? OrdreCoupeId { get; set; }
         /// <summary>Chaîne de production exportatrice (export uniquement, optionnel).</summary>
         public int? ChaineProductionId { get; set; }
     }
@@ -32,6 +35,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         /// <summary>Matelas dont relève la coupe (optionnel).</summary>
         public int? MatelasId { get; set; }
         public string? MatelasNumero { get; set; }
+        /// <summary>Ordre de coupe dont relève la coupe (C3, optionnel).</summary>
+        public int? OrdreCoupeId { get; set; }
     }
 
     public class LotExportDto
@@ -54,9 +59,13 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
     {
         public string Taille { get; set; } = string.Empty;
         public int QuantiteCommande { get; set; }
+        /// <summary>Plan théorique par taille : contributions du moteur unique (C3).</summary>
+        public int PlanTheorique { get; set; }
         public int QuantiteCoupee { get; set; }
         public int QuantiteExportee { get; set; }
         public bool DepassementCoupe { get; set; }
+        /// <summary>true si le plan théorique déborde de la demande autorisée (marge comprise).</summary>
+        public bool DepassePlan { get; set; }
         public bool DepassementExport { get; set; }
     }
 
@@ -87,6 +96,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int TotalQuantiteCommande { get; set; }
         public int TotalQuantiteCoupee { get; set; }
         public int TotalQuantiteExportee { get; set; }
+        /// <summary>Total plan théorique (contributions du moteur unique, C3).</summary>
+        public int TotalPlanTheorique { get; set; }
         public List<RapportCoupeTailleDto> Tailles { get; set; } = new();
         public List<RapportCoupeTissuDto> Tissus { get; set; } = new();
     }

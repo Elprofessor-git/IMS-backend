@@ -174,6 +174,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public DateTime? DateMiseAJour { get; set; }
         /// <summary>Un de ses plans est figé : des coupes réelles existent.</summary>
         public bool Verrouille { get; set; }
+        /// <summary>Nombre de matelas rattachés explicitement à cet ordre (C3).</summary>
+        public int NbMatelas { get; set; }
 
         // Résumé — tout recalculé, rien de stocké.
         public long TotalCommande { get; set; }
@@ -181,6 +183,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public long Surplus { get; set; }
         public long Manque { get; set; }
         public bool AlerteManque { get; set; }
+        /// <summary>Coupes réelles enregistrées sous cet ordre (C3, Σ LotCoupes).</summary>
+        public int TotalCoupeReelle { get; set; }
 
         public List<OrdreCoupeTailleDto> Tailles { get; set; } = new();
         public List<OrdreCoupePlanDto> Plans { get; set; } = new();
@@ -198,6 +202,8 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int NbTailles { get; set; }
         public int NbPlans { get; set; }
         public int NbMatieres { get; set; }
+        /// <summary>Nombre de matelas rattachés à cet ordre (C3).</summary>
+        public int NbMatelas { get; set; }
         public long TotalCommande { get; set; }
         public long TotalPlanifie { get; set; }
         public bool AlerteManque { get; set; }
@@ -214,5 +220,31 @@ namespace Backend_Gestion_Magasin_API.Dtos.Commande
         public int CellulesConservees { get; set; }
         public decimal MargeSecurite { get; set; }
         public string? Message { get; set; }
+    }
+
+    // ───────────────────────────── Rattachement des matelas (C3) ─────────────────────────────
+
+    /// <summary>Matelas orphelin d'une commande, candidate au rattachement manuel à un ordre.</summary>
+    public class MatelasOrphelinDto
+    {
+        public int MatelasId { get; set; }
+        public string NumeroMatelas { get; set; } = string.Empty;
+        public DateTime DateMatelas { get; set; }
+        public int PiecePliage { get; set; }
+        /// <summary>Nombre d'occurrences total du plan de marquage (Σ plis × occ du matelas).</summary>
+        public int Planifie { get; set; }
+        /// <summary>Coupes réelles déjà rattachées à ce matelas.</summary>
+        public int CoupeReelle { get; set; }
+    }
+
+    /// <summary>Matelas déjà rattaché à un ordre de coupe.</summary>
+    public class MatelasRattacheDto : MatelasOrphelinDto
+    {
+    }
+
+    /// <summary>Corps du rattachement manuel : choisir un matelas orphelin.</summary>
+    public class AttacherMatelasDto
+    {
+        public int MatelasId { get; set; }
     }
 }

@@ -19,12 +19,15 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private readonly ApplicationDbContext _context;
         private readonly ExcelExportService _excel;
         private readonly PdfExportService _pdf;
+        /// <summary>Moteur unique (C3) : rapport et ordre de coupe partagent le même calcul.</summary>
+        private readonly RapportCoupeService _moteur;
 
         public RapportCoupeController(ApplicationDbContext context, ExcelExportService excel, PdfExportService pdf)
         {
             _context = context;
             _excel = excel;
             _pdf = pdf;
+            _moteur = new RapportCoupeService(context);
         }
 
         // ───────────────────────────── Rapport complet ─────────────────────────────
@@ -76,11 +79,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
         {
             var commande = await _context.CommandesClients
                 .Include(c => c.Client)
-                .Include(c => c.ConfigTailles)
                 .Include(c => c.BomLignes)
                     .ThenInclude(b => b.Article)
-                .Include(c => c.LotCoupes)
-                .Include(c => c.LotExports)
                 .FirstOrDefaultAsync(c => c.Id == commandeId);
 
             if (commande == null)
@@ -92,38 +92,38 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 .Select(gcc => (int?)gcc.GroupeCommandeId)
                 .FirstOrDefaultAsync();
 
+            // ── Les cumuls ne vivent qu'au moteur unique (C3) : plan théorique, coupes
+            //    réelles, exports, seuil de marge. Aucune zone de calcul indépendante.
+            var calcul = await _moteur.CalculerAsync(commandeId);
+            if (calcul == null)
+                return null;
+
             var dto = new RapportCoupeDto
             {
                 CommandeId = commande.Id,
                 NumeroCommande = commande.NumeroCommande,
                 TitreCommande = commande.TitreCommande,
                 ClientNom = commande.Client?.Nom,
+                TotalQuantiteCommande = calcul.TotalQuantiteCommande,
+                TotalQuantiteCoupee = calcul.TotalCoupesToutes,
+                TotalQuantiteExportee = calcul.TotalExportee,
+                TotalPlanTheorique = calcul.TotalPlanTheorique,
             };
 
             // ── Totaux par taille ──
-            var coupesParTaille = commande.LotCoupes.GroupBy(l => l.Taille)
-                .ToDictionary(g => g.Key, g => g.Sum(l => l.QuantiteCoupee));
-            var exportsParTaille = commande.LotExports.GroupBy(l => l.Taille)
-                .ToDictionary(g => g.Key, g => g.Sum(l => l.QuantiteExportee));
-
-            foreach (var ct in commande.ConfigTailles.OrderBy(c => c.Taille))
+            foreach (var t in calcul.Tailles)
             {
-                var coup = coupesParTaille.GetValueOrDefault(ct.Taille);
-                var exp = exportsParTaille.GetValueOrDefault(ct.Taille);
-                // Dépassement toléré jusqu'à la marge de sécurité par défaut de la commande.
-                var seuilCoupe = ct.Quantite * (1m + commande.MargeSecuriteDefaut / 100m);
                 dto.Tailles.Add(new RapportCoupeTailleDto
                 {
-                    Taille = ct.Taille,
-                    QuantiteCommande = ct.Quantite,
-                    QuantiteCoupee = coup,
-                    QuantiteExportee = exp,
-                    DepassementCoupe = coup > seuilCoupe,
-                    DepassementExport = exp > coup,
+                    Taille = t.Taille,
+                    QuantiteCommande = t.QuantiteCommande,
+                    PlanTheorique = t.PlanTheorique,
+                    QuantiteCoupee = t.CoupeReelle,
+                    QuantiteExportee = t.Exportee,
+                    DepassementCoupe = t.DepasseCoupe,
+                    DepassePlan = t.DepassePlan,
+                    DepassementExport = t.DepasseExport,
                 });
-                dto.TotalQuantiteCommande += ct.Quantite;
-                dto.TotalQuantiteCoupee += coup;
-                dto.TotalQuantiteExportee += exp;
             }
 
             // ── Tissus consommables (BOM) avec métrage annoncé et restant ──
@@ -187,12 +187,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (commande == null)
                 return NotFound(new { message = "Commande introuvable." });
 
-            // Matelas de la commande chargés séparément (nav unidirectionnelle) avec leur plan.
-            var matelas = await _context.Matelas
-                .Where(m => m.CommandeId == commandeId)
-                .Include(m => m.PlanDeCoupeLignes)
-                .Include(m => m.LotCoupes)
-                .ToListAsync();
+            // Le plan de coupe passe par le moteur commun — mais désormais la lecture
+            // du rapport ET de l'ordre de coupe passent par LE MÊME service (C3) : les
+            // deux vues dérivent du même résultat, elles ne peuvent pas diverger.
+            var calcul = await _moteur.CalculerAsync(commandeId);
+            if (calcul == null)
+                return NotFound(new { message = "Commande introuvable." });
 
             var dto = new OrdreDeCoupeDto
             {
@@ -201,111 +201,59 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 MargeSecuriteDefaut = commande.MargeSecuriteDefaut,
             };
 
-            // Ordre de coupe = rang dans la séquence (DateMatelas, NumeroMatelas) croissant.
-            var matelasTries = matelas
-                .OrderBy(m => m.DateMatelas).ThenBy(m => m.NumeroMatelas)
-                .ToList();
-
-            // Cumul plan par taille + coupes réelles par taille (commande entière).
-            var coupeParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var sansMatelasParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            var lotsCommandes = await _context.LotCoupes
-                .Where(l => l.CommandeId == commandeId)
-                .ToListAsync();
-            foreach (var lot in lotsCommandes)
+            for (var i = 0; i < calcul.Matelas.Count; i++)
             {
-                coupeParTaille[lot.Taille] = coupeParTaille.GetValueOrDefault(lot.Taille) + lot.QuantiteCoupee;
-                if (lot.MatelasId == null)
-                    sansMatelasParTaille[lot.Taille] = sansMatelasParTaille.GetValueOrDefault(lot.Taille) + lot.QuantiteCoupee;
-            }
-
-            // Le plan de coupe passe par le moteur commun : c'est lui qui applique la
-            // règle des restes (reste = reste précédent − plis × occurrences, restes
-            // négatifs conservés). Un matelas = une passe ; l'ordre est celui de
-            // l'atelier. Les cumuls par taille ci-dessous lisent ses contributions,
-            // donc l'ordre de coupe et le rapport ne peuvent pas diverger.
-            var echelle = MoteurCoupe.Calculer(
-                commande.ConfigTailles.Select(c => new Gabarit(c.Taille, c.Quantite)).ToList(),
-                matelasTries.Select((m, i) => new PasseCoupe(
-                    i + 1,
-                    m.PiecePliage,
-                    m.PlanDeCoupeLignes.ToDictionary(
-                        p => p.Taille,
-                        p => p.Occurrences,
-                        StringComparer.OrdinalIgnoreCase),
-                    m.NumeroMatelas)).ToList());
-
-            var planParTaille = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            foreach (var ligneEchelle in echelle.Passes)
-                foreach (var (taille, contribution) in ligneEchelle.Contributions)
-                    planParTaille[taille] = planParTaille.GetValueOrDefault(taille) + contribution;
-
-            for (var i = 0; i < matelasTries.Count; i++)
-            {
-                var m = matelasTries[i];
-                var ligneEchelle = echelle.Passes[i];
+                var mc = calcul.Matelas[i];
                 var plan = new OrdreCoupeMatelasDto
                 {
-                    MatelasId = m.Id,
-                    NumeroMatelas = m.NumeroMatelas,
-                    DateMatelas = m.DateMatelas,
-                    PiecePliage = m.PiecePliage,
-                    Longueur = m.Longueur,
-                    Laize = m.Laize,
-                    OrdreDeCoupe = i + 1,
+                    MatelasId = mc.MatelasId,
+                    NumeroMatelas = mc.NumeroMatelas,
+                    DateMatelas = mc.DateMatelas,
+                    PiecePliage = mc.PiecePliage,
+                    Longueur = mc.Longueur,
+                    Laize = mc.Laize,
+                    OrdreDeCoupe = mc.OrdreDeCoupe,
+                    TotalTheorique = mc.TotalTheorique,
+                    TotalCoupeReelle = mc.TotalCoupeReelle,
+                    ResteTotal = mc.ResteTotal,
                 };
 
-                var coupesMatelas = m.LotCoupes.Sum(lc => (int?)lc.QuantiteCoupee) ?? 0;
-                plan.TotalCoupeReelle = coupesMatelas;
-
-                foreach (var ligne in m.PlanDeCoupeLignes.OrderBy(p => p.Taille))
+                foreach (var ligne in mc.Lignes)
                 {
-                    // Quantité produite par CETTE passe sur CETTE taille : c'est le
-                    // moteur qui l'a calculée, plus une recomputation locale qui
-                    // pourrait diverger si la règle changeait un jour.
-                    var theorique = ligneEchelle.Contributions.GetValueOrDefault(ligne.Taille);
-                    // Coupes réelles de CE matelas sur CETTE taille (vue lecture, calculée).
-                    var coupeReelle = m.LotCoupes
-                        .Where(lc => string.Equals(lc.Taille, ligne.Taille, StringComparison.OrdinalIgnoreCase))
-                        .Sum(lc => (int?)lc.QuantiteCoupee) ?? 0;
-                    var reste = theorique - coupeReelle;
                     plan.Lignes.Add(new OrdreCoupePlanLigneDto
                     {
-                        LigneId = ligne.Id,
-                        MatelasId = m.Id,
+                        LigneId = ligne.LigneId,
+                        MatelasId = ligne.MatelasId,
                         Taille = ligne.Taille,
                         Occurrences = ligne.Occurrences,
-                        Theorique = theorique,
-                        CoupeReelle = coupeReelle,
-                        ResteACouper = reste,
+                        Theorique = ligne.Theorique,
+                        CoupeReelle = ligne.CoupeReelle,
+                        ResteACouper = ligne.ResteACouper,
                     });
-                    plan.TotalTheorique += theorique;
-                    plan.ResteTotal += reste;
                 }
 
                 dto.TotalPlanTheorique += plan.TotalTheorique;
-                dto.TotalCoupeReelle += coupesMatelas;
+                dto.TotalCoupeReelle += plan.TotalCoupeReelle;
                 dto.Matelas.Add(plan);
             }
+            dto.TotalCoupesSansMatelas = calcul.TotalCoupesSansMatelas;
 
-            foreach (var ct in commande.ConfigTailles.OrderBy(c => c.Taille))
+            // Couverture par taille : un seul cumul en mémoire, celui du moteur.
+            foreach (var ct in commande.ConfigTailles.OrderBy(c => c.Taille).ToList())
             {
-                var planT = planParTaille.GetValueOrDefault(ct.Taille);
-                var coupeT = coupeParTaille.GetValueOrDefault(ct.Taille);
-                var seuil = ct.Quantite * (1m + commande.MargeSecuriteDefaut / 100m);
+                var cumul = calcul.Tailles.FirstOrDefault(t => t.Taille == ct.Taille);
+                if (cumul == null) continue;
                 dto.Tailles.Add(new OrdreCoupeTailleRapportDto
                 {
-                    Taille = ct.Taille,
-                    QuantiteCommande = ct.Quantite,
-                    Seuil =  Math.Round(seuil, 2, MidpointRounding.AwayFromZero),
-                    PlanTheorique = planT,
-                    CoupeReelle = coupeT,
-                    DepassePlan = planT > seuil,
-                    DepasseCoupe = coupeT > seuil,
-                    CoupesSansMatelas = sansMatelasParTaille.GetValueOrDefault(ct.Taille),
+                    Taille = cumul.Taille,
+                    QuantiteCommande = cumul.QuantiteCommande,
+                    Seuil = Math.Round(cumul.Seuil, 2, MidpointRounding.AwayFromZero),
+                    PlanTheorique = cumul.PlanTheorique,
+                    CoupeReelle = cumul.CoupeReelle,
+                    DepassePlan = cumul.DepassePlan,
+                    DepasseCoupe = cumul.DepasseCoupe,
+                    CoupesSansMatelas = cumul.CoupesSansMatelas,
                 });
-                dto.TotalCoupesSansMatelas += sansMatelasParTaille.GetValueOrDefault(ct.Taille);
             }
 
             return Ok(dto);
@@ -334,6 +282,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     OrdreFabricationNumero = l.OrdreFabrication != null ? l.OrdreFabrication.NumeroOF : null,
                     MatelasId = l.MatelasId,
                     MatelasNumero = l.Matelas != null ? l.Matelas.NumeroMatelas : null,
+                    OrdreCoupeId = l.OrdreCoupeId,
                 })
                 .ToListAsync();
             return Ok(coupes);
@@ -367,6 +316,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 !await _context.Matelas.AnyAsync(m => m.Id == dto.MatelasId.Value && (m.CommandeId == null || m.CommandeId == commandeId)))
                 return BadRequest(new { message = "Matelas introuvable ou hors commande." });
 
+            // Ordre de coupe (C3) : soit fourni, soit déduit du matelas rattaché.
+            // Toujours cohérent avec la commande — jamais hors scope.
+            var rattache = await ResoudreOrdreCoupeIdAsync(commandeId, dto.OrdreCoupeId, dto.MatelasId);
+            if (!rattache.Succes)
+                return BadRequest(new { message = "Ordre de coupe introuvable ou hors commande." });
+
             var totalExistant = await _context.LotCoupes
                 .Where(l => l.CommandeId == commandeId && l.Taille == dto.Taille)
                 .SumAsync(l => (int?)l.QuantiteCoupee) ?? 0;
@@ -398,6 +353,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 Notes = dto.Notes,
                 OrdreFabricationId = dto.OrdreFabricationId,
                 MatelasId = dto.MatelasId,
+                OrdreCoupeId = rattache.OrdreCoupeId,
             };
             _context.LotCoupes.Add(coupe);
             await _context.SaveChangesAsync();
@@ -443,6 +399,12 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 !await _context.Matelas.AnyAsync(m => m.Id == dto.MatelasId.Value && (m.CommandeId == null || m.CommandeId == commandeId)))
                 return BadRequest(new { message = "Matelas introuvable ou hors commande." });
 
+            // Ordre de coupe (C3) : déduit du matelas ré-attaché quand le client n'en
+            // fournit pas ; validation hors scope interdite.
+            var rattache = await ResoudreOrdreCoupeIdAsync(commandeId, dto.OrdreCoupeId, dto.MatelasId);
+            if (!rattache.Succes)
+                return BadRequest(new { message = "Ordre de coupe introuvable ou hors commande." });
+
             // Dépassement recalculé hors de la coupe modifiée elle-même.
             var totalExistant = await _context.LotCoupes
                 .Where(l => l.CommandeId == commandeId && l.Taille == dto.Taille && l.Id != id)
@@ -468,6 +430,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             if (dto.Notes != null) coupe.Notes = dto.Notes;
             coupe.OrdreFabricationId = dto.OrdreFabricationId;
             coupe.MatelasId = dto.MatelasId;
+            coupe.OrdreCoupeId = rattache.OrdreCoupeId;
 
             await _context.SaveChangesAsync();
 
@@ -582,6 +545,30 @@ namespace Backend_Gestion_Magasin_API.Controllers
             _context.LotExports.Remove(export);
             await _context.SaveChangesAsync();
             return Ok(new { message = "Export supprimé" });
+        }
+
+        // ───────────────────────────── Moteur unique / rattachement (C3) ─────────────────────────────
+
+        /// <summary>
+        /// Résout l'ordre de coupe d'une coupe : celui fourni par le client, sinon celui
+        /// du matelas rattaché. Vérifie qu'il appartient bien à la commande concernée.
+        /// </summary>
+        private async Task<(bool Succes, int? OrdreCoupeId)> ResoudreOrdreCoupeIdAsync(
+            int commandeId, int? dtoOrdreCoupeId, int? matelasId)
+        {
+            var ordre = dtoOrdreCoupeId;
+            if (ordre == null && matelasId.HasValue)
+            {
+                ordre = await _context.Matelas
+                    .AsNoTracking()
+                    .Where(m => m.Id == matelasId.Value)
+                    .Select(m => (int?)m.OrdreCoupeId)
+                    .FirstOrDefaultAsync();
+            }
+            if (ordre.HasValue &&
+                !await _context.OrdresCoupe.AnyAsync(o => o.Id == ordre.Value && o.CommandeClientId == commandeId))
+                return (false, null);
+            return (true, ordre);
         }
     }
 }
