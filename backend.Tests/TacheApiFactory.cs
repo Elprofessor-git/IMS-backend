@@ -325,7 +325,9 @@ namespace Backend.Tests
             bool? peutAssignerTaches = null,
             bool? peutVoirCourriels = null,
             bool? peutGererCourriels = null,
-            bool? estAdministrateur = null)
+            bool? estAdministrateur = null,
+            bool? peutUtiliserDiscussion = null,
+            bool? peutGererDiscussion = null)
         {
             using var scope = Services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -341,9 +343,22 @@ namespace Backend.Tests
             if (peutVoirCourriels.HasValue) role.PeutVoirCourriels = peutVoirCourriels.Value;
             if (peutGererCourriels.HasValue) role.PeutGererCourriels = peutGererCourriels.Value;
             if (estAdministrateur.HasValue) role.EstAdministrateur = estAdministrateur.Value;
+            if (peutUtiliserDiscussion.HasValue) role.PeutUtiliserDiscussion = peutUtiliserDiscussion.Value;
+            if (peutGererDiscussion.HasValue) role.PeutGererDiscussion = peutGererDiscussion.Value;
 
             await context.SaveChangesAsync();
         }
+
+        /// <summary>
+        /// Bascule le compte d'un utilisateur en interne/externe (<see cref="ApplicationUser.EstCompteInterne"/>).
+        /// Le jeton déjà créé reste valide : la lecture se fait en base, jamais depuis le JWT.
+        /// </summary>
+        public Task SetCompteInterneAsync(string userId, bool interne) => WithDbAsync(async context =>
+        {
+            var user = await context.Users.FirstAsync(u => u.Id == userId);
+            user.EstCompteInterne = interne;
+            await context.SaveChangesAsync();
+        });
 
         /// <summary>Exécute une action sur le DbContext de l'application.</summary>
         public async Task WithDbAsync(Func<ApplicationDbContext, Task> action)
