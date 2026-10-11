@@ -400,3 +400,67 @@ Réseau:   aucun appel externe — base PostgreSQL jetable sur ims-test-net
 - **27 des 54 feuilles ont des libellés de taille positionnels** (`'0','1','2','3'`) dans le classeur : ce ne sont pas des tailles de tissu. Les quantités extraites sont bonnes (la somme correspond au QT pour 25 d'entre elles), mais **le test « le moteur reproduit le classeur sur 54 feuilles » est partiellement circulaire** — seul OVITA est vérifié cellule par cellule.
 - **La couverture `BesoinCoupe` n'est pas couverte par un test de base** : les tests C1 portent sur le moteur, qui est pur. Le service et la migration sont validés par la suite complète (322 tests, `MigrateAsync` réel), pas par des tests dédiés.
 - La chaîne de 7ᵉ passe d'OVITA repose sur le nombre de pièces laissé vide dans le classeur : si l'opérateur le renseigne, `QT COUPE` passera à 4721 et la divergence disparaîtra. Les tests le signaleront.
+
+---
+
+# LOT DISCUSSION — Module de messagerie interne (PHASE E : E1 backend + E2 frontend)
+
+**Date** : 2026-10-11
+**Commits** : Backend `20ac87e` (drapeaux + comptes internes), `5390e7b` (entités), `5a0f2d6` (notifications + migration), `413615a` (endpoints E1), `b529bf2` (tests E1) — Frontend `4c7b458` (drapeaux dans le formulaire de rôle), `068d967` (page, polling `/sync`, badge de non-lus)
+
+## Résumé — un fil de discussion interne sans SignalR
+
+| # | Élément | Gravité | Mise en œuvre | Preuve |
+|---|---------|---------|---------------|--------|
+| 1 | **Messagerie interne** (DM, groupe, canal) | — | Entités `Conversation` / `ConversationMembre` / `MessageDiscussion` ; enum `TypeConversation` **stocké en texte** | `Models/Discussion/DiscussionModels.cs`, migration `20261010222413_AddDiscussion` |
+| 2 | **Auteurs sans FK vers `AspNetUsers`** | Haute | `CreeParUserId` / `AuteurUserId` = `string` **sans** navigation ni FK (`UserController.Delete` est un hard delete) ; `ConversationMembre.User` garde la FK `CASCADE` | `ApplicationDbContext.cs` |
+| 3 | **Cloisonnement d'accès** | Haute | Non-membre → **404** (jamais 403, pour ne pas confirmer l'existence) ; `[RequireModulePermission("discussion")]` de classe → 403 sans le drapeau | `DiscussionController.cs`, `DiscussionTests` |
+| 4 | **Comptes externes** | Haute | `ApplicationUser.EstCompteInterne` (NOT NULL, défaut **true**) + `RequireCompteInterneAttribute` (vérification **en base**) : 403 sur les comptes externes — « en cas de doute, refus » | `Filters/RequireCompteInterneAttribute.cs` |
+| 5 | **Modération des canaux publics** | Moyenne | `PeutGererDiscussion` (capacité transverse) n'ouvre que la création d'un **canal public** ; le droit d'accès à la page reste le module `discussion` | `PermissionService.cs` (module `discussion` ⇒ `PeutUtiliserDiscussion`), `nouvelle-conversation.tsx` |
+| 6 | **Diffusion sans SignalR** | Moyenne | Séquence `message_discussion_revision_seq` + trigger `trg_discussion_message_revision` (`BEFORE INSERT OR UPDATE`) : `Revision` **monotone** ; `GET /sync?depuis=` renvoie les messages de `Revision > depuis`, **suppressions incluses** (contenu vidé) et un `curseur` = MAX(revision) ou `depuis` si vide | `Migrations/20261010222413_AddDiscussion.cs`, `DiscussionController.Sync` |
+| 7 | **Anti-abus** | Moyenne | Envoi limité à **30 messages/min** → **429** | `DiscussionController` |
+| 8 | **Mentions** | Basse | Notification `MentionDiscussion` posée par `NotificationService.NotifierMentionAsync` | `Services/NotificationService.cs` |
+| 9 | **Anti-régression des rôles** | Haute | Les 2 drapeaux Discussion (`PeutUtiliserDiscussion`, `PeutGererDiscussion`) présents dans `Role.cs` **et** `RoleDto`/`CreateRoleDto`, réaffectés dans `RoleController.Update` : un `GET → PUT /api/roles/{id}` ne les perd pas | `RoleController.cs`, `DiscussionTests` |
+| 10 | **Transport frontend unique** | Haute | Polling par `/api/proxy` (`apiClient`, `PROXY_BASE`) : **aucune** connexion directe au backend, aucun `NEXT_PUBLIC_API_URL`. Intervalle **adaptatif** : 3 s page ouverte et onglet visible, 25 s sinon, **suspendu** onglet caché (`refetchIntervalInBackground: false`) | `hooks/use-discussion.ts` |
+| 11 | **Source de vérité unique** | Moyenne | `useDiscussionSync` écrit le **snapshot** conversations et fusionne les messages dans le flux ; la vue fusionne historique (`GET messages`) **+** flux, séparateur « nouveaux messages » posé sur le premier non-lu | `use-discussion.ts`, `conversation-view.tsx` |
+| 12 | **Envoi optimiste** | Basse | Message à `id` temporaire **négatif** puis remplacé par la réponse ; marquage lu optimiste (`nonLus = 0`) | `use-discussion.ts`, `composer.tsx` |
+| 13 | **Mise en page Discussion** | Basse | Deux panneaux (liste 320–340 px + conversation) ; sous 1024 px, liste puis détail avec bouton retour ; badge de non-lus dans la topbar | `app/(dashboard)/discussion/page.tsx`, `discussion-bell.tsx` |
+| 14 | **Texte brut** | Basse | Aucun `dangerouslySetInnerHTML` ; seules les URL http(s) deviennent des liens | `conversation-view.tsx` |
+
+## Détails techniques
+
+### Backend (E1)
+- **Nouveaux** : `Models/Discussion/DiscussionModels.cs`, `Dtos/Discussion/DiscussionDtos.cs`, `Controllers/DiscussionController.cs`, `Filters/RequireCompteInterneAttribute.cs`, `backend.Tests/DiscussionTests.cs` (14 tests).
+- **Modifiés** : `Models/Role.cs` (+`PeutUtiliserDiscussion`, +`PeutGererDiscussion`), `Models/ApplicationUser.cs` (+`EstCompteInterne`), `Models/Notification.cs`, `Data/ApplicationDbContext.cs`, `Data/SeedData.cs` (Admin `true`/`true`, Lecteur `true`/`false`), `Services/PermissionService.cs`, `Services/NotificationService.cs`, `Controllers/{Role,Permission}Controller.cs`, `backend.Tests/TacheApiFactory.cs` (`SetRoleFlagsAsync`, `SetCompteInterneAsync`).
+- **Migration** : `20261010222413_AddDiscussion` — **additive** (3 tables, colonnes, séquence, trigger). Enums convertis en texte via `HasConversion<string>()` ; DTO `type` en chaîne (`"Direct" | "Groupe" | "Canal"`).
+- **Routes** (JSON camelCase) : `GET/POST /api/Discussion`, `GET /api/Discussion/utilisateurs`, `GET /api/Discussion/{id}/messages?avantId=` (30/page), `POST /api/Discussion/{id}/messages` (`{contenu, reponseAId}`), `POST /api/Discussion/{id}/lire` (`{jusquaMessageId}`), `PUT/DELETE /api/Discussion/{id}/messages/{msgId}`, `POST /api/Discussion/{id}/membres`, `DELETE /api/Discussion/{id}/quitter`, `GET /api/Discussion/sync?depuis=`.
+
+### Frontend (E2)
+- **Nouveaux** : `types/discussion.ts`, `hooks/use-discussion.ts` (sync par curseur, intervalle adaptatif, écritures optimistes, présence par `useSyncExternalStore`), `lib/discussion.ts`, `components/discussion/{conversation-list,conversation-view,composer,nouvelle-conversation}.tsx`, `components/layout/discussion-bell.tsx`, `app/(dashboard)/discussion/page.tsx`, `e2e/lot18-discussion.spec.ts`.
+- **Modifiés** : `types/permission.ts`, `hooks/use-permissions.ts` (`useCanUtiliserDiscussion`, `useCanGererDiscussion` → lisent `data[0].peutXxx`, **fermé** tant que non chargé), `components/layout/sidebar.tsx` (entrée `module: 'discussion'`), `components/layout/topbar.tsx` (`DiscussionBell`).
+
+### Décisions retenues
+- **Polling plutôt que SignalR** : transport unique par le proxy Next, un seul point d'autorisation ; l'intervalle s'adapte à la page ouverte et à la visibilité de l'onglet.
+- **Auteurs non rattachés par FK** : la suppression d'un utilisateur ne réécrit pas l'historique ; l'affichage retombe sur le nom d'auteur figé dans le message.
+- **404 pour non-membre**, jamais 403 : ne pas divulguer l'existence d'une conversation.
+- **`PeutGererDiscussion` transverse** : n'élargit pas l'accès à la page (module), seulement la création de canaux publics.
+- **`Revision` par trigger** plutôt qu'un compteur applicatif : la monotonie est garantie au niveau base, y compris sur `UPDATE`.
+
+## Vérifications
+```
+Backend:  dotnet build API + backend.Tests séparément ✅ 0 erreur
+          DiscussionTests ✅ 14 / 14
+          suite complète ✅ 354 / 354
+EF:       migration 20261010222413_AddDiscussion additive (Up = création)
+Frontend: pnpm run typecheck ✅
+          npx eslint (fichiers Discussion) ✅
+          npx playwright test e2e/lot18-discussion.spec.ts ✅ 5 / 5
+Protocole: git diff --stat → AUCUNE méthode protégée touchée
+           (ValiderRessources, Calculer, LivrerAchat, RecevoirImportation, RecevoirPartiel)
+```
+
+## Points laissés ouverts
+- **Aucun SignalR** : la réception repose sur le polling (3 s page ouverte). Assumé pour l'E2 ; passage temps réel possible plus tard sans changer le modèle de données.
+- **Tests Playwright à API interceptée** (`page.route` + JWT factice) : ils pilotent l'interface et le transport, pas le contrôle des droits serveur — celui-ci est couvert par `DiscussionTests`.
+- **Notifications de mention** : la notification est créée côté serveur ; son lien vers la conversation n'a pas été vérifié de bout en bout dans un navigateur réel.
+- **Reprise du lot suivant** : l'écran d'ordre de coupe (C2) fait l'objet d'un lot séparé et n'entre pas dans ce journal.
