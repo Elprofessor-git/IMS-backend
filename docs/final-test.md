@@ -540,3 +540,52 @@ Frontend: pnpm typecheck ✅   eslint (fichiers C2) ✅
 - **WIP Discussions E3 finalisé** : l'ancien WIP concurrent (`Services/ReferenceDiscussionService.cs`, `Controllers/DiscussionController.cs`, `Dtos/Discussion/*`, `Models/Notification.cs`, `Services/{Notification,Permission}Service.cs`, `Program.cs`, `backend.Tests/DiscussionContexteTests.cs`) qui rompait le build est **désormais complet** : `dotnet build` ✅ 0 erreur, `DiscussionContexteTests` ✅ 11/11 (voir le LOT DISCUSSION, E3).
 - **Migration en double** : aucune (une seule `20261007184526_AddOrdreCoupe`, une seule `20261004125935_AddBesoinCoupe`, toutes avec Designer).
 - **Branche `feat/production-readiness-updates`** : aucun commit hors main (ancêtre), rien à pousser ni fusionner — à abandonner.
+
+# LOT COUPE C3 — rattachement des matelas, moteur unique, exports
+
+**Date** : 2026-10-11
+**Commits** : Backend `96cbc6e` (FK `OrdreCoupeId` sur Matelas/LotCoupe), `fe4af89` (moteur unique `RapportCoupeService` + lecture `RapportCoupe`/`OrdreDeCoupe`), `c4a9926` (rattachement + exports XLSX/PDF, tests) — Frontend `d303e98` (boutons Exporter/Imprimer + dialogue Matelas), `4455112` (e2e exports + rattachement)
+
+## Résumé — les 6 exigences C3
+
+| # | Exigence | Mise en œuvre | Preuve |
+|---|----------|---------------|--------|
+| 1 | **Rattachement manuel** d'un matelas à un ordre de coupe | Endpoints `GET /api/OrdreCoupe/commande/{id}/matelas-orphelins`, `GET /api/OrdreCoupe/{id}/matelas`, `POST`/`DELETE .../matelas/{matelasId}` ; auto-rattachement dès qu'un **plan** de l'ordre référence le matelas | `OrdreCoupeController` ; `OrdreCoupeC3Tests` (rattachement) |
+| 2 | **Un seul moteur** pour `RapportCoupe` et `OrdreDeCoupe` | `Services/Coupe/RapportCoupeService.cs` : une passe unique (gabarits `ConfigTailles` + passes des matelas) alimente les deux lectures et la saisie de coupe | `OrdreCoupeC3Tests.Moteur_Unique_*` (3 feuilles) |
+| 3 | **Pas de ligne THERMO codée en dur** | Les exports n'émettent que les `OrdreCoupeMatieres` libres ; `THERMO` n'existe nulle part dans le code | assertion XLSX (aucune cellule « THERMO ») |
+| 4 | **Exports XLSX + PDF** de l'ordre de coupe | `ExcelExportService.ExportOrdreCoupe` (ClosedXML, sans gabarit), `PdfExportService.ExportOrdreCoupe` (QuestPDF) ; routes `GET /api/OrdreCoupe/{id}/Export` et `/ExportPdf` | `OrdreCoupeC3Tests` (B1/D1/J1/L1, `%PDF`), e2e téléchargements |
+| 5 | **Bouton « Imprimer / Exporter »** (permissions coupe) | `ordre-coupe-sheet.tsx` : boutons « Exporter (Excel) » / « Imprimer (PDF) » via `downloadViaProxy`, sous `PermissionGate module="coupe"` | `e2e/c2-ordre-coupe.spec.ts` (téléchargement nommé) |
+| 6 | **Tests** (exports, moteur unique, interface) | 13 tests backend + 2 tests Playwright (exports, rattachement) | `backend.Tests/OrdreCoupeC3Tests.cs`, `e2e/c2-ordre-coupe.spec.ts` |
+
+## Détails techniques
+
+### Migration (additive, sans backfill)
+- `20261011120706_AddOrdreCoupeIdSurMatelasEtLotCoupe` : colonne **nullable** `OrdreCoupeId` + FK `OnDelete SetNull` + index sur `Matelas` et `LotCoupe`. Les lignes existantes restent sans rattachement ; aucun champ d'API n'est supprimé ou renommé.
+
+### Moteur unique
+- `RapportCoupeService` (ex-`MoteurCoupe`) conserve les règles calibrées : quantité coupée réelle par taille (tous les lots de la commande, y compris sans matelas), `TotalCoupeReelle` L2 = lots rattachés à des matelas, seuils comparés non arrondis / affichés arrondis à 2 décimales (`AwayFromZero`), ordre des matelas par `DateMatelas, NumeroMatelas`.
+- La saisie `POST`/`PUT` de coupe résout `OrdreCoupeId` (fourni, sinon déduit du matelas) et refuse une incohérence de commande (`400`).
+
+### Rattachement
+- Orphelin = matelas de la commande sans `OrdreCoupeId` et non référencé par un `OrdreCoupePlan`.
+- Verrou après coupe (`409`) sur rattacher/détacher ; détachement refusé (`409`) si un plan de l'ordre le référence ou si des `LotCoupe` existent pour ce matelas.
+- Un plan `create`/`update` rattache automatiquement le matelas.
+
+### Exports
+- XLSX : en-tête (MODELE/COL/CHAINE/OF, QT, QT COUPE, SURPLUS, MANQUE, TIS RECU), tableau par matelas (restes après chaque passe, négatifs en rouge), puis bloc **MATIERES LIBRES** (laize, conso client/réelle, retrait %, mètres reçus, stock). Aucune ligne THERMO.
+- PDF : impression QuestPDF de la même feuille.
+
+## Vérifications
+```
+Backend:  dotnet build ✅ 0 erreur
+          suite complète ✅ 400 / 400 (objet isolé #IMS_TEST_PG, 1m50s)
+          OrdreCoupeC3Tests ✅ 13 / 13  ·  filtre C2/moteur/RapportCoupe ✅ 42 / 42
+          git diff --stat avant chaque commit : AUCUNE méthode protégée touchée
+Frontend: pnpm run typecheck ✅   npx eslint ✅
+          npx playwright test e2e/c2-ordre-coupe.spec.ts ✅ 6 / 6
+```
+
+## Points laissés ouverts
+- **Migration non backfillée** : les matelas/lots historiques restent non rattachés jusqu'à rattachement manuel (ou via le prochain plan).
+- **WIP concurrent préservé** : `backend/docs/final-test.md` portait une section « LOT DISCUSSION — Temps réel SignalR » non commitée (auteur différent) ; seule la présente section C3 est committée, la section SignalR reste dans le working tree.
+- **`feat/production-readiness-updates`** : toujours à abandonner (ancêtre de main).
