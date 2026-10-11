@@ -110,7 +110,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             Type = source.Type.ToString(),
             PlanningEntryId = source.PlanningEntryId,
             TacheProductionId = source.TacheProductionId,
-            GmailMessageId = source.GmailMessageId
+            GmailMessageId = source.GmailMessageId,
+            MessageDiscussionId = source.MessageDiscussionId
         };
 
         /// <summary>POST api/notification/{id}/livrer : marque SA PROPRE notification comme livrée.</summary>
@@ -166,5 +167,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
         public int? PlanningEntryId { get; set; }
         public int? TacheProductionId { get; set; }
         public int? GmailMessageId { get; set; }
+        // ADDITIF E1 : cible d'une notification de mention dans une discussion.
+        public long? MessageDiscussionId { get; set; }
     }
 }

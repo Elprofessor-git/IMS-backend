@@ -151,6 +151,11 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Property<bool>("EstActif")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("EstCompteInterne")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
@@ -806,6 +811,101 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.HasIndex("DefautCodeId");
 
                     b.ToTable("ControleQualiteDefautLignes");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Conversation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ArchiveLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CleDirecte")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int?>("ContexteId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContexteType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreeLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreeParUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("EstPrive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Nom")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Direct");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CleDirecte")
+                        .IsUnique();
+
+                    b.HasIndex("ContexteType", "ContexteId")
+                        .IsUnique()
+                        .HasFilter("\"ContexteType\" IS NOT NULL");
+
+                    b.ToTable("Conversations");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.ConversationMembre", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AQuitteLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("DernierMessageLuId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("EstAdmin")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Muet")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("RejointLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ConversationId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ConversationMembres");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.DefautCode", b =>
@@ -2390,6 +2490,54 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.ToTable("Matelas");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.MessageDiscussion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AuteurUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Contenu")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("EnvoyeLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ModifieLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("ReponseAId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Revision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValueSql("nextval('message_discussion_revision_seq')");
+
+                    b.Property<DateTime?>("SupprimeLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuteurUserId");
+
+                    b.HasIndex("Revision");
+
+                    b.HasIndex("ConversationId", "Id");
+
+                    b.ToTable("MessagesDiscussion");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.ModeleBom", b =>
                 {
                     b.Property<int>("Id")
@@ -2517,6 +2665,9 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<long?>("MessageDiscussionId")
+                        .HasColumnType("bigint");
+
                     b.Property<int?>("PlanningEntryId")
                         .HasColumnType("integer");
 
@@ -2537,6 +2688,8 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("GmailMessageId");
+
+                    b.HasIndex("MessageDiscussionId");
 
                     b.HasIndex("PlanningEntryId");
 
@@ -3208,6 +3361,11 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Property<bool>("PeutGererCourriels")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("PeutGererDiscussion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("PeutGererFactures")
                         .HasColumnType("boolean");
 
@@ -3245,6 +3403,11 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("PeutPartagerLiens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("PeutUtiliserDiscussion")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
@@ -4026,6 +4189,25 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("DefautCode");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.ConversationMembre", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.Conversation", "Conversation")
+                        .WithMany("Membres")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.DocumentImportation", b =>
                 {
                     b.HasOne("Backend_Gestion_Magasin_API.Models.Importation", "Importation")
@@ -4463,6 +4645,17 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("Commande");
                 });
 
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.MessageDiscussion", b =>
+                {
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.Conversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.MouvementStock", b =>
                 {
                     b.HasOne("Backend_Gestion_Magasin_API.Models.Stock", "Stock")
@@ -4488,6 +4681,11 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasForeignKey("GmailMessageId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.MessageDiscussion", "MessageDiscussion")
+                        .WithMany()
+                        .HasForeignKey("MessageDiscussionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Backend_Gestion_Magasin_API.Models.PlanningEntry", "PlanningEntry")
                         .WithMany()
                         .HasForeignKey("PlanningEntryId")
@@ -4499,6 +4697,8 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("GmailMessage");
+
+                    b.Navigation("MessageDiscussion");
 
                     b.Navigation("PlanningEntry");
 
@@ -4933,6 +5133,13 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("Defauts");
 
                     b.Navigation("EnvoisRetouche");
+                });
+
+            modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.Conversation", b =>
+                {
+                    b.Navigation("Membres");
+
+                    b.Navigation("Messages");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.EnvoiRetouche", b =>

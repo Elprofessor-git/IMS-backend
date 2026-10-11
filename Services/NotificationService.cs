@@ -54,6 +54,26 @@ namespace Backend_Gestion_Magasin_API.Services
             string auteurUserId,
             int gmailMessageId,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Notifie un utilisateur qu'il a été mentionné (@) dans une discussion.
+        /// Le message ne contient QUE le nom de l'auteur et le nom de la conversation :
+        /// jamais le contenu du message, qui peut être confidentiel. Best effort et
+        /// dédupliqué par (destinataire, message de discussion).
+        /// </summary>
+        /// <param name="destinataireUserId">Utilisateur mentionné (jamais l'auteur).</param>
+        /// <param name="auteurUserId">Utilisateur ayant écrit la mention (claims JWT).</param>
+        /// <param name="conversationId">Conversation où la mention a été écrite.</param>
+        /// <param name="nomConversation">Libellé affichable de la conversation.</param>
+        /// <param name="messageId">Message contenant la mention, cible de la déduplication.</param>
+        /// <param name="cancellationToken">Annulation de l'appel HTTP.</param>
+        Task NotifierMentionAsync(
+            string destinataireUserId,
+            string auteurUserId,
+            int conversationId,
+            string nomConversation,
+            long messageId,
+            CancellationToken cancellationToken = default);
     }
 
     public class NotificationService : INotificationService
@@ -101,6 +121,81 @@ namespace Backend_Gestion_Magasin_API.Services
                 message: $"Une nouvelle tâche a été créée depuis un email : « {Titre(tache)} »",
                 messageRetrait: null,
                 cancellationToken: cancellationToken);
+
+        public async Task NotifierMentionAsync(
+            string destinataireUserId,
+            string auteurUserId,
+            int conversationId,
+            string nomConversation,
+            long messageId,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                // Auto-notification inutile : l'auteur sait qu'il vient d'écrire.
+                if (string.IsNullOrEmpty(destinataireUserId) || destinataireUserId == auteurUserId)
+                    return;
+
+                // Défense en profondeur : jamais de notification vers un compte
+                // inexistant ou inactif (voir EstDestinataireValideAsync).
+                if (!await EstDestinataireValideAsync(destinataireUserId, cancellationToken))
+                {
+                    _logger.LogWarning(
+                        "Notification de mention ignorée : destinataire {Destinataire} inexistant ou inactif (conversation {ConversationId}).",
+                        destinataireUserId, conversationId);
+                    return;
+                }
+
+                // Déduplication : un message modifié ne doit pas re-notifier la même
+                // personne à chaque réécriture.
+                if (await _db.Notifications.AnyAsync(n =>
+                        n.UtilisateurId == destinataireUserId
+                        && n.Type == TypeNotification.MentionDiscussion
+                        && n.MessageDiscussionId == messageId
+                        && !n.EstLivree,
+                        cancellationToken))
+                {
+                    return;
+                }
+
+                // Nom de l'auteur, borné, jamais de donnée sensible.
+                var auteur = await _db.Users
+                    .Where(u => u.Id == auteurUserId)
+                    .Select(u => new { u.Prenom, u.Nom, u.UserName })
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                var nomAuteur = auteur == null
+                    ? "Quelqu'un"
+                    : (string.IsNullOrWhiteSpace($"{auteur.Prenom} {auteur.Nom}".Trim())
+                        ? (auteur.UserName ?? "Quelqu'un")
+                        : $"{auteur.Prenom} {auteur.Nom}".Trim());
+
+                var texte = $"Vous avez été mentionné par {nomAuteur} dans « {nomConversation} ».";
+
+                // La colonne fait 500 caractères : on borne le libellé de conversation.
+                if (texte.Length > 500)
+                    texte = texte[..499] + "…";
+
+                _db.Notifications.Add(new Notification
+                {
+                    UtilisateurId = destinataireUserId,
+                    Message = texte,
+                    DateNotification = DateTime.Now,
+                    EstLivree = false,
+                    Type = TypeNotification.MentionDiscussion,
+                    MessageDiscussionId = messageId
+                });
+
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Best effort : une notification ratée ne doit jamais faire échouer
+                // l'envoi du message de discussion.
+                _logger.LogError(ex,
+                    "Échec (ignoré) de la notification de mention pour le message {MessageId}.", messageId);
+            }
+        }
 
         /// <summary>
         /// Écrit au plus DEUX notifications : l'attribution au nouveau responsable et le

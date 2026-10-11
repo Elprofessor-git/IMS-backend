@@ -84,6 +84,11 @@ namespace Backend_Gestion_Magasin_API.Data
         public DbSet<OrdreCoupePlanOccurrence> OrdreCoupeOccurrences { get; set; }
         public DbSet<OrdreCoupeMatiere> OrdreCoupeMatieres { get; set; }
 
+        // ── Module Discussion (type Slack) — E1 ──────────────────────────────────
+        public DbSet<Conversation> Conversations { get; set; }
+        public DbSet<ConversationMembre> ConversationMembres { get; set; }
+        public DbSet<MessageDiscussion> MessagesDiscussion { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -1063,6 +1068,15 @@ namespace Backend_Gestion_Magasin_API.Data
                 .HasForeignKey(n => n.GmailMessageId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Notification -> MessageDiscussion (module Discussion, E1) : même règle.
+            // Le message peut disparaître (suppression logique vidant le contenu),
+            // la notification de mention reste lisible.
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.MessageDiscussion)
+                .WithMany()
+                .HasForeignKey(n => n.MessageDiscussionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // Cloche : liste des notifications d'un utilisateur + compteur des non livrées.
             // Sans cet index, chaque rafraîchissement (polling 25 s) parcourt toute la table.
             modelBuilder.Entity<Notification>()
@@ -1488,6 +1502,105 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<Role>()
                 .Property(r => r.PeutPartagerLiens)
                 .HasDefaultValue(false);
+
+            // Même défaut sûr pour les deux capacités du module Discussion :
+            // aucun rôle existant n'accède au module tant qu'un administrateur
+            // ne l'a pas explicitement activé (sauf l'Administrateur seedé).
+            modelBuilder.Entity<Role>()
+                .Property(r => r.PeutUtiliserDiscussion)
+                .HasDefaultValue(false);
+
+            modelBuilder.Entity<Role>()
+                .Property(r => r.PeutGererDiscussion)
+                .HasDefaultValue(false);
+
+            // ADDITIF : les comptes EXISTANTS sont tous internes (aucun self-signup,
+            // tout accès passe par un administrateur). Le défaut true garantit que
+            // la colonne ajoutée ne transforme personne en compte externe.
+            modelBuilder.Entity<ApplicationUser>()
+                .Property(u => u.EstCompteInterne)
+                .HasDefaultValue(true);
+
+            // ── Module Discussion (type Slack) — E1 ──────────────────────────────
+            // ADDITIF : trois nouvelles tables + deux colonnes booléennes sur Role.
+            // Aucune table ni colonne existante n'est modifiée.
+            //
+            // Règle de durée de vie des UserId :
+            // - ConversationMembre : FK vers AspNetUsers CASCADE — supprimer un
+            //   compte efface ses appartenance (un mort n'est plus membre actif).
+            // - Conversation.CreeParUserId et MessageDiscussion.AuteurUserId :
+            //   string SANS FK, comme Notification.UtilisateurId — supprimer un
+            //   compte ne doit PAS effacer l'historique de discussion qu'il a
+            //   produit ; la ligne reste, orpheline.
+
+            modelBuilder.Entity<Conversation>(b =>
+            {
+                b.Property(c => c.Type)
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .HasDefaultValue(TypeConversation.Direct);
+
+                // Un DM ne peut exister qu'une seule fois pour une paire donnée.
+                // Les Groupe/Canal ont CleDirecte null ; l'index unique PostgreSQL
+                // ignore les nulls, donc la contrainte ne vaut que pour les DM.
+                b.HasIndex(c => c.CleDirecte).IsUnique();
+
+                // E3 : un objet métier (commande, OF, tâche) n'aura jamais deux
+                // conversations rattachées. Filtre pour que les lignes sans
+                // contexte (toutes en E1) échappent à l'unicité.
+                b.HasIndex(c => new { c.ContexteType, c.ContexteId })
+                    .IsUnique()
+                    .HasFilter("\"ContexteType\" IS NOT NULL");
+
+                b.Property(c => c.Nom).HasMaxLength(100);
+                b.Property(c => c.CleDirecte).HasMaxLength(80);
+                b.Property(c => c.ContexteType).HasMaxLength(50);
+
+                // L'appartenance et les messages sont interne à la conversation :
+                // Cascade. Pas de FK vers AspNetUsers (voir ci-dessus).
+                b.HasMany(c => c.Membres)
+                    .WithOne(m => m.Conversation)
+                    .HasForeignKey(m => m.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                b.HasMany(c => c.Messages)
+                    .WithOne(m => m.Conversation)
+                    .HasForeignKey(m => m.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ConversationMembre>(b =>
+            {
+                // Deux lignes d'appartenance pour le même couple (conversation,
+                // utilisateur) seraient une source de non-lus incohérente.
+                b.HasIndex(m => new { m.ConversationId, m.UserId }).IsUnique();
+
+                b.HasOne(m => m.User)
+                    .WithMany()
+                    .HasForeignKey(m => m.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<MessageDiscussion>(b =>
+            {
+                // Conversation + ID croissant = ordre chronologique d'affichage.
+                b.HasIndex(m => new { m.ConversationId, m.Id });
+
+                // GET /sync : « tout ce dont la revision dépasse mon curseur ».
+                b.HasIndex(m => m.Revision);
+
+                // Auteur sans FK (voir ci-dessus) mais indexé : « mes messages »,
+                // détection des mentions, rate limit par auteur.
+                b.HasIndex(m => m.AuteurUserId);
+
+                b.Property(m => m.Contenu).HasMaxLength(4000);
+
+                // La revision est posée par un trigger PostgreSQL (INSERT et UPDATE,
+                // cf. migration) ; le DEFAULT nextval garantit une valeur non-nulle
+                // même si le trigger venait à manquer.
+                b.Property(m => m.Revision)
+                    .HasDefaultValueSql("nextval('message_discussion_revision_seq')");
+            });
         }
     }
 }

@@ -25,7 +25,15 @@ namespace Backend_Gestion_Magasin_API.Models
         TacheDesassignee = 2,
 
         /// <summary>Une tâche a été créée depuis un email et m'est confiée.</summary>
-        TacheDepuisEmail = 3
+        TacheDepuisEmail = 3,
+
+        /// <summary>
+        /// Un membre m'a mentionné (@) dans une discussion (module Discussion, E1).
+        /// Aucune FK cible : le texte seul porte l'information ; le deep-link vers la
+        /// conversation sera ajouté côté frontend en E2. Valeur AJOUTÉE à l'énumération,
+        /// stockée en texte — additive vis-à-vis des lignes existantes.
+        /// </summary>
+        MentionDiscussion = 4
     }
 
     /// <summary>
@@ -74,9 +82,15 @@ namespace Backend_Gestion_Magasin_API.Models
         /// pouvoir revenir au courrier d'origine.</summary>
         public int? GmailMessageId { get; set; }
 
+        /// <summary>Message de discussion lié (optionnel) : mention (@) dans le module Discussion.
+        /// Sert à la déduplication (une mention = une notification) et au futur deep-link E2.
+        /// Nullable + SetNull : la notification survit à la suppression logique du message.</summary>
+        public long? MessageDiscussionId { get; set; }
+
         // Relations
         public virtual PlanningEntry? PlanningEntry { get; set; }
         public virtual TacheProduction? TacheProduction { get; set; }
         public virtual GmailMessage? GmailMessage { get; set; }
+        public virtual MessageDiscussion? MessageDiscussion { get; set; }
     }
 }
