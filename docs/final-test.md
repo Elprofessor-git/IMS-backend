@@ -492,6 +492,73 @@ Protocole: git diff --stat → AUCUNE méthode protégée touchée
 - **Notifications de mention** : la notification est créée côté serveur ; la cloche ne connaît que `messageDiscussionId` (pas la conversation) et route donc vers `/discussion` — vérifié de bout en bout par `lot20-discussion-contexte.spec.ts` (icône + route).
 - **Reprise du lot suivant** : l'écran d'ordre de coupe (C2) fait l'objet d'un lot séparé et n'entre pas dans ce journal.
 
+# LOT DISCUSSION — Temps réel SignalR (amélioration du polling)
+
+**Date** : 2026-10-11
+**Commits** : Backend `d820c75` (hub, tickets à usage unique, diffusions ciblées) — Frontend `05e8b5f` (client `useDiscussionHub`), `665e12e` (attente d'hydratation de session dans lot20)
+
+## Résumé — le polling reste le repli, SignalR vient en plus
+
+| # | Élément | Gravité | Mise en œuvre | Preuve |
+|---|---------|---------|---------------|--------|
+| 1 | **Aucun groupe choisi par le client** | Haute | Le hub n'expose **aucune** méthode cliente (`RejoindreConversation` n'existe pas). À `OnConnectedAsync`, le serveur déduit seul le groupe personnel `utilisateur:{id}` + un groupe `conversation:{id}` par appartenance **active** (`ConversationMembre.AQuitteLe == null`) | `Hubs/DiscussionHub.cs`, `DiscussionHubTests.Hub_sans_methode_cliente_ni_rejoindre_conversation` |
+| 2 | **Ticket à usage unique (60 s)** | Haute | Jeton **opaque** aléatoire (256 bits, base64url), lié au `UserId` **et** au `SecurityStamp`, TTL **60 s**, consommé atomiquement (`TryRemove`) → réutilisation refusée | `Services/Auth/HubTicketService.cs`, `DiscussionHubTests.Ticket_usage_unique_et_liaison` / `Ticket_expire_apres_60s` |
+| 3 | **Ticket émis par route protégée** | Haute | `POST /api/Discussion/hub-ticket` (JWT + module `discussion` + compte interne) ; sans session → **401**, sans le module → **403** | `DiscussionController.HubTicket`, `DiscussionHubTests.Hub_ticket_*` |
+| 4 | **Ticket refusé par tout le REST** | Haute | Le ticket n'est **pas** un JWT : les routes REST n'authentifient qu'en JWT, donc le ticket (query `access_token` **ou** en-tête `Bearer`) est refusé | `DiscussionHubTests.Ticket_refuse_par_les_routes_REST_*` |
+| 5 | **Aucun JWT principal dans l'URL** | Haute | Le JWT reste en cookie httpOnly côté Next ; le hub ne reçoit que le ticket opaque. Schéma d'auth dédié **`HubTicket`** (`[Authorize(AuthenticationSchemes="HubTicket")]`) qui lit `access_token` | `Authentication/HubTicketAuthenticationHandler.cs` |
+| 6 | **Compte désactivé / stamp périmé** | Haute | Le handler relit le compte à **chaque** connexion : inactif, non interne, ou `SecurityStamp` divergent → refus immédiat | `HubTicketAuthenticationHandler`, `DiscussionHubTests.Handler_refuse_un_compte_desactive` / `Handler_refuse_un_security_stamp_perime` |
+| 7 | **Pokes sans contenu** | Moyenne | Diffusions `DiscussionChanged` (par conversation) et `NotificationChanged` (par compte) ; le client **invalide**, l'API applique les droits du lecteur (aucune fuite) | `DiscussionController.DiffuserConversationAsync` / `DiffuserUtilisateurAsync` |
+| 8 | **Opt-in par variable publique** | Moyenne | `NEXT_PUBLIC_DISCUSSION_HUB_URL` : si définie, le hook se connecte ; sinon **aucun** hub et le polling `/sync` reste seul | `hooks/use-discussion-hub.ts`, `.env.local.example` |
+| 9 | **Reconnexion automatique** | Moyenne | `withAutomaticReconnect` **illimité** (délais exponentiels plafonnés à 15 s) : Render gratuit s'endort, le client retente ; `onreconnected` réinvalide → resync par l'API | `hooks/use-discussion-hub.ts` |
+| 10 | **WebSockets sans négociation** | Moyenne | `skipNegotiation: true` + `HttpTransportType.WebSockets` : le ticket à usage unique n'est présenté qu'**une** fois (en LongPolling, il serait rejoué à chaque requête) | `hooks/use-discussion-hub.ts` |
+| 11 | **CORS avec credentials** | Moyenne | Hub monté avec `RequireCors("AllowFrontend")` (origines fixes + `AllowCredentials`) ; pas de `RequireAuthorization()` global (qui exigerait le JWT) | `Program.cs` |
+
+## Détails techniques
+
+### Backend — hub et tickets
+- **Nouveaux** : `Hubs/DiscussionHub.cs`, `Services/Auth/HubTicketService.cs` (`IHubTicketService`, `HubTicket`, singleton en mémoire + `TimeProvider`), `Authentication/HubTicketAuthenticationHandler.cs` (`HubTicketAuthenticationOptions`, schéma `HubTicket`), `backend.Tests/DiscussionHubTests.cs` (16 tests).
+- **Modifiés** : `Controllers/DiscussionController.cs` (endpoint `hub-ticket`, injections `IHubTicketService` + `IHubContext<DiscussionHub>`, diffusions sur `Envoyer`/`Modifier`/`Supprimer`/`Creer`/`AjouterMembres`/`Quitter`, poke personnel sur mention/réponse), `Program.cs` (`AddScheme<HubTicketAuthenticationOptions, HubTicketAuthenticationHandler>`, `AddSingleton(TimeProvider.System)`, `AddSingleton<IHubTicketService>`, `MapHub<DiscussionHub>("/hubs/discussion").RequireCors("AllowFrontend")`).
+- **Route ajoutée** : `POST /api/Discussion/hub-ticket` → `{ ticket, expiresInSeconds: 60 }`.
+- **Sans migration** : aucune donnée persistée pour les tickets (magasin mémoire, TTL 60 s).
+
+### Frontend — hook temps réel
+- **Nouveaux** : `hooks/use-discussion-hub.ts`.
+- **Modifiés** : `components/layout/discussion-bell.tsx` (`useDiscussionHub(peutUtiliser)` — la cloche porte le polling global et devient le point de connexion unique), `.env.local.example` (documentation de la variable).
+
+### Décisions retenues
+- **Le polling n'est jamais désactivé** : SignalR n'est qu'un accélérateur. Si la variable publique est absente, si le backend dort ou si la connexion tombe, `/sync` continue de tout rattraper.
+- **Ticket opaque plutôt que JWT dans l'URL** : le JWT principal (cookie httpOnly) n'est jamais exposé ; le ticket ne vit que 60 s, ne sert qu'une fois et n'est compris que par le hub.
+- **Poke, pas contenu** : les broadcasts ne transportent qu'un identifiant — les cartes de références (E3), calculées par lecteur, restent produites par l'API, donc un broadcast ne peut pas divulguer ce qu'une réponse HTTP refuserait.
+- **WebSockets obligatoires** pour un ticket à usage unique : en LongPolling, le token d'accès est rejoué à chaque poll et serait rejeté dès la deuxième requête.
+
+## Vérifications
+```
+Backend:  dotnet build ✅ 0 erreur (16 avertissements, aucun dans les fichiers du lot)
+          DiscussionHubTests ✅ 16 / 16
+          filtre Discussion (E1/E2/E3 + temps réel) ✅ 44 / 44
+Frontend: pnpm run typecheck ✅
+          npx eslint (use-discussion-hub.ts, discussion-bell.tsx) ✅
+          node --test (suite unitaire) ✅ 29 / 29
+          npx playwright test e2e/lot18-discussion.spec.ts ✅ 5 / 5
+          npx playwright test e2e/lot20-discussion-contexte.spec.ts ✅ 4 / 4
+          e2e discussion combiné ✅ 9 / 9
+```
+
+**Correctif de test (lot20)** : `e2e/lot20-discussion-contexte.spec.ts` cliquait la cloche/les fiches
+juste après `page.goto('/taches')`. La résolution tardive de `useAuth()` remonte la topbar et
+remettait à zéro l'état local des panneaux (cloche, dialogue Discussion), d'où des échecs de
+visibilité **déterministes mais sans lien avec le temps réel** (reproduits sur le commit de base,
+la variable publique absente rendant `useDiscussionHub` inerte). Ajout d'un helper
+`ouvrirTaches(page)` qui attend l'hydratation de la session (nom « Meme Moi » dans le `header`)
+avant toute interaction → 4 / 4.
+
+## Points laissés ouverts
+- **Magasin de tickets mono-instance** : en mémoire, à usage unique. Une montée en charge multi-instances exigerait un cache partagé (hors périmètre Render mono-instance).
+- **Groupes figés à la connexion** : un membre ajouté à une conversation en cours de session reçoit un poke **personnel** (liste rafraîchie) mais n'entre dans le groupe de la conversation qu'à la reconnexion ; le polling couvre l'intervalle.
+- **Conversations contextuelles** : les pokes suivent les **appartenances** (participants) ; un utilisateur qui accède par le module mais n'est pas encore participant reste servi par le repoll 5 s de la fiche.
+
+
+
 # LOT COUPE C2 — AUDIT DE VÉRITÉ + complétion du verrou (C0)
 
 **Date** : 2026-10-11
