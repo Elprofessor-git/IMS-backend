@@ -320,6 +320,145 @@ namespace Backend.Tests
             Assert.Equal(5m, matiere.GetProperty("retrait").GetDecimal());
         }
 
+        /// <summary>Figer l'ordre : un plan rattaché à un matelas, puis une coupe réelle.</summary>
+        private async Task VerrouillerOrdreAsync(int commandeId, int ordreId)
+        {
+            var matelasId = await _factory.WithDbAsync(async db =>
+            {
+                var m = new Matelas { CommandeId = commandeId, NumeroMatelas = "MAT-C2-VERROU", PiecePliage = 1 };
+                db.Matelas.Add(m);
+                await db.SaveChangesAsync();
+                return m.Id;
+            });
+
+            var resPlan = await _auteur.Client.PostAsJsonAsync($"/api/OrdreCoupe/{ordreId}/plans", new
+            {
+                Libelle = "nappe verrou",
+                Plis = 1,
+                MatelasId = matelasId,
+                Occurrences = new[] { new { Taille = "M", Occurrences = 1 } },
+            });
+            resPlan.EnsureSuccessStatusCode();
+
+            await _factory.WithDbAsync(async db =>
+            {
+                db.LotCoupes.Add(new LotCoupe
+                {
+                    CommandeId = commandeId,
+                    MatelasId = matelasId,
+                    Taille = "M",
+                    QuantiteCoupee = 1,
+                });
+                await db.SaveChangesAsync();
+            });
+        }
+
+        [Fact]
+        public async Task Verrou_Refuse_Modification_De_L_Entete()
+        {
+            var commandeId = await CreerCommandeAvecTaillesAsync(0m, ("M", 10));
+            var id = await CreerOrdreAsync(_auteur.Client, commandeId, "PDJ22", "ECRU");
+            await PreremplirAsync(_auteur.Client, id);
+            await VerrouillerOrdreAsync(commandeId, id);
+
+            var res = await _auteur.Client.PutAsJsonAsync($"/api/OrdreCoupe/{id}", new
+            {
+                Modele = "PDJ22",
+                Couleur = "ECRU",
+                MargeSecurite = 15m,
+            });
+
+            Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+        }
+
+        [Fact]
+        public async Task Verrou_Refuse_Ajout_De_Taille()
+        {
+            var commandeId = await CreerCommandeAvecTaillesAsync(0m, ("M", 10));
+            var id = await CreerOrdreAsync(_auteur.Client, commandeId, "PDJ22", "ECRU");
+            await PreremplirAsync(_auteur.Client, id);
+            await VerrouillerOrdreAsync(commandeId, id);
+
+            var res = await _auteur.Client.PostAsJsonAsync($"/api/OrdreCoupe/{id}/tailles", new
+            {
+                Libelle = "XXL",
+            });
+
+            Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+        }
+
+        [Fact]
+        public async Task Verrou_Refuse_Modification_Et_Suppression_De_Taille()
+        {
+            var commandeId = await CreerCommandeAvecTaillesAsync(0m, ("M", 10));
+            var id = await CreerOrdreAsync(_auteur.Client, commandeId, "PDJ22", "ECRU");
+            await PreremplirAsync(_auteur.Client, id);
+            var tailleId = TailleParLibelle(await GetOrdreAsync(_auteur.Client, id), "M").GetProperty("id").GetInt32();
+            await VerrouillerOrdreAsync(commandeId, id);
+
+            var maj = await _auteur.Client.PutAsJsonAsync($"/api/OrdreCoupe/tailles/{tailleId}", new
+            {
+                Libelle = "M",
+                QuantiteDemandee = 7,
+                QuantiteAvecMarge = 7m,
+            });
+            Assert.Equal(HttpStatusCode.Conflict, maj.StatusCode);
+
+            var suppression = await _auteur.Client.DeleteAsync($"/api/OrdreCoupe/tailles/{tailleId}");
+            Assert.Equal(HttpStatusCode.Conflict, suppression.StatusCode);
+        }
+
+        [Fact]
+        public async Task Verrou_Refuse_Preremplissage()
+        {
+            var commandeId = await CreerCommandeAvecTaillesAsync(0m, ("M", 10), ("L", 5));
+            var id = await CreerOrdreAsync(_auteur.Client, commandeId, "PDJ22", "ECRU");
+            await PreremplirAsync(_auteur.Client, id);
+            await VerrouillerOrdreAsync(commandeId, id);
+
+            var res = await _auteur.Client.PostAsync($"/api/OrdreCoupe/{id}/Preremplir", null);
+
+            Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+        }
+
+        [Fact]
+        public async Task Verrou_Refuse_Ajout_Et_Modification_De_Matiere()
+        {
+            var commandeId = await CreerCommandeAvecTaillesAsync(0m, ("M", 10));
+            var id = await CreerOrdreAsync(_auteur.Client, commandeId, "PDJ22", "ECRU");
+            await PreremplirAsync(_auteur.Client, id);
+
+            var resAjout = await _auteur.Client.PostAsJsonAsync($"/api/OrdreCoupe/{id}/matieres", new
+            {
+                Designation = "Tissu libre",
+                ConsoClient = 1m,
+                RetraitPourcentage = 0m,
+                MetresRecus = 100m,
+            });
+            resAjout.EnsureSuccessStatusCode();
+            var matiereId = (await resAjout.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+
+            await VerrouillerOrdreAsync(commandeId, id);
+
+            var maj = await _auteur.Client.PutAsJsonAsync($"/api/OrdreCoupe/matieres/{matiereId}", new
+            {
+                Designation = "Tissu libre",
+                ConsoClient = 2m,
+                RetraitPourcentage = 0m,
+                MetresRecus = 100m,
+            });
+            Assert.Equal(HttpStatusCode.Conflict, maj.StatusCode);
+
+            var resNouvelle = await _auteur.Client.PostAsJsonAsync($"/api/OrdreCoupe/{id}/matieres", new
+            {
+                Designation = "Doublure libre",
+                ConsoClient = 1m,
+                RetraitPourcentage = 0m,
+                MetresRecus = 10m,
+            });
+            Assert.Equal(HttpStatusCode.Conflict, resNouvelle.StatusCode);
+        }
+
         [Fact]
         public async Task Verrou_Premiere_Coupe_Fige_Le_Plan()
         {
