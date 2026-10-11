@@ -323,6 +323,13 @@ namespace Backend.Tests
                 .First(m => m.GetProperty("id").GetInt64() == msgId);
             Assert.True(msg.GetProperty("estSupprime").GetBoolean());
             Assert.Equal(string.Empty, msg.GetProperty("contenu").GetString());
+
+            // Le contenu est réellement vidé EN BASE (pas seulement masqué à la
+            // projection) : un message supprimé ne laisse rien à lire côté stockage.
+            var enBase = await _factory.WithDbAsync(ctx =>
+                ctx.MessagesDiscussion.AsNoTracking().FirstAsync(m => m.Id == msgId));
+            Assert.NotNull(enBase.SupprimeLe);
+            Assert.Equal(string.Empty, enBase.Contenu);
         }
 
         // ── Sync : la revision est renouvelée à chaque modification ─────────
@@ -503,6 +510,67 @@ namespace Backend.Tests
             var refus = await simple.Client.PostAsJsonAsync(
                 $"/api/Discussion/{canalId}/membres", new { membreIds = new[] { _carol.Id } });
             Assert.Equal(HttpStatusCode.Forbidden, refus.StatusCode);
+        }
+
+        // ── Admin / modérateur : aucun accès aux DM d'autrui (404) ───────────
+
+        [Fact]
+        public async Task Admin_PeutGerer_NeLitPasLeDmDAutrui()
+        {
+            // Administrateur COMPLET : il passe le portail de module, mais n'est pas
+            // membre du DM d'Alice et Bob. L'appartenance prime, même pour un admin.
+            var admin = await _factory.CreateUserAsync(
+                "disc-admin-dm", "Admin", "Dm", r => r.EstAdministrateur = true);
+
+            var dm = await CreerDmAsync(_alice, _bob.Id);
+            var msgId = await EnvoyerAsync(_bob, dm, "privé");
+
+            // Le DM n'apparaît pas dans sa liste…
+            var liste = JsonDocument.Parse(
+                await (await admin.Client.GetAsync("/api/Discussion")).Content.ReadAsStringAsync());
+            Assert.DoesNotContain(dm, liste.RootElement.EnumerateArray()
+                .Select(e => e.GetProperty("id").GetInt32()));
+
+            // … et chaque opération reçoit 404 (jamais 403), pour ne pas révéler
+            // l'existence de la conversation.
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await admin.Client.GetAsync($"/api/Discussion/{dm}/messages")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await admin.Client.PostAsJsonAsync($"/api/Discussion/{dm}/messages", new { contenu = "espion" })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await admin.Client.PostAsJsonAsync($"/api/Discussion/{dm}/lire", new { jusquaMessageId = msgId })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await admin.Client.PostAsJsonAsync($"/api/Discussion/{dm}/membres", new { membreIds = new[] { admin.Id } })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await admin.Client.DeleteAsync($"/api/Discussion/{dm}/quitter")).StatusCode);
+        }
+
+        // ── Modérateur : aucun accès aux groupes privés d'autrui (404) ───────
+
+        [Fact]
+        public async Task Moderateur_PeutGerer_NeLitPasLeGroupePriveDAutrui()
+        {
+            // PeutGererDiscussion ne porte que sur les CANAUX PUBLICS : il n'ouvre
+            // ni les DM ni les groupes privés d'autrui.
+            var moderateur = await _factory.CreateUserAsync(
+                "disc-mod-groupe", "Moderateur", "Groupe", r =>
+                {
+                    r.PeutUtiliserDiscussion = true;
+                    r.PeutGererDiscussion = true;
+                });
+
+            var groupe = await CreerGroupeAsync(_bob, new[] { _carol.Id }, "Groupe privé d'autrui");
+            var msgId = await EnvoyerAsync(_bob, groupe, "privé au groupe");
+
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await moderateur.Client.GetAsync($"/api/Discussion/{groupe}/messages")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await moderateur.Client.PostAsJsonAsync($"/api/Discussion/{groupe}/messages", new { contenu = "intrusion" })).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await moderateur.Client.PostAsJsonAsync($"/api/Discussion/{groupe}/lire", new { jusquaMessageId = msgId })).StatusCode);
+            // Même la modération de membres est refusée : il faudrait être membre.
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await moderateur.Client.PostAsJsonAsync($"/api/Discussion/{groupe}/membres", new { membreIds = new[] { moderateur.Id } })).StatusCode);
         }
     }
 }
