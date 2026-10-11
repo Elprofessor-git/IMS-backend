@@ -20,6 +20,15 @@ namespace Backend_Gestion_Magasin_API.Models
         /// </summary>
         public int? CommandeId { get; set; }
 
+        /// <summary>
+        /// Ordre de coupe (C2/C3) auquel ce matelas est rattaché. Nullable et additif :
+        /// les NOUVEAUX ordres de coupe rattachent leurs matelas par cette clé ; les
+        /// matelas historiques restent valides avec OrdreCoupeId = null et restent lus
+        /// par l'ancien chemin (PlanDeCoupeLignes via CommandeId) en lecture seule,
+        /// sans backfill. La suppression d'un ordre met la référence à NULL (SetNull).
+        /// </summary>
+        public int? OrdreCoupeId { get; set; }
+
         [Required]
         [StringLength(50)]
         public string NumeroMatelas { get; set; } = string.Empty;
@@ -52,6 +61,9 @@ namespace Backend_Gestion_Magasin_API.Models
 
         /// <summary>Commande porteuse du matelas (scope, null si matelas partagé/historique).</summary>
         public virtual CommandeClient? Commande { get; set; }
+
+        /// <summary>Ordre de coupe porteur du matelas (null si matelas partagé/historique).</summary>
+        public virtual OrdreCoupe? OrdreCoupe { get; set; }
 
         /// <summary>
         /// Plan de coupe du matelas (marker) : une ligne par taille dessinée sur la nappe,

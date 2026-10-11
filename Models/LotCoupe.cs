@@ -21,6 +21,16 @@ namespace Backend_Gestion_Magasin_API.Models
         public int? MatelasId { get; set; }
 
         /// <summary>
+        /// Ordre de coupe dont relève cette coupe (module Coupe — C3). Nullable et
+        /// additif : les coupes existantes restent valides sans ordre. Renseigné
+        /// explicitement à la saisie, ou bien hérité du matelas rattaché quand celui-ci
+        /// appartient à un ordre (trace de bout en bout : ordre → matelas → coupe).
+        /// La suppression d'un ordre met la référence à NULL (SetNull).
+        /// </summary>
+        [ForeignKey("OrdreCoupe")]
+        public int? OrdreCoupeId { get; set; }
+
+        /// <summary>
         /// Ordre de fabrication dont relève cette coupe (module OF — Phase 1).
         /// Nullable et additif : les coupes existantes restent valides sans OF.
         /// La suppression d'un OF met la référence à NULL (SetNull) — l'historique
@@ -48,5 +58,6 @@ namespace Backend_Gestion_Magasin_API.Models
         public virtual CommandeClient Commande { get; set; } = null!;
         public virtual Matelas? Matelas { get; set; }
         public virtual OrdreFabrication? OrdreFabrication { get; set; }
+        public virtual OrdreCoupe? OrdreCoupe { get; set; }
     }
 }

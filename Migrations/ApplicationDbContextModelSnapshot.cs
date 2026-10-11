@@ -2324,6 +2324,9 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<int?>("OrdreCoupeId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("OrdreFabricationId")
                         .HasColumnType("integer");
 
@@ -2338,6 +2341,8 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("MatelasId");
+
+                    b.HasIndex("OrdreCoupeId");
 
                     b.HasIndex("OrdreFabricationId");
 
@@ -2480,12 +2485,17 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<int?>("OrdreCoupeId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("PiecePliage")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CommandeId");
+
+                    b.HasIndex("OrdreCoupeId");
 
                     b.ToTable("Matelas");
                 });
@@ -4605,6 +4615,11 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasForeignKey("MatelasId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.OrdreCoupe", "OrdreCoupe")
+                        .WithMany()
+                        .HasForeignKey("OrdreCoupeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Backend_Gestion_Magasin_API.Models.OrdreFabrication", "OrdreFabrication")
                         .WithMany()
                         .HasForeignKey("OrdreFabricationId")
@@ -4613,6 +4628,8 @@ namespace Backend_Gestion_Magasin_API.Migrations
                     b.Navigation("Commande");
 
                     b.Navigation("Matelas");
+
+                    b.Navigation("OrdreCoupe");
 
                     b.Navigation("OrdreFabrication");
                 });
@@ -4642,7 +4659,14 @@ namespace Backend_Gestion_Magasin_API.Migrations
                         .HasForeignKey("CommandeId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Backend_Gestion_Magasin_API.Models.OrdreCoupe", "OrdreCoupe")
+                        .WithMany()
+                        .HasForeignKey("OrdreCoupeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Commande");
+
+                    b.Navigation("OrdreCoupe");
                 });
 
             modelBuilder.Entity("Backend_Gestion_Magasin_API.Models.MessageDiscussion", b =>

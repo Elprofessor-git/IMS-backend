@@ -882,6 +882,18 @@ namespace Backend_Gestion_Magasin_API.Data
             modelBuilder.Entity<Matelas>()
                 .HasIndex(m => m.CommandeId);
 
+            // Matelas -> OrdreCoupe (C3) : rattachement nullable additif, SetNull pour
+            // conserver le matelas si son ordre de coupe est supprimé (l'historique des
+            // coupes n'est jamais détruit avec l'ordre).
+            modelBuilder.Entity<Matelas>()
+                .HasOne(m => m.OrdreCoupe)
+                .WithMany()
+                .HasForeignKey(m => m.OrdreCoupeId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Matelas>()
+                .HasIndex(m => m.OrdreCoupeId);
+
             // LotCoupe -> Matelas (nullable, SetNull pour conserver l'historique)
             modelBuilder.Entity<LotCoupe>()
                 .HasOne(lc => lc.Matelas)
@@ -891,6 +903,14 @@ namespace Backend_Gestion_Magasin_API.Data
 
             modelBuilder.Entity<LotCoupe>()
                 .HasIndex(lc => new { lc.CommandeId, lc.MatelasId });
+
+            // LotCoupe -> OrdreCoupe (C3) : trace bout en bout ordre → matelas → coupe,
+            // nullable additive (SetNull, l'historique des coupes est préservé).
+            modelBuilder.Entity<LotCoupe>()
+                .HasOne(lc => lc.OrdreCoupe)
+                .WithMany()
+                .HasForeignKey(lc => lc.OrdreCoupeId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // PlanDeCoupeLigne -> Matelas (Cascade : le plan de coupe appartient à son matelas).
             modelBuilder.Entity<PlanDeCoupeLigne>()
