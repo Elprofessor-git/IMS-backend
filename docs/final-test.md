@@ -403,10 +403,11 @@ Réseau:   aucun appel externe — base PostgreSQL jetable sur ims-test-net
 
 ---
 
-# LOT DISCUSSION — Module de messagerie interne (PHASE E : E1 backend + E2 frontend)
+# LOT DISCUSSION — Module de messagerie interne (PHASE E : E1 backend + E2 frontend + E3 discussions contextuelles)
 
 **Date** : 2026-10-11
 **Commits** : Backend `20ac87e` (drapeaux + comptes internes), `5390e7b` (entités), `5a0f2d6` (notifications + migration), `413615a` (endpoints E1), `b529bf2` (tests E1), `392f41f` (tests admin/modérateur sans accès aux DM/groupes privés) — Frontend `4c7b458` (drapeaux dans le formulaire de rôle), `068d967` (page, polling `/sync`, badge de non-lus), `feb6407` (apostrophes du texte d'aide Discussion, eslint)
+**Commits E3** : Backend `954511e` (discussions contextuelles : service de références, endpoints `/contexte` et `/references`, notifications de réponse, `DiscussionContexteTests`) — Frontend `e8eccbb` (onglet Discussion des fiches commande/achat/OF/tâche, cartes de référence, autocomplétion, cloche, e2e `lot20`)
 
 ## Résumé — un fil de discussion interne sans SignalR
 
@@ -426,6 +427,11 @@ Réseau:   aucun appel externe — base PostgreSQL jetable sur ims-test-net
 | 12 | **Envoi optimiste** | Basse | Message à `id` temporaire **négatif** puis remplacé par la réponse ; marquage lu optimiste (`nonLus = 0`) | `use-discussion.ts`, `composer.tsx` |
 | 13 | **Mise en page Discussion** | Basse | Deux panneaux (liste 320–340 px + conversation) ; sous 1024 px, liste puis détail avec bouton retour ; badge de non-lus dans la topbar | `app/(dashboard)/discussion/page.tsx`, `discussion-bell.tsx` |
 | 14 | **Texte brut** | Basse | Aucun `dangerouslySetInnerHTML` ; seules les URL http(s) deviennent des liens | `conversation-view.tsx` |
+| 15 | **Discussions contextuelles (E3)** | Moyenne | Conversation rattachée à un objet (`ContexteType`/`ContexteId`) ; unicité garantie par index filtré ; ouverture **idempotente** `POST /api/Discussion/contexte/{segment}/{id}` (get-or-create) | `DiscussionController.OuvrirContexte`, migration `20261010222413_AddDiscussion`, `DiscussionContexteTests` |
+| 16 | **Accès par le module de l'objet** | Haute | L'accès suit le module de l'objet (`commandes`/`production`/`taches`/`achats`), **pas** l'appartenance ; participants = rédacteurs + responsables assignés ; contextuelles **exclues** de la liste globale et de `/sync` | `PermissionService.UtilisateursAvecAccesModuleAsync`, `DiscussionController` |
+| 17 | **Références `#CMD-123`…** | Moyenne | Cartes calculées **côté serveur pour le lecteur** : `montant`/`devise`/`tiers` émis **seulement** avec le droit d'écriture du module ; objet inaccessible → **aucune** carte ; autocomplétion `GET /references?q=` restreinte aux objets accessibles | `Services/ReferenceDiscussionService.cs` |
+| 18 | **Notifications réponse / mention** | Basse | `NotifierReponseAsync` (+ `MentionDiscussion` existant) ; la projection cloche expose `messageDiscussionId`, **jamais** la conversation → route `/discussion` | `Services/NotificationService.cs`, `NotificationController.NotificationDto` |
+| 19 | **Onglet Discussion des fiches** | Moyenne | Panneau `DiscussionContextuelle` monté sur commande, achat, OF (dialogue) et tâche (dialogue) ; **403** → état dédié ; repoll 5 s (exclues de `/sync`) | `components/discussion/discussion-contextuelle.tsx`, fiches commandes/achats/tâches/OF |
 
 ## Détails techniques
 
@@ -440,12 +446,27 @@ Réseau:   aucun appel externe — base PostgreSQL jetable sur ims-test-net
 - **Nouveaux** : `types/discussion.ts`, `hooks/use-discussion.ts` (sync par curseur, intervalle adaptatif, écritures optimistes, présence par `useSyncExternalStore`), `lib/discussion.ts`, `components/discussion/{conversation-list,conversation-view,composer,nouvelle-conversation}.tsx`, `components/layout/discussion-bell.tsx`, `app/(dashboard)/discussion/page.tsx`, `e2e/lot18-discussion.spec.ts`.
 - **Modifiés** : `types/permission.ts`, `hooks/use-permissions.ts` (`useCanUtiliserDiscussion`, `useCanGererDiscussion` → lisent `data[0].peutXxx`, **fermé** tant que non chargé), `components/layout/sidebar.tsx` (entrée `module: 'discussion'`), `components/layout/topbar.tsx` (`DiscussionBell`).
 
+### Backend (E3) — discussions contextuelles
+- **Nouveaux** : `Services/ReferenceDiscussionService.cs` (`IReferenceDiscussionService` : parsing `#(CMD|OF|TAC|ACH)-(\d+)`, résolution **par lot**, champs sensibles filtrés par le droit d'écriture, autocomplétion), `backend.Tests/DiscussionContexteTests.cs` (11 tests).
+- **Modifiés** : `Models/Discussion/DiscussionModels.cs` (+`TypeConversation.Contexte`, +`TypeContexte`), `Models/Notification.cs` (+`ReponseDiscussion`), `Dtos/Discussion/DiscussionDtos.cs` (+`MessageDto.References`, `ReferenceDto`, `ResultatReferenceDto`), `Services/NotificationService.cs` (`NotifierReponseAsync`), `Services/IPermissionService.cs` + `PermissionService.cs` (`UtilisateursAvecAccesModuleAsync` : actifs **et** internes avec accès lecture module), `Controllers/DiscussionController.cs` (endpoints contexte + références, exclusions `/sync`, notifications de réponse), `Program.cs` (`AddScoped<IReferenceDiscussionService>`).
+- **Routes ajoutées** : `POST /api/Discussion/contexte/{segment}/{id}` (idempotent, contrôle du module de l'objet, amorçage des participants — ouvreur inclus s'il est responsable, course gérée par `DbUpdateException`), `GET /api/Discussion/references?q=`.
+- **Migration** : `20261010222413_AddDiscussion` — colonnes `ContexteType` (varchar50) / `ContexteId` (int) + index unique filtré `IX_Conversations_ContexteType_ContexteId` (`filter: "ContexteType" IS NOT NULL`). Enums en texte, **aucune** migration supplémentaire.
+- **Cloisonnement** : `AjouterMembres` / `Quitter` refusent (**400**) une conversation contextuelle **avant** le contrôle d'appartenance (piloté par le module) ; `Lire` est un no-op pour un non-membre contextuel.
+
+### Frontend (E3) — onglet Discussion des fiches
+- **Nouveaux** : `components/discussion/discussion-contextuelle.tsx` (panneau réutilisable : `useAuth` + `useCanUtiliserDiscussion` + `useDiscussionContexte`, état **403** dédié), `components/discussion/carte-reference.tsx`, `e2e/lot20-discussion-contexte.spec.ts` (4 tests).
+- **Modifiés** : `types/discussion.ts` (+`'Contexte'`, `TypeContexte`, `SegmentContexte`, `ReferenceDiscussion`, `ResultatReference`, `MessageDiscussion.references`), `types/notification.ts` (+`MentionDiscussion`/`ReponseDiscussion`, +`messageDiscussionId`), `hooks/use-discussion.ts` (`useDiscussionContexte`, `useReferencesAutocomplete`, `refetchInterval` sur l'historique), `hooks/use-notifications.ts` (route `/discussion`), `lib/discussion.ts`, `components/discussion/{conversation-view,composer}.tsx`, `components/layout/notification-bell.tsx` (icônes dédiées), fiches `commandes/[id]`, `achats/[id]`, `ordres-fabrication-section.tsx` (OF), `taches/page.tsx` (carte → dialogue Discussion).
+
 ### Décisions retenues
 - **Polling plutôt que SignalR** : transport unique par le proxy Next, un seul point d'autorisation ; l'intervalle s'adapte à la page ouverte et à la visibilité de l'onglet.
 - **Auteurs non rattachés par FK** : la suppression d'un utilisateur ne réécrit pas l'historique ; l'affichage retombe sur le nom d'auteur figé dans le message.
 - **404 pour non-membre**, jamais 403 : ne pas divulguer l'existence d'une conversation.
 - **`PeutGererDiscussion` transverse** : n'élargit pas l'accès à la page (module), seulement la création de canaux publics.
 - **`Revision` par trigger** plutôt qu'un compteur applicatif : la monotonie est garantie au niveau base, y compris sur `UPDATE`.
+- **Accès contextuel = module de l'objet** : une discussion rattachée n'a pas de « membres » au sens d'accès — on la voit si l'on a le module de l'objet. Elle est donc **hors** de la liste globale et de `/sync` (son historique est repollé tant que la fiche est ouverte).
+- **Création à la demande** : la conversation n'est créée qu'à l'ouverture de l'onglet (commande/achat) ou du volet Discussion (tâche/OF) — consulter ou éditer la fiche ne génère aucune conversation vide.
+- **Cartes de référence calculées pour le lecteur** : `montant`/`devise`/`tiers` ne sont **jamais** émis sans le droit d'écriture du module ; un objet hors permissions ne produit **aucune** carte (le client ne masque rien).
+- **Notification sans identifiant de conversation** : la cloche ne stocke que `MessageDiscussionId`, elle route donc vers `/discussion` (pas de lien profond vers une conversation contextuelle précise).
 
 ## Vérifications
 ```
@@ -456,6 +477,11 @@ EF:       migration 20261010222413_AddDiscussion additive (Up = création)
 Frontend: pnpm run typecheck ✅
           npx eslint (fichiers Discussion) ✅
           npx playwright test e2e/lot18-discussion.spec.ts ✅ 5 / 5
+E3:       dotnet build ✅ 0 erreur (16 avertissements, aucun dans les fichiers E3)
+          DiscussionContexteTests ✅ 11 / 11
+          filtre Discussion (E1/E2+E3) ✅ 28 / 28
+Frontend: pnpm run typecheck ✅   npx eslint (fichiers E3) ✅
+          npx playwright test e2e/lot20-discussion-contexte.spec.ts ✅ 4 / 4
 Protocole: git diff --stat → AUCUNE méthode protégée touchée
            (ValiderRessources, Calculer, LivrerAchat, RecevoirImportation, RecevoirPartiel)
 ```
@@ -463,7 +489,7 @@ Protocole: git diff --stat → AUCUNE méthode protégée touchée
 ## Points laissés ouverts
 - **Aucun SignalR** : la réception repose sur le polling (3 s page ouverte). Assumé pour l'E2 ; passage temps réel possible plus tard sans changer le modèle de données.
 - **Tests Playwright à API interceptée** (`page.route` + JWT factice) : ils pilotent l'interface et le transport, pas le contrôle des droits serveur — celui-ci est couvert par `DiscussionTests`.
-- **Notifications de mention** : la notification est créée côté serveur ; son lien vers la conversation n'a pas été vérifié de bout en bout dans un navigateur réel.
+- **Notifications de mention** : la notification est créée côté serveur ; la cloche ne connaît que `messageDiscussionId` (pas la conversation) et route donc vers `/discussion` — vérifié de bout en bout par `lot20-discussion-contexte.spec.ts` (icône + route).
 - **Reprise du lot suivant** : l'écran d'ordre de coupe (C2) fait l'objet d'un lot séparé et n'entre pas dans ce journal.
 
 # LOT COUPE C2 — AUDIT DE VÉRITÉ + complétion du verrou (C0)
@@ -511,6 +537,6 @@ Frontend: pnpm typecheck ✅   eslint (fichiers C2) ✅
 ```
 
 ## Points laissés ouverts
-- **Suite complète re-vérifiée en worktree isolé** : entre-temps, un **WIP Discussions concurrent** non commité sur la branche (`Services/ReferenceDiscussionService.cs`, `Controllers/DiscussionController.cs`, `Dtos/Discussion/*`, `Models/Notification.cs`, `Services/{Notification,Permission}Service.cs`, `Program.cs`, `backend.Tests/DiscussionContexteTests.cs`) **rompt le build local** (`ReferenceDiscussionService.cs:256,426`). Il n'a **pas** été commité ni poussé ; à finaliser par son auteur avant le prochain `dotnet build`/`dotnet test` sur la branche.
+- **WIP Discussions E3 finalisé** : l'ancien WIP concurrent (`Services/ReferenceDiscussionService.cs`, `Controllers/DiscussionController.cs`, `Dtos/Discussion/*`, `Models/Notification.cs`, `Services/{Notification,Permission}Service.cs`, `Program.cs`, `backend.Tests/DiscussionContexteTests.cs`) qui rompait le build est **désormais complet** : `dotnet build` ✅ 0 erreur, `DiscussionContexteTests` ✅ 11/11 (voir le LOT DISCUSSION, E3).
 - **Migration en double** : aucune (une seule `20261007184526_AddOrdreCoupe`, une seule `20261004125935_AddBesoinCoupe`, toutes avec Designer).
 - **Branche `feat/production-readiness-updates`** : aucun commit hors main (ancêtre), rien à pousser ni fusionner — à abandonner.
