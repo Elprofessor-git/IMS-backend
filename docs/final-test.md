@@ -656,3 +656,42 @@ Frontend: pnpm run typecheck ✅   npx eslint ✅
 - **Migration non backfillée** : les matelas/lots historiques restent non rattachés jusqu'à rattachement manuel (ou via le prochain plan).
 - **WIP concurrent préservé** : `backend/docs/final-test.md` portait une section « LOT DISCUSSION — Temps réel SignalR » non commitée (auteur différent) ; seule la présente section C3 est committée, la section SignalR reste dans le working tree.
 - **`feat/production-readiness-updates`** : toujours à abandonner (ancêtre de main).
+
+---
+
+# LOT SÉCURITÉ — mot de passe de test postgreSQL retiré du code
+
+**Date** : 2026-10-11
+**Commits** : Backend `d0b1463`, Frontend `e246b2b`
+
+## Résumé — plus aucun secret de base de données codé en dur
+
+| # | Élément | Mise en œuvre | Preuve |
+|---|---------|---------------|--------|
+| 1 | **Mot de passe de test commité** (2 fichiers suivis) | Lecture exclusive par variable d'environnement : `IMS_TEST_PG` dans `TestDatabase` (chemin partagé par toutes les fabriques de test), `DB_CONNECTION` dans la fabrique design-time EF ; repli codé en dur remplacé par une `InvalidOperationException` qui **nomme la variable** et renvoie vers `backend/docs/README.md` — jamais la valeur | `backend.Tests/TacheApiFactory.cs`, `Data/ApplicationDbContextFactory.cs` |
+| 2 | **Autres occurrences** | Recherche exhaustive backend + frontend (suivis et non suivis) : reste uniquement dans des fichiers **ignorés et non suivis** | `git grep` sur les fichiers suivis = 0 occurrence (2 dépôts) |
+| 3 | **Durcissement du `.gitignore`** (2 dépôts) | `client_secret*.json`, `*.pem`, `*.pfx`, `*.key`, `.env`, `.env.*` + exceptions `!.env.example`, `!.env.local.example` ; vérifié par `git check-ignore` | `.gitignore` backend + frontend |
+
+## Détails techniques
+
+- **Point de lecture unique** : toutes les fabriques de test passent par `TestDatabase` (`AuthApiFactory.cs` l'instancie) — une seule correction suffit pour `IMS_TEST_PG`.
+- **Fabrique design-time** `Data/ApplicationDbContextFactory.cs` : `DB_CONNECTION` absente → échec explicite (utilisée par `dotnet ef`, jamais en production, dont la chaîne vient de l'environnement de déploiement).
+- **Comportement par défaut réellement appliqué** : auparavant, `IMS_TEST_PG` absente → repli silencieux sur `localhost` ; désormais **échec sonore** avec cause nommée.
+- `.dockerignore` backend ignore déjà `.env`, `.env.*`, `appsettings.Development.json` (lot précédent) — inchangé.
+
+## Vérifications
+```
+Backend:  dotnet build Backend_Gestion_Magasin_API.csproj ✅ 0 erreur
+          dotnet build backend.Tests/backend.Tests.csproj   ✅ 0 erreur
+          git grep <mot_de_passe> : 0 occurrence dans les fichiers suivis (backend + frontend)
+          git check-ignore ✅ : secrets ignorés ; .env.example et .env.local.example versionnables
+Protocole: git diff --stat avant chaque commit : AUCUNE méthode protégée touchée
+           (ValiderRessources, Calculer, LivrerAchat, RecevoirImportation, RecevoirPartiel)
+Suite:     ⏸ NON REJOUÉE — conteneur ims-test-pg arrêté (Exited 0, +8 h), rien sur le port 5432
+           → à rejouer via backend/docs/README.md dès que le conteneur tourne (réf. 400 / 400)
+```
+
+## Points laissés ouverts
+- **Suite de tests à rejouer** : `ims-test-pg` était stoppé ; la reprise de `dotnet vstest` (sdk:9.0, ims-test-net) est documentée dans `backend/docs/README.md`.
+- **Fichiers locaux à purger par Sof** (ignorés, non suivis) : `backend/.env`, `backend/appsettings.Development.json`, et le `client_secret_*.json` sur disque hors dépôts. Dépôt destiné à passer privé ; changement du mot de passe de la base de test prévu par Sof.
+- **`.env.local.example` (frontend)** : désormais versionnable (exception ajoutée), resté non commité.
