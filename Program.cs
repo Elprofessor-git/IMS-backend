@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Backend_Gestion_Magasin_API.Models;
 using dotenv.net;
+using Backend_Gestion_Magasin_API.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Backend_Gestion_Magasin_API.Services;
 using Backend_Gestion_Magasin_API.Services.Coupe;
@@ -158,8 +159,7 @@ builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
+}).AddJwtBearer(options =>
 {
     options.RequireHttpsMetadata = false;
     options.SaveToken = true;
@@ -198,7 +198,13 @@ builder.Services.AddAuthentication(options =>
                 context.Fail(resultat.Motif ?? "Session invalide.");
         }
     };
-});
+})
+// Schéma additionnel « HubTicket » : réservé au hub Discussion. Il lit un ticket
+// OPAQUE à usage unique (query string access_token), jamais le JWT principal : le
+// jeton de session n'apparaît donc jamais dans une URL. Les routes REST continuent
+// de n'accepter que le schéma JWT par défaut, donc un ticket y est refusé.
+.AddScheme<HubTicketAuthenticationOptions, HubTicketAuthenticationHandler>(
+    HubTicketAuthenticationHandler.SchemeName, _ => { });
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -351,6 +357,12 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 // des conversations contextuelles. Le calcul des cartes dépend des droits du LECTEUR.
 builder.Services.AddScoped<IReferenceDiscussionService, ReferenceDiscussionService>();
 
+// Temps réel Discussion — tickets éphémères d'authentification du hub. SINGLETON :
+// le magasin de tickets (usage unique, TTL 60 s) doit être partagé par toutes les
+// requêtes. TimeProvider injecté rend l'expiration testable sans horloge réelle.
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IHubTicketService, HubTicketService>();
+
 // Chatbot IA — HttpClient typé pour GroqService, puis ToolExecutor et ChatbotAgentService
 builder.Services.AddHttpClient<GroqService>(client =>
 {
@@ -432,6 +444,12 @@ app.MapControllers()
 app.MapHub<Backend_Gestion_Magasin_API.Hubs.PlanningHub>("/hubs/planning")
         .RequireCors("AllowFrontend")
         .RequireAuthorization(); 
+
+// Hub Discussion : autorisation portée par l'ATTRIBUT du hub (schéma « HubTicket »),
+// PAS par RequireAuthorization() qui exigerait le schéma JWT par défaut et rejetterait
+// le ticket. CORS restreint aux origines autorisées, comme le reste de l'API.
+app.MapHub<Backend_Gestion_Magasin_API.Hubs.DiscussionHub>("/hubs/discussion")
+        .RequireCors("AllowFrontend");
 
 // Ensure database creation and apply migrations (with retry)
 using (var scope = app.Services.CreateScope())

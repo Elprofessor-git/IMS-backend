@@ -1,10 +1,13 @@
 using Backend_Gestion_Magasin_API.Data;
 using Backend_Gestion_Magasin_API.Dtos.Discussion;
 using Backend_Gestion_Magasin_API.Filters;
+using Backend_Gestion_Magasin_API.Hubs;
 using Backend_Gestion_Magasin_API.Models;
 using Backend_Gestion_Magasin_API.Services;
+using Backend_Gestion_Magasin_API.Services.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -52,17 +55,23 @@ namespace Backend_Gestion_Magasin_API.Controllers
         private readonly INotificationService _notifications;
         private readonly IPermissionService _permissions;
         private readonly IReferenceDiscussionService _references;
+        private readonly IHubTicketService _tickets;
+        private readonly IHubContext<DiscussionHub> _hub;
 
         public DiscussionController(
             ApplicationDbContext db,
             INotificationService notifications,
             IPermissionService permissions,
-            IReferenceDiscussionService references)
+            IReferenceDiscussionService references,
+            IHubTicketService tickets,
+            IHubContext<DiscussionHub> hub)
         {
             _db = db;
             _notifications = notifications;
             _permissions = permissions;
             _references = references;
+            _tickets = tickets;
+            _hub = hub;
         }
 
         private string? Moi => User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -218,6 +227,11 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 throw;
             }
 
+            // Nouvelle conversation : on « poke » l'autre participant (et soi-même, au
+            // cas où un autre onglet serait ouvert) pour recharger la liste.
+            await DiffuserUtilisateurAsync(autre);
+            await DiffuserUtilisateurAsync(moi);
+
             return StatusCode(StatusCodes.Status201Created,
                 await ProjectionConversationAsync(conversation.Id, moi));
         }
@@ -257,6 +271,10 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             _db.Conversations.Add(conversation);
             await _db.SaveChangesAsync(HttpContext.RequestAborted);
+
+            // Poke les participants déjà connectés au hub (le polling couvre les autres).
+            foreach (var userId in valides.Append(moi).Distinct())
+                await DiffuserUtilisateurAsync(userId);
 
             return StatusCode(StatusCodes.Status201Created,
                 await ProjectionConversationAsync(conversation.Id, moi));
@@ -419,7 +437,13 @@ namespace Backend_Gestion_Magasin_API.Controllers
                 await _notifications.NotifierReponseAsync(
                     auteurRepondu, moi, id, await NomConversationAsync(id, HttpContext.RequestAborted),
                     message.Id, HttpContext.RequestAborted);
+
+                await DiffuserUtilisateurAsync(auteurRepondu);
             }
+
+            // Les membres connectés au hub rafraîchissent immédiatement (poke) ; les
+            // autres suivront par le polling /sync, jamais désactivé.
+            await DiffuserConversationAsync(id);
 
             return StatusCode(StatusCodes.Status201Created, projection);
         }
@@ -497,6 +521,8 @@ namespace Backend_Gestion_Magasin_API.Controllers
             // clients en polling verront le message modifié.
             await _db.SaveChangesAsync(HttpContext.RequestAborted);
 
+            await DiffuserConversationAsync(id);
+
             return Ok(await ProjectionMessageAsync(msgId, moi));
         }
 
@@ -530,6 +556,7 @@ namespace Backend_Gestion_Magasin_API.Controllers
             message.SupprimeLe = DateTime.Now;
 
             await _db.SaveChangesAsync(HttpContext.RequestAborted);
+            await DiffuserConversationAsync(id);
             return NoContent();
         }
 
@@ -640,6 +667,14 @@ namespace Backend_Gestion_Magasin_API.Controllers
             }
 
             await _db.SaveChangesAsync(HttpContext.RequestAborted);
+
+            // Les nouveaux membres reçoivent un poke personnel (leur connexion n'est pas
+            // encore dans le groupe de la conversation) et les membres connectés voient
+            // la mise à jour de la liste.
+            foreach (var userId in valides)
+                await DiffuserUtilisateurAsync(userId);
+            await DiffuserConversationAsync(id);
+
             return Ok(await ProjectionConversationAsync(id, moi));
         }
 
@@ -675,7 +710,44 @@ namespace Backend_Gestion_Magasin_API.Controllers
 
             membre.AQuitteLe = DateTime.Now;
             await _db.SaveChangesAsync(HttpContext.RequestAborted);
+
+            await DiffuserConversationAsync(id);
             return NoContent();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // POST api/Discussion/hub-ticket — ticket éphémère du hub SignalR
+        // ─────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Émet un ticket à usage unique (60 s) pour se connecter au hub Discussion.
+        ///
+        /// Route REST protégée (JWT + module + compte interne) : c'est le SEUL chemin
+        /// d'obtention du ticket. Le ticket renvoyé n'est pas un JWT — il n'est accepté
+        /// que par le hub ; le JWT principal n'apparaît jamais dans l'URL.
+        /// </summary>
+        [HttpPost("hub-ticket")]
+        public async Task<IActionResult> HubTicket()
+        {
+            var moi = Moi;
+            if (moi == null) return Unauthorized();
+
+            // Le ticket est lié au SecurityStamp : un mot de passe changé, une
+            // désactivation ou un changement de rôle entre l'émission et la connexion
+            // au hub rend le ticket inutilisable (le handler revérifie en base).
+            var stamp = await _db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == moi)
+                .Select(u => u.SecurityStamp)
+                .FirstOrDefaultAsync(HttpContext.RequestAborted);
+
+            if (stamp == null) return Unauthorized();
+
+            return Ok(new
+            {
+                ticket = _tickets.Creer(moi, stamp),
+                expiresInSeconds = (int)HubTicketService.Duree.TotalSeconds
+            });
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -1126,8 +1198,31 @@ namespace Backend_Gestion_Magasin_API.Controllers
                     nomConversation,
                     message.Id,
                     HttpContext.RequestAborted);
+
+                // La mention est un événement pour la CLOCHE de ce compte : on la lui
+                // « pousse » s'il est connecté au hub (groupe personnel), sans pousser
+                // le contenu du message (le client rechargera via sa propre API).
+                await DiffuserUtilisateurAsync(candidat.UserId);
             }
         }
+
+        // ── Diffusion hub (pokes) ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Signale un changement dans une conversation à ses groupes connectés. On ne
+        /// pousse qu'un identifiant : le client recharge via l'API, qui applique ses
+        /// propres droits (le broadcast ne peut pas divulguer de contenu).
+        /// </summary>
+        private Task DiffuserConversationAsync(int conversationId)
+            => _hub.Clients
+                .Group(DiscussionHub.GroupeConversation(conversationId))
+                .SendAsync("DiscussionChanged", conversationId, HttpContext.RequestAborted);
+
+        /// <summary>Signale à un compte que sa cloche de notifications a changé.</summary>
+        private Task DiffuserUtilisateurAsync(string userId)
+            => _hub.Clients
+                .Group(DiscussionHub.GroupeUtilisateur(userId))
+                .SendAsync("NotificationChanged", HttpContext.RequestAborted);
 
         private static string? Apercu(string? contenu)
         {
